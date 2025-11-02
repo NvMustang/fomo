@@ -80,16 +80,11 @@ app.get('/', (req, res) => {
 })
 
 // Montage des routes API
-// En Vercel, le path /api est déjà géré par le routing, donc on monte à la racine
-// En développement/local, on monte sur /api
-const isVercel = process.env.VERCEL || process.env.VERCEL_ENV
-const apiBasePath = isVercel ? '/' : '/api'
-
-app.use(apiBasePath === '/' ? '/' : '/api', apiRoutes)
+// Vercel préserve le path /api lors du rewrite, donc on monte toujours sur /api
+app.use('/api', apiRoutes)
 
 // Health check
-const healthPath = isVercel ? '/health' : '/api/health'
-app.get(healthPath, (req, res) => {
+app.get('/api/health', (req, res) => {
     res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
