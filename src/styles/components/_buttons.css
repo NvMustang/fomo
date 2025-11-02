@@ -1,0 +1,136 @@
+/* ========================
+   BUTTONS & INTERACTIONS
+======================== */
+
+
+
+/* Button component avec variantes privacy */
+.button {
+    padding: var(--sm) var(--md);
+    border-radius: var(--radius);
+    font-size: var(--text-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: 2px solid transparent;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Primary button avec privacy dynamique */
+.button.primary {
+    background: var(--current-color);
+    border-color: var(--current-color);
+}
+
+/* Secondary button */
+.button.secondary {
+    background: var(--background-secondary);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+/* Ghost button */
+.button.ghost {
+    background: transparent;
+    color: var(--text);
+    border-color: transparent;
+}
+
+/* Response buttons */
+.response-button {
+    flex: auto;
+    padding: var(--sm)
+}
+
+/* Circular buttons */
+.circular-button {
+    width: var(--button-size);
+    height: var(--button-size);
+    border-radius: var(--button-radius);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    box-shadow: var(--shadow);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.circular-button:hover {
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.circular-button:active {
+    transform: scale(0.98);
+}
+
+.circular-button {
+    background: var(--current-color);
+}
+
+.circular-button.rotated {
+    transform: rotate(45deg) scale(1.05);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Tailles pour boutons circulaires */
+.circular-button--md {
+    width: var(--button-size-md);
+    height: var(--button-size-md);
+    border-radius: var(--button-radius-md);
+}
+
+.circular-button--sm {
+    width: var(--button-size-sm);
+    height: var(--button-size-sm);
+    border-radius: var(--button-radius-sm);
+}
+
+.circular-button--xs {
+    width: var(--button-size-xs);
+    height: var(--button-size-xs);
+    border-radius: var(--button-radius-xs);
+}
+
+/* Container générique pour toutes les icônes */
+.icon-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: transform var(--transition-fast), filter var(--transition-fast);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* Back button - flèche de retour */
+.back-button {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg, #fff);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--text-lg);
+    line-height: 1;
+    transition: all var(--transition-fast);
+    -webkit-tap-highlight-color: transparent;
+}

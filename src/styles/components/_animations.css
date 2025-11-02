@@ -1,0 +1,128 @@
+/* ========================
+   ANIMATIONS & KEYFRAMES
+======================== */
+
+/* Keyframes */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes logoFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Animation slideUp avec max-height pour les événements */
+@keyframes slideUpWithHeight {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        max-height: 500px;
+        transform: translateY(0);
+    }
+}
+
+
+/* ========================
+   TRANSITION UTILITIES
+======================== */
+
+.transition-fast {
+    transition: all var(--transition-fast);
+}
+
+.transition-medium {
+    transition: all var(--transition-medium);
+}
+
+/* Fade out animation for rejected events */
+.fade-out-2s {
+    animation: fadeOut 2s ease-in-out forwards;
+}
+
+/* Animation pour la zone expandable de partage */
+@keyframes shareSectionExpand {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        max-height: 70vh;
+        transform: translateY(0);
+    }
+}
+
+@keyframes shareSectionCollapse {
+    from {
+        opacity: 1;
+        max-height: 70vh;
+        transform: translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+}
+
+.share-section-expanding {
+    animation: shareSectionExpand 0.3s ease-out forwards;
+}
+
+.share-section-collapsing {
+    animation: shareSectionCollapse 0.3s ease-out forwards;
+}

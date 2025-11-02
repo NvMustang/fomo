@@ -1,0 +1,106 @@
+/* ==========================================================================
+   FOMO Design System — layout.css (ULTRA SIMPLIFIÉ)
+   Une seule classe .app pour tout
+   ========================================================================== */
+
+/* ========================
+   APP STRUCTURE
+======================== */
+
+/* App-level styles will be added here as needed */
+
+/* ========================
+   MAP CONTAINER
+======================== */
+
+.map-container {
+   position: fixed;
+   top: env(safe-area-inset-top, 0px);
+   left: env(safe-area-inset-left, 0px);
+   right: env(safe-area-inset-right, 0px);
+   bottom: 0px;
+   z-index: 1;
+
+}
+
+/* Désactiver les interactions de la carte quand un modal est ouvert */
+.map-container.map-disabled {
+   pointer-events: none;
+   touch-action: none;
+}
+
+/* Barre teaser en bas de page (mode visiteur après toggle privacy) */
+/* Teaser modal - même structure que AuthModal pour transition fluide */
+.modal-teaser {
+   width: 360px;
+   text-align: center;
+   position: relative;
+   border: none !important;
+}
+
+.modal-teaser::before {
+   content: '';
+   position: absolute;
+   inset: 0;
+   border-radius: var(--radius-lg);
+   padding: 4px;
+   background: linear-gradient(135deg, var(--color-public) 0%, var(--color-private) 100%);
+   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+   -webkit-mask-composite: xor;
+   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+   mask-composite: exclude;
+   pointer-events: none;
+   z-index: 1;
+}
+
+.modal-teaser .modal-content {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: var(--md);
+   padding-bottom: calc(var(--lg) + env(safe-area-inset-bottom, 0px));
+   position: relative;
+   z-index: 2;
+}
+
+.map-teaser-message {
+   font-size: var(--text-sm);
+   font-weight: var(--font-weight-bold);
+   color: var(--text);
+   line-height: 1.4;
+   margin: 0;
+   letter-spacing: -0.5px;
+   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+   text-transform: uppercase;
+}
+
+.map-teaser-cta.button.primary {
+   font-weight: var(--font-weight-semibold);
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: var(--xs);
+   background: linear-gradient(135deg, var(--color-public) 0%, var(--color-private) 100%) !important;
+   border: none !important;
+}
+
+.map-teaser-text {
+   display: inline-flex;
+   align-items: center;
+   gap: 0.5em;
+   font-size: var(--text-lg);
+   font-weight: var(--font-weight-bold);
+   letter-spacing: -0.5px;
+   line-height: 1;
+   color: white;
+}
+
+.map-teaser-word {
+   display: inline-flex;
+   align-items: center;
+   gap: 0.1em;
+}
+
+.map-teaser-text[data-size="sm"] {
+   font-size: var(--text-xl);
+}

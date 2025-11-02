@@ -1,0 +1,28 @@
+/**
+ * Routes pour les utilisateurs et le système d'amitié
+ * Routes utilisées uniquement (MVP)
+ */
+
+const express = require('express')
+const router = express.Router()
+const UsersController = require('../controllers/usersController')
+
+// GET /api/users - Récupérer tous les utilisateurs
+router.get('/', UsersController.getAllUsers)
+
+// POST /api/users - Créer un utilisateur
+router.post('/', UsersController.upsertUser)
+
+// POST /api/users/friendships - Créer une amitié
+router.post('/friendships', UsersController.upsertFriendship)
+
+// GET /api/users/email/:email - Récupérer un utilisateur par email
+router.get('/email/:email', UsersController.getUserByEmail)
+
+// GET /api/users/search - Rechercher des utilisateurs par nom ou email
+router.get('/search', UsersController.searchUsers)
+
+// GET /api/users/:id/friends - Récupérer les amis d'un utilisateur
+router.get('/:id/friends', UsersController.getUserFriends)
+
+module.exports = router

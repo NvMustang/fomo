@@ -1,0 +1,229 @@
+/* ========================
+   HEADER & NAVIGATION
+======================== */
+
+/* Header - Web-first layout */
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 2000;
+    padding: var(--md);
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+}
+
+.header-actions {
+    display: flex;
+    pointer-events: auto;
+}
+
+/* Toggle switch */
+.toggle-switch {
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.toggle-track {
+    width: var(--toggle-width);
+    height: var(--toggle-height);
+    border-radius: var(--toggle-radius);
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    transition: transform var(--transition-fast);
+    background: var(--current-color);
+}
+
+.toggle-switch::before {
+    content: '';
+    position: absolute;
+    width: var(--toggle-circle-size);
+    height: var(--toggle-circle-size);
+    background: white;
+    border-radius: 50%;
+    transform: translate(var(--current-toggle-position));
+    transition: transform var(--transition-fast);
+    /* z-index hérité de navbar-container */
+    box-shadow: var(--shadow-lg);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Toggle icons */
+.toggle-icon {
+    width: var(--toggle-icon-size);
+    height: var(--toggle-icon-size);
+    filter: brightness(0) invert(1);
+}
+
+/* User elements */
+.user-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+/* Navigation bar container - Web-first layout */
+.navbar-container {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+
+    /* padding-bottom: var(--safe-bottom); */
+    z-index: 2000;
+    /* Au-dessus de tous les autres éléments (modals, event cards, etc.) */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Navigation bar - Web-first with internal shadow */
+.navigation {
+    display: flex;
+    width: 100vw;
+    position: relative;
+}
+
+/* Internal shadow to avoid hairline gaps on iOS */
+.navigation::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 8px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .08), rgba(0, 0, 0, 0));
+}
+
+/* Floating create button */
+.nav-create-floating {
+    position: absolute;
+    top: -28px;
+    left: 50%;
+    margin-left: -28px;
+    z-index: 2001;
+    /* Juste au-dessus de la navbar (2000) */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(20px);
+}
+
+
+.nav-create-floating.rotated {
+    transform: rotate(45deg);
+}
+
+/* Plus icon bars */
+.plus-bar {
+    position: absolute;
+    background: currentColor;
+    border-radius: calc(var(--bar-thickness) / 2);
+    transition: transform var(--transition-fast);
+}
+
+.plus-bar-horizontal {
+    width: var(--bar-length);
+    height: var(--bar-thickness);
+}
+
+.plus-bar-vertical {
+    width: var(--bar-thickness);
+    height: var(--bar-length);
+}
+
+/* Navigation items */
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xs);
+    padding: var(--md) var(--sm);
+    height: var(--navbar-height);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: transform var(--transition-fast), background var(--transition-fast);
+    cursor: pointer;
+    justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    flex: 1;
+
+    /* Reset minimal pour que les boutons ressemblent aux liens */
+    background: none;
+    border: none;
+    font: inherit;
+}
+
+/* Hauteur des nav-items - utilise la variable CSS du navigateur */
+.nav-item {
+    height: var(--navbar-height);
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.nav-item.active {
+    color: var(--current-color);
+    font-weight: var(--font-weight-semibold);
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+}
+
+.nav-icon {
+    display: flex;
+    align-items: center;
+
+    justify-content: center;
+    transition: transform var(--transition-fast);
+}
+
+.nav-item.active .nav-icon {
+    transform: scale(1.2);
+    filter: drop-shadow(var(--text-shadow-public));
+}
+
+.nav-label {
+    font-size: var(--text-xs);
+    font-weight: 500;
+}
+
+/* Burger menu bars */
+.burger-1,
+.burger-2,
+.burger-3 {
+    width: var(--bar-length);
+    height: var(--bar-thickness);
+    background: currentColor;
+    border-radius: calc(var(--bar-thickness) / 2);
+    transition: transform var(--transition-fast);
+}
+
+.burger-2 {
+    width: calc(var(--bar-length) * 0.75);
+}
+
+.burger-3 {
+    width: calc(var(--bar-length) * 0.5);
+}

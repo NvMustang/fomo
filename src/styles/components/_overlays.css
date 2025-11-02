@@ -1,0 +1,155 @@
+/* ========================
+   OVERLAYS - Système unifié
+   ======================== */
+
+/* Base overlay - Style unifié pour tous les overlays */
+.overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-index-modal, 1000);
+    padding: var(--lg);
+    background: rgba(0, 0, 0, 0.5);
+    /* Animation d'entrée */
+    animation: overlayFadeIn 0.3s ease-out;
+}
+
+
+/* États d'overlay */
+.overlay--closing {
+    animation: overlayFadeOut 0.2s ease-out forwards;
+}
+
+
+
+/* Classes d'alias pour compatibilité */
+.modal-backdrop,
+.auth-overlay,
+.overlay-container {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-index-modal, 1000);
+    padding: 0;
+    background: rgba(0, 0, 0, 0.5);
+    animation: overlayFadeIn 0.3s ease-out;
+}
+
+.image-editor-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-index-modal, 1000);
+    padding: 0;
+    background: rgba(0, 0, 0, 0.8);
+    animation: overlayFadeIn 0.3s ease-out;
+}
+
+.location-picker-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: var(--z-index-modal, 1000);
+}
+
+/* Toast overlay - Système de notification unifié */
+.toast-overlay {
+    /* Hérite du style .overlay avec des modifications */
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    animation: overlayFadeIn 0.3s ease-out;
+    pointer-events: auto;
+    /* Intercepte les gestes pour masquer la barre d'adresse */
+}
+
+.toast-overlay.closing {
+    animation: overlayFadeOut 0.2s ease-out forwards;
+}
+
+.toast-message {
+    background: var(--surface);
+    padding: var(--lg) var(--xl);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    text-align: center;
+    animation: messageSlideUp 0.4s ease-out 0.1s both;
+    border: 2px solid var(--current-color);
+    max-width: 90vw;
+    width: 100%;
+}
+
+.toast-message h3 {
+    margin: 0 0 var(--sm) 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.toast-message p {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+/* Animations */
+@keyframes overlayFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes overlayFadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes messageSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+
+/* Variantes de couleurs */
+.toast-message.success {
+    border-color: var(--success);
+}
+
+.toast-message.success h3 {
+    color: var(--success);
+}
+
+.toast-message.error {
+    border-color: var(--danger);
+}
+
+.toast-message.error h3 {
+    color: var(--danger);
+}

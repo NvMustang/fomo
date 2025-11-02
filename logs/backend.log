@@ -1,0 +1,10 @@
+
+> fomo-backend@1.0.0 start
+> node server.js
+
+🚀 FOMO Beta Backend démarré sur le port 3001
+📊 Base de données: Google Sheets
+🖼️ Images: ImgBB
+🏗️ Architecture: Modulaire
+📡 Network URL: http://0.0.0.0:3001
+📋 Documentation: http://0.0.0.0:3001/

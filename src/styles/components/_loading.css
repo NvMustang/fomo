@@ -1,0 +1,144 @@
+/* ========================
+   LOADING & SPINNERS
+======================== */
+
+/* Loading containers */
+.loading-container {
+    text-align: center;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--lg);
+}
+
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--color-private), var(--color-public));
+    z-index: 9999;
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.loading-content {
+    text-align: center;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--lg);
+}
+
+.loading-text {
+    font-size: var(--text-lg);
+    margin: 0;
+    opacity: 0.9;
+}
+
+/* Spinners */
+.loading-spinner {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto var(--lg) auto;
+}
+
+.spinner-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid transparent;
+    border-top: 3px solid rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: spin 1.5s linear infinite;
+}
+
+.spinner-ring:nth-child(2) {
+    width: 60px;
+    height: 60px;
+    top: 10px;
+    left: 10px;
+    border-top-color: rgba(255, 255, 255, 0.6);
+    animation-delay: -0.5s;
+}
+
+.spinner-ring:nth-child(3) {
+    width: 40px;
+    height: 40px;
+    top: 20px;
+    left: 20px;
+    border-top-color: rgba(255, 255, 255, 0.4);
+    animation-delay: -1s;
+}
+
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    gap: var(--md);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: var(--border-width-thick) solid var(--border);
+    border-top: var(--border-width-thick) solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Logo dans loading-screen : icônes blanches sur fond dégradé */
+.loading-screen .logo-container img {
+    filter: brightness(0) invert(1);
+}
+
+/* Overlay transparent pour AuthModal dans WelcomeScreen */
+.welcome-auth-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 10%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+
+    opacity: 0;
+    transform: translateY(20px);
+    animation: welcomeAuthFadeIn 1s ease-out 1.5s forwards;
+}
+
+@keyframes welcomeAuthFadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Override le positionnement fixed du modal_container dans WelcomeScreen */
+.welcome-auth-overlay .modal_container {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+}

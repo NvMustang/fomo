@@ -1,0 +1,29 @@
+/**
+ * FOMO MVP - Components Index
+ * 
+ * Index centralisé pour exporter uniquement les composants UI
+ */
+
+// Composants UI de base
+export { Button } from './ui/Button'
+export { Header } from './ui/Header'
+export { EventCard } from './ui/EventCard'
+export { default as EventCardDefault } from './ui/EventCard'
+export { UserCard } from './ui/UserCard'
+export { WelcomeScreen } from './modals/WelcomeScreen'
+export { Logo } from './ui/Logo'
+export { ToggleLabelsWithExpendableList } from './ui/ToggleLabelsWithExpendableList'
+export { NavBar } from './ui/NavBar'
+export { MapIcon, ListIcon, ChatIcon, ProfileIcon, PlusIcon, SearchIcon } from './ui/NavIcons'
+
+// Modales
+export { AddFriendModal } from './modals/AddFriendModal'
+export { default as CreateEventModal } from './modals/CreateEventModal'
+export { AuthModal } from './modals/AuthModal'
+export { VisitorNameModal } from './modals/VisitorNameModal'
+
+// Composants utilitaires
+export { LocationPicker } from './ui/LocationPicker'
+export { AddressAutocomplete } from './AddressAutocomplete'
+export { StockImagePicker } from './ui/StockImagePicker'
+export { FomoDatePicker } from './ui/DatePicker'

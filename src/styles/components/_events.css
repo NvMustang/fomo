@@ -1,0 +1,600 @@
+/* ========================
+   EVENT COMPONENTS
+======================== */
+
+/* Event cards */
+
+.event-card-container {
+    /* Positionnement intégré - même logique que .modal */
+    position: fixed;
+    bottom: calc(var(--navbar-height) + var(--button-radius) + var(--sm));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1004;
+
+
+
+}
+
+.event-card {
+    width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--md);
+    box-shadow: var(--shadow);
+    border-left: 3px solid var(--current-color);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    /* Limiter la hauteur de l'EventCard entière à 70% de l'écran */
+    max-height: 70vh;
+
+    /* Améliorer l'apparence du scroll */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+/* Sur la page profile, pas de scroll dans l'EventCard, utilise flex */
+.event-card[data-profile-page="true"] {
+    overflow-y: visible;
+    max-height: none;
+}
+
+/* Événements offline (isOnline === false) : bordure gauche en gris */
+.event-card--offline {
+    border-left-color: var(--text-muted);
+}
+
+/* Wrapper d'item de liste pour animer la suppression (calendar/list) */
+.event-list-item {
+    position: relative;
+    z-index: 1;
+    /* suffisamment grand pour contenir la carte */
+    max-height: 1000px;
+    padding-block: var(--sm);
+    transition: max-height 2000ms ease, margin 2000ms ease, padding 2000ms ease, opacity 2000ms ease;
+}
+
+/* Quand la carte interne entre en fade-out, effondrer le wrapper pour translater la liste */
+.event-list-item:has(.fade-out-2s) {
+    max-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    overflow: hidden;
+}
+
+/* Style du scrollbar pour WebKit (Chrome, Safari, etc.) */
+.event-card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.event-card::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.event-card::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 3px;
+}
+
+.event-card::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-muted);
+}
+
+
+
+
+/* Container pour la page liste */
+.event-card-list-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--lg);
+    flex-direction: column;
+    width: 100%;
+    margin: 80px auto 0;
+    padding: 0 var(--md) var(--xl);
+    min-height: calc(100vh - 80px);
+}
+
+.event-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xs);
+    padding: var(--sm) var(--sm) 0;
+    border-top-left-radius: var(--radius-lg);
+    border-top-right-radius: var(--radius-lg);
+}
+
+.event-card-body {
+    background: transparent;
+    padding: var(--sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+    border-radius: var(--radius);
+}
+
+.event-card-title {
+    font-size: var(--text-md);
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+}
+
+
+.event-card-meta {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+    margin: 0;
+}
+
+
+.meta-row {
+    white-space: normal;
+    /* Permet le retour à la ligne */
+    word-wrap: break-word;
+    /* Force le retour à la ligne sur les mots longs */
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+    /* Améliore la lisibilité sur plusieurs lignes */
+}
+
+
+.event-card-banner {
+    position: relative;
+    height: 120px;
+    border-top-left-radius: var(--banner-radius);
+    border-top-right-radius: var(--banner-radius);
+    overflow: hidden;
+}
+
+.event-card-banner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: var(--bg);
+}
+
+/* Event response buttons */
+.event-response-buttons-container {
+    display: flex;
+    width: 100%;
+    gap: var(--sm);
+    padding-top: var(--sm);
+    border-top: 1px solid var(--border);
+    margin-top: var(--sm);
+
+
+}
+
+/* Event edit buttons */
+/* Zone expandable de partage dans EventCard (page profile) */
+.event-share-section {
+    border-top: 1px solid var(--border);
+    margin-top: var(--sm);
+    flex: 0;
+    min-height: 0;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: flex 0.3s ease-out, opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.event-share-section.expanded {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.event-share-section .share-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.event-share-section .share-content-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.event-share-section .modal-content-inner {
+    padding: 0;
+}
+
+.event-edit-buttons-container {
+    display: flex;
+    width: 100%;
+    gap: var(--sm);
+    padding-top: var(--sm);
+    border-top: 1px solid var(--border);
+    margin-top: var(--sm);
+}
+
+
+
+/* Rotation spécifique pour le bouton d'expansion (180° au lieu de 45°) */
+.circular-button.expand-rotated {
+    transform: rotate(180deg) scale(1.05);
+}
+
+/* Rotation pour l'icône de partage (comme le bouton expandable) */
+.event-card img[src="/share-icon.svg"] {
+    transition: transform 0.3s ease-out;
+}
+
+.event-card img[src="/share-icon.svg"].share-icon-rotated {
+    transform: rotate(-180deg);
+}
+
+/* Utilise maintenant la classe générique .icon-container */
+
+/* Utilise les classes .plus-bar existantes */
+
+.arrow-bar-left {
+    position: absolute;
+    transform: translateX(-3px) rotate(-50deg);
+    width: calc(var(--bar-length) / 2);
+    height: var(--bar-thickness);
+}
+
+.arrow-bar-right {
+    position: absolute;
+    transform: translateX(3px) rotate(50deg);
+    width: calc(var(--bar-length) / 2);
+    height: var(--bar-thickness);
+}
+
+/* Section des détails expandable */
+.event-details-section {
+    margin-top: var(--sm);
+    padding-top: var(--sm);
+    border-top: 1px solid var(--border);
+    animation: slideUpWithHeight 0.3s ease-out;
+}
+
+.event-details-section.closing {
+    opacity: 0;
+    max-height: 0;
+}
+
+.event-description {
+    margin-bottom: var(--md);
+}
+
+.event-description p {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.event-info-grid {
+    display: grid;
+    gap: var(--sm);
+    margin-bottom: var(--md);
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--text-sm);
+}
+
+.info-item strong {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.participation-stats {
+    margin-top: var(--md);
+}
+
+.participation-stats h4 {
+    margin: 0 0 var(--sm) 0;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sm);
+}
+
+.stat-item {
+    text-align: center;
+    padding: var(--sm);
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.stat-number {
+    display: block;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.stat-label {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--xs);
+}
+
+.stat-item.going .stat-number {
+    color: var(--success);
+}
+
+.stat-item.interested .stat-number {
+    color: var(--warning);
+}
+
+.stat-item.total .stat-number {
+    color: var(--primary);
+}
+
+
+
+/* Event details */
+.event-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+}
+
+.event-details-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+}
+
+.modal-banner {
+    width: 100%;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    border-radius: var(--radius);
+    margin-bottom: var(--md);
+}
+
+.event-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sm);
+}
+
+.info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sm);
+    padding: var(--xs) 0;
+}
+
+.info-item strong {
+    min-width: 100px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.event-description {
+    color: var(--text);
+    line-height: 1.6;
+    margin: var(--sm) 0;
+}
+
+/* Participation stats */
+.participation-stats {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: var(--md);
+}
+
+.participation-stats h4 {
+    margin: 0 0 var(--sm) 0;
+    font-size: var(--text-md);
+    color: var(--text);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sm);
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xs);
+    padding: var(--sm);
+    background: var(--surface);
+    border-radius: var(--radius);
+}
+
+.stat-number {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--text);
+}
+
+.stat-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Friends participation */
+.friends-participation {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: var(--md);
+}
+
+.friends-participation h4 {
+    margin: 0 0 var(--sm) 0;
+    font-size: var(--text-md);
+    color: var(--text);
+}
+
+.friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}
+
+.friend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sm);
+    background: var(--surface);
+    border-radius: var(--radius);
+}
+
+.friend-names {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-weight: 500;
+}
+
+.friend-status {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* Event states */
+.event-not-found {
+    text-align: center;
+    padding: var(--xl);
+    color: var(--text-muted);
+}
+
+.event-not-found p {
+    margin: 0;
+    font-size: var(--text-md);
+}
+
+.event-item {
+    padding: var(--md);
+    background: var(--background-secondary);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--primary);
+}
+
+.event-date {
+    font-size: var(--text-xs);
+    color: var(--primary);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--xs);
+}
+
+.event-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text);
+    margin-bottom: var(--xs);
+}
+
+.event-location {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--xs);
+}
+
+.more-events {
+    padding: var(--sm);
+    text-align: center;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    background: var(--background-secondary);
+    border-radius: var(--radius);
+    border: 1px dashed var(--border);
+}
+
+.no-events {
+    text-align: center;
+    padding: var(--lg);
+    background: var(--background-secondary);
+    border-radius: var(--radius);
+    border: 1px dashed var(--border);
+}
+
+.no-events-icon {
+    font-size: var(--text-2xl);
+    margin-bottom: var(--sm);
+}
+
+.no-events-text {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+/* Events lists */
+.events-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sm);
+}
+
+.events-content {
+    margin-bottom: var(--sm);
+}
+
+.events-nav {
+    display: flex;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--xs);
+    margin-bottom: var(--sm);
+    box-shadow: var(--shadow);
+    gap: var(--xs);
+}
+
+.events-nav-button {
+    flex: 1;
+    padding: var(--sm) var(--md);
+    border: none;
+    background: transparent;
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.events-nav-button.active {
+    background: var(--current-color);
+    color: white;
+}
+
+/* Animation de suppression pour EventCard */
+.event-card.fading-out {
+    opacity: 0;
+    transform: translateX(-100%);
+    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    pointer-events: none;
+}

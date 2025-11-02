@@ -1,0 +1,442 @@
+---
+alwaysApply: true
+---
+Project-Rules
+
+(pour l’équipe projet, la gestion globale du code et des processus)
+
+Access / Governance
+
+Ce document est central : ne pas modifier sans revue.
+
+Toute évolution suit : proposition → approbation par Eugene → mise en œuvre.
+
+En cas de doute : consulter avant d’agir.
+
+Hierarchy of Rules
+
+Ask Before (dépendances majeures, refactors, modèle de données)
+
+Zero Tolerance
+
+Workflow
+
+Guides (CSS/React/Performance)
+
+Workflow
+
+Avant d’ajouter du code : audit rapide (grep -r "<mot-clé>" src/) pour vérifier la réutilisation.
+
+Demander validation avant création de fichiers/packages/CSS.
+
+Exposer l’approche en 3-5 lignes puis attendre accord.
+
+Implémenter un seul changement par itération puis attendre feedback.
+
+Itérer progressivement et consciemment, sans sauter d’étapes.
+
+Zero Tolerance
+
+Aucun nouveau package non approuvé.
+
+Aucun nouveau fichier CSS en dehors de styles/components.css.
+
+Pas de duplication de classes CSS.
+
+any interdit en TypeScript (mode strict obligatoire).
+
+Pas de multi-fix dans un seul commit/PR.
+
+Aucun refactor sans autorisation explicite.
+
+Usage de useEffect, useMemo, useCallback uniquement après accord.
+
+Une violation = rollback + avertissement.
+
+Always (Project Level)
+
+Réutiliser avant créer.
+
+Utiliser les design-tokens dans styles/base.css.
+
+Code simple et clair (fonctions courtes, noms explicites).
+
+Chaque opération asynchrone gère loading + error.
+
+Journaux loggers propres (logger.info/warn/error).
+
+Approche mobile-first validée.
+
+Exception Handling
+
+Toute modification significative (hooks, architecture) nécessite feuille de route décrite.
+
+Tout comportement observé et documenté avant modif.
+
+
+
+
+CSS Guidelines
+
+Styles dans styles/components.css, bien commentés.
+
+Avant création de classe, vérifier via grep.
+
+Utiliser tokens de base.css.
+
+Nom BEM‐light (.tag-chip, .calendar-period-label).
+
+Pas de librairie CSS externe, pas de reset supplémentaire.
+
+React / TypeScript Guidelines
+
+1 fichier = 1 feature. Si > 500 lignes ou fortement réutilisable → scinder.
+
+Types stricts, pas d’any. Préférer types nominaux.
+
+Props documentées (JSdoc bref).
+
+Side-effects encapsulés dans services, pas dans composants.
+
+Usage de Context API permis, pas de Redux.
+
+Nettoyer les logs (pas de console.log permanents).
+
+Logger usage (logger.info|warn|error).
+
+Exceptions (sur autorisation explicite)
+
+useMemo pour listes lourdes (avec dépendances stables).
+
+useCallback pour handlers passés à des listes volumineuses.
+
+useEffect pour synchronisation données → état, dépendances stables et documentées.
+
+Performance Budget
+
+Taille de la bundle page < 200 KB gzip (hors MapLibre).
+
+Pas de double‐render évitable : vérifier dépendances hooks.
+
+Images compressées côté client avant upload.
+
+Listes > 100 items visibles → utiliser pagination/virtualisation.
+
+Accessibility / UX (Project Level)
+
+Focus visible (outline).
+
+Labels pour inputs, aria pour selects/combos.
+
+Clavier (Tab/Enter/Esc) fonctionnel dans modals/menus.
+
+États « vide » avec CTA.
+
+Sticky headers + scroll-margin-top.
+
+Data / IO
+
+Google Sheets = DB temporaire.
+
+Toutes IO via services/dataService.ts (facade).
+
+Préparer interfaces pour Firebase (pas d’implémentation directe).
+
+Journaliser actions clés (réponse événement, création, édition) via logger.
+
+Security
+
+Secrets en env, jamais en clair.
+
+Ne jamais logger tokens/PII.
+
+Valider/sanitiser inputs côté service.
+
+Errors
+
+Messages clairs et accessibles.
+
+Un seul retry autorisé, puis échec propre.
+
+UX notifications (succès/erreur).
+
+« Report Crash » log structuré (timestamp, action, petit payload).
+
+Pre-Commit Checklist
+
+Réutiliser les composants existants.
+
+Utiliser tokens de base.css.
+
+Aucun any.
+
+États loading+error présents.
+
+Mobile test (viewport min 360px).
+
+Logs propres.
+
+Un seul changement par PR.
+
+PR Template (Project)
+
+But : (1 phrase)
+
+Changement unique : (décrire)
+
+Impact UX : (screens/gif)
+
+Tests : (manuels/états couverts)
+
+Risques/Rollback : (comment revenir)
+
+Commits Format
+
+type(scope): résumé court
+
+types : feat | fix | chore | refactor | docs | perf | test
+
+Ask Before (Project)
+
+tout nouveau package
+
+tout refactor majeur
+
+tout changement modèle de données
+
+toute logique publique/privée
+
+toute altération structurelle
+
+Objective (Project)
+
+Livrer une bêta stable, prête pour Vercel.
+
+Stabilité > Perfection, Lisibilité > Abstraction, MVP > Over-engineering.
+
+Rappels : build propre, debug lent, une change à la fois, demander avant d’agir.2. Project-Rules
+
+(pour l’équipe projet, la gestion globale du code et des processus)
+
+Access / Governance
+
+Ce document est central : ne pas modifier sans revue.
+
+Toute évolution suit : proposition → approbation par Eugene → mise en œuvre.
+
+En cas de doute : consulter avant d’agir.
+
+Hierarchy of Rules
+
+Ask Before (dépendances majeures, refactors, modèle de données)
+
+Zero Tolerance
+
+Workflow
+
+Guides (CSS/React/Performance)
+
+Workflow
+
+Avant d’ajouter du code : audit rapide (grep -r "<mot-clé>" src/) pour vérifier la réutilisation.
+
+Demander validation avant création de fichiers/packages/CSS.
+
+Exposer l’approche en 3-5 lignes puis attendre accord.
+
+Implémenter un seul changement par itération puis attendre feedback.
+
+Itérer progressivement et consciemment, sans sauter d’étapes.
+
+Zero Tolerance
+
+Aucun nouveau package non approuvé.
+
+Aucun nouveau fichier CSS en dehors de styles/components.css.
+
+Pas de duplication de classes CSS.
+
+any interdit en TypeScript (mode strict obligatoire).
+
+Pas de multi-fix dans un seul commit/PR.
+
+Aucun refactor sans autorisation explicite.
+
+Usage de useEffect, useMemo, useCallback uniquement après accord.
+
+Une violation = rollback + avertissement.
+
+Always (Project Level)
+
+Réutiliser avant créer.
+
+Utiliser les design-tokens dans styles/base.css.
+
+Code simple et clair (fonctions courtes, noms explicites).
+
+Chaque opération asynchrone gère loading + error.
+
+Journaux loggers propres (logger.info/warn/error).
+
+Approche mobile-first validée.
+
+Exception Handling
+
+Toute modification significative (hooks, architecture) nécessite feuille de route décrite.
+
+Tout comportement observé et documenté avant modif.
+
+Structure
+
+src/
+  components/
+  pages/
+  contexts/
+  hooks/
+  utils/
+  types/
+  styles/
+    base.css
+    layout.css
+    components.css
+
+
+CSS Guidelines
+
+Styles dans styles/components.css, bien commentés.
+
+Avant création de classe, vérifier via grep.
+
+Utiliser tokens de base.css.
+
+Nom BEM‐light (.tag-chip, .calendar-period-label).
+
+Pas de librairie CSS externe, pas de reset supplémentaire.
+
+React / TypeScript Guidelines
+
+1 fichier = 1 feature. Si > 500 lignes ou fortement réutilisable → scinder.
+
+Types stricts, pas d’any. Préférer types nominaux.
+
+Props documentées (JSdoc bref).
+
+Side-effects encapsulés dans services, pas dans composants.
+
+Usage de Context API permis, pas de Redux.
+
+Nettoyer les logs (pas de console.log permanents).
+
+Logger usage (logger.info|warn|error).
+
+Exceptions (sur autorisation explicite)
+
+useMemo pour listes lourdes (avec dépendances stables).
+
+useCallback pour handlers passés à des listes volumineuses.
+
+useEffect pour synchronisation données → état, dépendances stables et documentées.
+
+Performance Budget
+
+Taille de la bundle page < 200 KB gzip (hors MapLibre).
+
+Pas de double‐render évitable : vérifier dépendances hooks.
+
+Images compressées côté client avant upload.
+
+Listes > 100 items visibles → utiliser pagination/virtualisation.
+
+Accessibility / UX (Project Level)
+
+Focus visible (outline).
+
+Labels pour inputs, aria pour selects/combos.
+
+Clavier (Tab/Enter/Esc) fonctionnel dans modals/menus.
+
+États « vide » avec CTA.
+
+Sticky headers + scroll-margin-top.
+
+Data / IO
+
+Google Sheets = DB temporaire.
+
+Toutes IO via services/dataService.ts (facade).
+
+Préparer interfaces pour Firebase (pas d’implémentation directe).
+
+Journaliser actions clés (réponse événement, création, édition) via logger.
+
+Security
+
+Secrets en env, jamais en clair.
+
+Ne jamais logger tokens/PII.
+
+Valider/sanitiser inputs côté service.
+
+Errors
+
+Messages clairs et accessibles.
+
+Un seul retry autorisé, puis échec propre.
+
+UX notifications (succès/erreur).
+
+« Report Crash » log structuré (timestamp, action, petit payload).
+
+Pre-Commit Checklist
+
+Réutiliser les composants existants.
+
+Utiliser tokens de base.css.
+
+Aucun any.
+
+États loading+error présents.
+
+Mobile test (viewport min 360px).
+
+Logs propres.
+
+Un seul changement par PR.
+
+PR Template (Project)
+
+But : (1 phrase)
+
+Changement unique : (décrire)
+
+Impact UX : (screens/gif)
+
+Tests : (manuels/états couverts)
+
+Risques/Rollback : (comment revenir)
+
+Commits Format
+
+type(scope): résumé court
+
+types : feat | fix | chore | refactor | docs | perf | test
+
+Ask Before (Project)
+
+tout nouveau package
+
+tout refactor majeur
+
+tout changement modèle de données
+
+toute logique publique/privée
+
+toute altération structurelle
+
+Objective (Project)
+
+Livrer une bêta stable, prête pour Vercel.
+
+Stabilité > Perfection, Lisibilité > Abstraction, MVP > Over-engineering.
+
+Rappels : build propre, debug lent, une change à la fois, demander avant d’agir.

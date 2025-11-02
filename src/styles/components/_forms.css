@@ -1,0 +1,229 @@
+/* ========================
+   FORMS & INPUTS
+======================== */
+
+/* Form structure */
+.form-section {
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--sm);
+    width: 100%;
+    max-width: 100%;
+}
+
+.form-label {
+    display: block;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: var(--xs);
+    font-size: var(--text-sm);
+}
+
+.form-help {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--xs);
+}
+
+
+/* Inputs */
+.form-input,
+.input {
+    width: 100%;
+    padding: var(--sm) var(--md);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: var(--text-md);
+    font-family: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    transition: border-color var(--transition-fast);
+}
+
+.form-input:focus,
+.input:focus {
+    outline: none;
+    border-color: var(--current-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--current-color), transparent 90%);
+}
+
+/* Textarea */
+.form-textarea {
+
+
+    min-height: 100px;
+    resize: vertical;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Create form - utilisé dans AuthModal */
+.create-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+}
+
+/* ========================
+   Address Autocomplete
+======================== */
+.autocomplete-suggestions {
+    background: var(--bg, #fff);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    z-index: 10000;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.suggestion-item {
+    padding: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    background: transparent;
+}
+
+.suggestion-item:hover,
+.suggestion-item.selected {
+    background: #f8f9fa;
+}
+
+/* Banner selector + preview (utilisé dans CreateEventModal) */
+.banner-selector-btn {
+    width: 100%;
+    height: 120px;
+    padding: var(--lg) var(--md);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sm);
+    cursor: pointer;
+    background: rgb(255, 255, 255);
+}
+
+/* Aperçu banner - même hauteur que event-card-banner (120px) pour rendu fidèle */
+.image-preview-container {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: rgb(255, 255, 255);
+}
+
+.image-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    cursor: grab;
+    user-select: none;
+    transition: cursor 0.2s;
+}
+
+.image-preview.dragging {
+    cursor: grabbing;
+}
+
+.image-preview:hover {
+    cursor: grab;
+}
+
+.image-remove-btn {
+    position: absolute;
+    top: var(--xs);
+    right: var(--xs);
+    background: transparent;
+    border: none;
+    color: rgb(255, 255, 255);
+    font-size: var(--text-lg);
+    margin: var(--xs);
+    cursor: pointer;
+    z-index: 2;
+}
+
+.image-position-hint {
+    position: absolute;
+    bottom: var(--xs);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0.9;
+}
+
+
+
+/* Stock image picker container - fixed height with scroll */
+.stock--image-picker {
+    height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.stock-image-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--xs);
+}
+
+.stock-image-item {
+    position: relative;
+    height: 120px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.stock-image-item:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stock-image-item.selected {
+    border: 2px solid var(--current-color);
+    box-shadow: 0 0 0 3px var(--current-color-10);
+}
+
+.stock-image-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.search-input-group {
+    display: flex;
+    gap: var(--sm);
+}
+
+/* Input group avec flex row */
+.form-input-group {
+    display: flex;
+    gap: var(--sm);
+    align-items: stretch;
+}
+
+/* Input avec police monospace */
+.form-input-monospace {
+    font-family: monospace;
+}
+
+/* Form actions en colonne */
+.form-actions-column {
+    flex-direction: column;
+    gap: var(--xs);
+}

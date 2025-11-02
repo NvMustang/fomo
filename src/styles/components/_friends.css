@@ -1,0 +1,580 @@
+/* ========================
+   FRIENDS & SOCIAL COMPONENTS
+======================== */
+
+/* Friends display */
+.friends-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: 0 0 var(--sm) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--xs);
+}
+
+.friends-count {
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-normal);
+    color: var(--text-secondary);
+    background: var(--background-secondary);
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius);
+}
+
+.friends-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--md);
+}
+
+
+.friend-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.friend-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.friend-name {
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: 0 0 var(--xs) 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-location {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friends-empty {
+    text-align: center;
+    padding: var(--lg);
+    color: var(--text-secondary);
+}
+
+.friends-section {
+    margin-bottom: var(--md);
+}
+
+/* Container pour les sections d'amis dans ProfilePage - les styles sont gérés par profile-section */
+
+/* Subsections dans la section amis */
+.friends-subsection {
+    margin-bottom: var(--md);
+}
+
+/* Bordure supérieure pour le label des amitiés (séparation comme entre les réglages) */
+.friends-subsection.with-border-top {
+    padding-top: var(--sm);
+    border-top: 1px solid var(--border);
+}
+
+.friends-subsection-title {
+    font-size: var(--text-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: 0 0 var(--sm) 0;
+}
+
+/* Container pour le toggle */
+.friends-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: var(--sm);
+    padding: var(--sm) var(--md);
+    background: var(--background-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: all var(--transition-fast);
+    text-align: left;
+    cursor: pointer;
+}
+
+.friends-toggle-container:hover {
+    background: var(--background-hover);
+    border-color: var(--primary);
+}
+
+.friends-toggle-container.selected {
+    background: var(--current-color);
+    border-color: var(--current-color);
+    color: var(--white);
+}
+
+.friends-toggle-container.selected .friend-name,
+.friends-toggle-container.selected .friend-location {
+    color: var(--white);
+}
+
+/* Container pour la liste d'amis */
+.friends-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+}
+
+/* Avatar pour les amis */
+.friend-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--white);
+    flex-shrink: 0;
+    background-color: var(--text-muted);
+}
+
+.bg-current-color {
+    background-color: var(--current-color) !important;
+}
+
+.bg-text-muted {
+    background-color: var(--text-muted) !important;
+}
+
+/* Toggle pour les invitations */
+.friends-toggle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    user-select: none;
+    font: inherit;
+    text-align: left;
+}
+
+.friends-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: var(--sm);
+    font-size: var(--text-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+}
+
+.friends-toggle-icon {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    transition: transform var(--transition-fast);
+}
+
+.friends-toggle-content {
+    animation: slideDown 0.2s ease-out;
+    border-top: 1px solid var(--border);
+    padding-top: var(--md);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.friendship-status {
+    margin-top: var(--xs);
+}
+
+/* Friend actions */
+.friend-actions {
+    display: flex;
+    gap: var(--sm);
+    justify-content: stretch;
+    width: 100%;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
+    padding: var(--xs) var(--sm);
+}
+
+.action-buttons {
+    display: flex;
+    gap: var(--sm);
+    flex-wrap: wrap;
+}
+
+.pending-info {
+    padding: var(--md);
+    background: var(--background-secondary);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--color-private);
+}
+
+/* Search */
+.search-container {
+    position: relative;
+}
+
+.search-icon {
+    position: absolute;
+    right: var(--md);
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.search-results {
+    margin-top: var(--sm);
+}
+
+/* Container pour les résultats de recherche */
+.search-results-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sm);
+}
+
+/* Container fixe pour les résultats ou les états vides - hauteur fixe pour éviter le redimensionnement */
+.search-results-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sm);
+    min-height: 450px;
+    max-height: 450px;
+}
+
+/* Section scrollable pour les résultats de recherche */
+.search-results-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: var(--xs);
+    margin-top: var(--sm);
+    min-height: 0;
+    /* Important pour que flex:1 fonctionne avec overflow */
+}
+
+/* Style du scrollbar pour WebKit (Chrome, Safari, etc.) */
+.search-results-scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+
+.search-results-scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.search-results-scrollable::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 3px;
+}
+
+.search-results-scrollable::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-muted);
+}
+
+/* Limiter UserCard à 300px dans les résultats de recherche */
+.search-results-scrollable .event-card {
+    width: 300px;
+    max-width: 300px;
+}
+
+.search-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--md);
+    border-bottom: 1px solid var(--border);
+    transition: background var(--transition-fast);
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.user-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}
+
+.user-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.user-email {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.user-city {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.user-actions {
+    display: flex;
+    gap: var(--sm);
+}
+
+/* Add friend button - étend les styles de .button */
+.friends-add-button {
+    gap: var(--xs);
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.friends-add-button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+}
+
+.friends-add-button:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow);
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.status-active {
+    background: var(--success-light);
+    color: var(--success);
+}
+
+.status-badge.status-pending {
+    background: var(--warning-light);
+    color: var(--warning);
+}
+
+.status-badge.status-blocked {
+    background: var(--error-light);
+    color: var(--error);
+}
+
+/* Section des demandes en attente - mise en évidence */
+.friends-section-pending {
+    background: var(--background-secondary);
+    border: 2px solid var(--warning);
+    border-radius: var(--radius);
+    padding: var(--md);
+}
+
+.friends-title-with-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--md);
+}
+
+.friends-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 var(--xs);
+    border-radius: 12px;
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+    background: var(--background-secondary);
+    color: var(--text-secondary);
+}
+
+.pending-badge {
+    background: var(--warning);
+    color: var(--bg);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+.friend-card-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.friend-card-wrapper.card-pending {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    pointer-events: auto;
+}
+
+/* UserCard dans la section amis - même style que le UserCard du profil */
+.friends-grid .event-card {
+    /* Même style que .user-card-container .event-card dans _profile.css */
+    width: 300px;
+    max-width: 300px;
+    margin: 0;
+    max-height: none;
+    /* Border-left supprimé pour les UserCard dans la liste d'amitiés */
+    border-left: none !important;
+}
+
+/* Styles UserCard - correspondent exactement aux styles du UserCard du profil */
+.user-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.user-card-header {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--sm);
+    flex-shrink: 0;
+}
+
+.user-card-info {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+}
+
+.user-card-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sm);
+    margin-bottom: var(--xs);
+}
+
+.user-card-title {
+    margin: 0;
+    flex: 1;
+}
+
+.user-card-badge {
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius-sm);
+    color: var(--white);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xs);
+}
+
+.user-card-badge-public {
+    background-color: var(--color-public);
+}
+
+.user-card-badge-private {
+    background-color: var(--color-private);
+}
+
+.user-card-badge-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    filter: brightness(0) invert(1);
+}
+
+.user-card-meta {
+    flex-shrink: 0;
+    margin-bottom: var(--sm);
+}
+
+.user-card-ambassador-wrapper {
+    margin-bottom: var(--sm);
+}
+
+.user-card-ambassador-badge {
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius-sm);
+    background-color: var(--warning-light);
+    color: var(--warning);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.user-card-edit-wrapper {
+    padding: var(--sm);
+    flex-shrink: 0;
+}
+
+.user-card-edit-button {
+    width: 100%;
+    padding: var(--sm) var(--md);
+    background-color: var(--primary);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.user-card-edit-button:hover {
+    background-color: var(--primary-hover);
+}
+
+.user-card-actions-wrapper {
+    padding: var(--xs) var(--sm);
+    flex-shrink: 0;
+}
+
+/* La carte peut être cliquée pour afficher/masquer les boutons */
+
+.friends-grid .friend-card-wrapper {
+    display: flex;
+    flex-direction: column;
+}

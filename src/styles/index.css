@@ -1,0 +1,13 @@
+/* ==========================================================================
+   FOMO Design System — Central Stylesheet
+   Architecture minimaliste pour MVP (3 fichiers seulement)
+   ========================================================================== */
+
+/* 1. Tokens & Variables */
+@import './base.css';
+
+/* 2. Layout & Utilities */
+@import './layout.css';
+
+/* 3. Components (incl. typography & animations) */
+@import './components.css';

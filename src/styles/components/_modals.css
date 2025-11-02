@@ -1,0 +1,196 @@
+/* ========================
+   MODALS & OVERLAYS
+======================== */
+
+/* Désactiver le scroll du body et html quand un modal est ouvert */
+/* Utiliser seulement overflow: hidden, pas position: fixed pour éviter la réduction du viewport */
+
+
+/* Overlay pour couvrir tout l'écran et gérer le clic extérieur */
+.modal_overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1005;
+    /* Au-dessus de event-card-container (1004) */
+    background: rgba(0, 0, 0, 0.5);
+    /* Animation d'entrée */
+    animation: overlayFadeIn 0.3s ease-out;
+    overflow: hidden;
+}
+
+/* Conteneur de positionnement pour modals */
+.modal_container {
+    position: fixed;
+    bottom: calc(var(--navbar-height) + var(--button-radius) + var(--sm));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1006;
+    /* Au-dessus de l'overlay (1005) */
+    overflow: visible;
+    /* Permet au modal de gérer son propre scroll */
+}
+
+/* Modal principal */
+.modal {
+    /* Style du modal */
+    position: relative;
+
+    width: 360px;
+    max-height: 70vh;
+    background: rgba(255, 255, 255, 0.9);
+
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    border: 2px solid var(--current-color);
+
+    pointer-events: auto;
+    /* Permet au modal de recevoir les événements */
+    display: flex;
+    flex-direction: column;
+
+
+    /* Animation d'entrée */
+    animation: overlayFadeIn 0.3s ease-out;
+}
+
+/* Contenu spécifique aux modals avec formulaire */
+.modal-content {
+    padding: var(--lg);
+    overflow-y: auto;
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+}
+
+/* Modal style pour WelcomeScreen (fond dégradé) */
+.modal-welcome {
+    color: white;
+    border: 1px solid white;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-welcome .form-label {
+    color: white;
+}
+
+.modal-welcome .form-input {
+    color: white;
+    border: 1px solid white;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-welcome .form-input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.modal-welcome .button.primary {
+    color: white;
+    border: 1px solid white;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Modal header avec titre et bouton fermer */
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--md);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.modal-title {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--text);
+    margin: 0;
+}
+
+/* Informations de l'événement dans le modal */
+.modal-event-info {
+    padding: var(--md);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* Onglets du modal */
+.modal-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border);
+    flex-shrink: 0;
+}
+
+.modal-tab-button {
+    flex: 1;
+    padding: var(--md);
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-weight: var(--font-weight-normal);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-bottom: -2px;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xs);
+}
+
+.modal-tab-button:hover {
+    color: var(--text);
+    background: var(--background-hover);
+}
+
+.modal-tab-button.active {
+    color: var(--current-color);
+    font-weight: var(--font-weight-semibold);
+    border-bottom-color: var(--current-color);
+}
+
+/* Contenu scrollable du modal */
+.modal-scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.modal-content-inner {
+    padding: var(--md);
+}
+
+/* Footer du modal */
+.modal-footer {
+    padding: var(--md);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* Modal Share - hauteur fixe */
+.modal-share {
+    height: 85vh;
+    max-height: 85vh;
+    width: 100%;
+    max-width: 420px;
+}
+
+/* Titre de l'événement dans le modal */
+.modal-event-title {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text);
+    margin-bottom: var(--xs);
+    line-height: 1.2;
+}
+
+/* Détails de l'événement dans le modal */
+.modal-event-details {
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}

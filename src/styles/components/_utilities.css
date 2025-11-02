@@ -1,0 +1,183 @@
+/* ========================
+   UTILITY CLASSES
+======================== */
+
+/* ========================
+   FOMO LOGO
+======================== */
+
+/* Structure principale du logo */
+.logo-container {
+
+    align-items: center;
+    gap: var(--sm);
+    padding: var(--xs) var(--md);
+    transition: all var(--transition-fast);
+    position: relative;
+    pointer-events: auto;
+}
+
+.logo-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xs);
+}
+
+/* Texte principal FOMO */
+.logo-text {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: -0.5px;
+    line-height: 1;
+    margin: 0;
+}
+
+/* Tailles du logo selon l'attribut data-size */
+.logo-text[data-size="sm"] {
+    font-size: var(--text-lg);
+}
+
+.logo-text[data-size="md"] {
+    font-size: var(--text-xl);
+}
+
+.logo-text[data-size="lg"] {
+    font-size: var(--text-2xl);
+}
+
+.logo-text[data-size="2xl"] {
+    font-size: 64px;
+}
+
+/* Badge de privacy */
+.logo-badge {
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    box-shadow: var(--shadow);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: var(--xs) var(--xs);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    width: 100%;
+    text-align: center;
+    background: var(--current-color);
+    color: var(--bg);
+}
+
+/* Animation du logo */
+.logo-container {
+    animation: logoFadeIn var(--transition-medium) ease-out;
+}
+
+/* Transition fluide pour les changements de mode */
+.logo-container * {
+    transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+/* Typography utilities */
+.text-xs {
+    font-size: var(--text-xs);
+}
+
+.text-sm {
+    font-size: var(--text-sm);
+}
+
+.text-md {
+    font-size: var(--text-md);
+}
+
+.text-lg {
+    font-size: var(--text-lg);
+}
+
+.text-xl {
+    font-size: var(--text-xl);
+}
+
+.text-2xl {
+    font-size: var(--text-2xl);
+}
+
+/* Common utilities */
+.clickable {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+
+/* Empty states */
+.empty-state {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--xl);
+    text-align: center;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 100%;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: var(--md);
+}
+
+.empty-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 var(--sm) 0;
+}
+
+.empty-description {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: var(--md);
+    opacity: 0.6;
+}
+
+.empty-state-text {
+    font-size: var(--text-md);
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: var(--xs);
+}
+
+.empty-state-subtext {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+/* Utility classes */
+.text-white {
+    color: var(--white);
+}
+
+.width-full {
+    width: 100%;
+}
+
+.flex-shrink-0 {
+    flex-shrink: 0;
+}
+
+/* Liste d'amis avec gap xs */
+.friends-list-xs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}

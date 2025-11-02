@@ -1,0 +1,182 @@
+/* ========================
+   PROFILE PAGE
+======================== */
+
+/* Profile sections */
+.profile-section {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--lg);
+    margin-bottom: var(--sm);
+    box-shadow: var(--shadow);
+}
+
+.profile-main {
+    display: flex;
+    align-items: center;
+    gap: var(--md);
+}
+
+.profile-icon {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.profile-details {
+    flex: 1;
+}
+
+.profile-name {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 var(--xs) 0;
+}
+
+.profile-location {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Stats */
+.stats-section {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--lg);
+    margin-bottom: var(--sm);
+    box-shadow: var(--shadow);
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: var(--xs);
+}
+
+/* Actions */
+.actions-section {
+    display: flex;
+    gap: var(--sm);
+    padding: 0 var(--lg);
+    margin-bottom: var(--md);
+    justify-content: center;
+    flex-wrap: wrap;
+    align-items: spa
+}
+
+.actions-section .button {
+    flex: 1;
+    min-width: 140px;
+    max-width: 280px;
+    padding: var(--sm) var(--md);
+    font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 480px) {
+    .actions-section {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .actions-section .button {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* Container UserCard - limité à 300px */
+.user-card-container {
+    width: 300px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+/* UserCard utilisant event-card - limite à 300px */
+.user-card-container .event-card {
+    width: 300px;
+    max-width: 300px;
+}
+
+/* EventCard dans la liste du profil - même largeur que partout ailleurs */
+.profile-section .event-list-item {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+/* Les EventCards doivent avoir la même largeur (360px) partout dans l'app */
+.profile-section .event-list-item .event-card {
+    width: 360px;
+}
+
+/* Section Lieu */
+.city-setting-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--md);
+}
+
+.city-setting-title {
+    font-size: var(--text-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text);
+}
+
+.city-edit-button {
+    padding: var(--xs) var(--sm);
+    font-size: var(--text-sm);
+    background: var(--background-secondary);
+    color: var(--text);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.city-edit-button:hover {
+    background: var(--background-hover);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.city-edit-button:active {
+    transform: scale(0.98);
+}
+
+/* Champ de recherche de la ville */
+.city-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md);
+    padding: var(--md);
+    background-color: var(--bg);
+    border-radius: var(--radius);
+    border: 2px solid var(--primary);
+    animation: slideUp 0.3s ease-out;
+}
+
+.city-editor .address-autocomplete {
+    width: 100%;
+}
+
+.city-editor-actions {
+    display: flex;
+    gap: var(--sm);
+    justify-content: flex-end;
+    padding-top: var(--xs);
+    border-top: 1px solid var(--border);
+}
