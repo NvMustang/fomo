@@ -43,7 +43,7 @@ const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
-// Re-export toutes les fonctions du fichier original (qui gère déjà USE_TEST_DB)
+// Re-export toutes les fonctions du fichier original (qui détecte automatiquement local/Vercel)
 const originalConfig = require('./sheets-config')
 
 module.exports = {

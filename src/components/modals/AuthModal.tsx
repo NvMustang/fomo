@@ -51,16 +51,23 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
     }
 
     try {
+      console.log('🔍 [AuthModal] Vérification email:', email.trim())
       const user = await checkUserByEmail(email.trim())
+      console.log('🔍 [AuthModal] Résultat checkUserByEmail:', user ? `Utilisateur trouvé: ${user.name}` : 'Aucun utilisateur trouvé')
+
       if (user) {
         // Connexion directe si l'utilisateur existe
-        await login(user.name, user.city, user.email)
+        // Passer l'utilisateur directement à login pour éviter une double vérification
+        console.log('🔍 [AuthModal] Tentative de connexion avec:', { name: user.name, email: user.email })
+        await login(user.name, user.city, user.email, user)
+        console.log('✅ [AuthModal] Connexion réussie')
       } else {
+        console.log('ℹ️ [AuthModal] Utilisateur non trouvé, passage à l\'étape new-user')
         setCurrentStep('new-user')
       }
     } catch (error) {
+      console.error('❌ [AuthModal] Erreur de vérification:', error)
       setError('Erreur lors de la vérification de l\'email. Réessayez.')
-      console.error('Erreur de vérification:', error)
     }
   }
 

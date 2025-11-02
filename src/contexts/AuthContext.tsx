@@ -15,7 +15,7 @@ interface AuthContextType {
     user: User | null
     isAuthenticated: boolean
     isLoading: boolean
-    login: (name: string, city: string, email: string) => Promise<void>
+    login: (name: string, city: string, email: string, existingUserData?: UserWithPrivacy) => Promise<void>
     logout: () => void
     isPublicUser: boolean
     checkUserByEmail: (email: string) => Promise<UserWithPrivacy | null>
@@ -72,61 +72,83 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
     // Créer une instance directe pour éviter la référence circulaire
     const fomoData = new FomoDataManager()
 
-    const login = useCallback(async (name: string, city: string, email: string) => {
+    const login = useCallback(async (name: string, city: string, email: string, existingUserData?: UserWithPrivacy) => {
         try {
             setIsLoading(true)
+            console.log('🔍 [AuthContext] login appelé avec:', { name, email, existingUserData: existingUserData ? 'fourni' : 'non fourni' })
 
-            // Vérifier si l'utilisateur existe déjà par email
-            const existingUser = await fomoData.checkUserByEmail(email.trim())
+            // Si l'utilisateur existe déjà (passé en paramètre depuis AuthModal), l'utiliser directement
+            let userToConnect: UserWithPrivacy
 
-            if (existingUser) {
-                // Utilisateur existant : se connecter avec ses données existantes
-                console.log('🔍 AuthContext - Existing user found:', existingUser)
+            if (existingUserData) {
+                // Utilisateur existant passé en paramètre (déjà vérifié dans AuthModal)
+                console.log('✅ [AuthContext] Utilisation de l\'utilisateur existant fourni:', existingUserData.name)
+                userToConnect = existingUserData
 
                 // Mettre à jour lastConnexion lors de la connexion
                 const lastConnexion = new Date().toISOString()
                 try {
-                    await fomoData.saveUserToBackend(existingUser as UserWithPrivacy, lastConnexion)
+                    await fomoData.saveUserToBackend(userToConnect, lastConnexion)
+                    console.log('✅ [AuthContext] lastConnexion mis à jour')
                 } catch (error) {
-                    console.error('Erreur mise à jour lastConnexion:', error)
+                    console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
                     // Continue même si la mise à jour échoue
                 }
-
-                localStorage.setItem('fomo-user', JSON.stringify(existingUser))
-                setUser(existingUser)
-                setIsPublicUser((existingUser as any).isPublicProfile)
             } else {
-                // Nouvel utilisateur : créer un profil
-                const newUser: UserWithPrivacy = {
-                    id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-                    name: name.trim(),
-                    email: email.trim(),
-                    city: city.trim(),
-                    friendsCount: 0,
-                    showAttendanceToFriends: true,
-                    isPublicProfile: false, // Tous les utilisateurs commencent avec un profil privé
-                    isAmbassador: false
+                // Pas d'utilisateur fourni, vérifier s'il existe ou créer un nouveau
+                const existingUser = await fomoData.checkUserByEmail(email.trim())
+                console.log('🔍 [AuthContext] existingUser trouvé:', existingUser ? `${existingUser.name} (${existingUser.email})` : 'null')
+
+                if (existingUser) {
+                    // Utilisateur existant trouvé
+                    console.log('✅ [AuthContext] Utilisateur existant trouvé, connexion en cours...')
+                    userToConnect = existingUser
+
+                    // Mettre à jour lastConnexion lors de la connexion
+                    const lastConnexion = new Date().toISOString()
+                    try {
+                        await fomoData.saveUserToBackend(userToConnect, lastConnexion)
+                        console.log('✅ [AuthContext] lastConnexion mis à jour')
+                    } catch (error) {
+                        console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
+                        // Continue même si la mise à jour échoue
+                    }
+                } else {
+                    // Nouvel utilisateur : créer un profil
+                    console.log('📝 [AuthContext] Nouvel utilisateur, création du profil...')
+                    userToConnect = {
+                        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+                        name: name.trim(),
+                        email: email.trim(),
+                        city: city.trim(),
+                        friendsCount: 0,
+                        showAttendanceToFriends: true,
+                        isPublicProfile: false, // Tous les utilisateurs commencent avec un profil privé
+                        isAmbassador: false
+                    }
+
+                    // Sauvegarder dans le backend (Google Sheets)
+                    try {
+                        await fomoData.saveUserToBackend(userToConnect)
+                        console.log('✅ [AuthContext] Nouvel utilisateur sauvegardé dans le backend')
+                    } catch (error) {
+                        console.error('❌ [AuthContext] Erreur sauvegarde backend:', error)
+                        // Continue même si la sauvegarde backend échoue
+                    }
                 }
-
-                // Sauvegarder dans le localStorage
-                localStorage.setItem('fomo-user', JSON.stringify(newUser))
-
-                // Sauvegarder dans le backend (Google Sheets)
-                try {
-                    await fomoData.saveUserToBackend(newUser)
-                } catch (error) {
-                    console.error('Erreur sauvegarde backend:', error)
-                    // Continue même si la sauvegarde backend échoue
-                }
-
-                setUser(newUser)
-                setIsPublicUser(false)
             }
+
+            // Sauvegarder dans le localStorage et mettre à jour l'état
+            localStorage.setItem('fomo-user', JSON.stringify(userToConnect))
+            setUser(userToConnect)
+            setIsPublicUser(userToConnect.isPublicProfile)
+            console.log('✅ [AuthContext] Utilisateur connecté et sauvegardé dans localStorage')
         } catch (error) {
-            console.error('Erreur lors de la connexion:', error)
+            console.error('❌ [AuthContext] Erreur lors de la connexion:', error)
             throw error
         } finally {
             setIsLoading(false)
+            console.log('🏁 [AuthContext] login terminé, isLoading = false')
         }
     }, [])
 

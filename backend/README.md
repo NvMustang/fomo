@@ -53,36 +53,30 @@ GOOGLE_SERVICE_ACCOUNT_KEY=./service-account.json
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 PORT=3001
 CORS_ORIGIN=http://localhost:5173
-IMGBB_API_KEY=your_imgbb_api_key
 
-# Optionnel : DB de test (pour développement local sans affecter la production)
-USE_TEST_DB=true
-GOOGLE_SPREADSHEET_ID_TEST=your_test_spreadsheet_id
+# DB de test (pour développement local - détection automatique)
+GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
 ```
 
-### 🧪 Utilisation de la DB de test
+### 🧪 Détection automatique de l'environnement
 
-Pour développer avec une base de données de test sans modifier la production :
+La configuration détecte automatiquement l'environnement :
+- **En local** (développement) : utilise toujours la DB de test si `GOOGLE_SPREADSHEET_ID_TEST` est défini
+- **Sur Vercel** (production) : utilise automatiquement `GOOGLE_SPREADSHEET_ID`
 
-1. **Créer une feuille Google Sheets de test** (copie de la production)
+**Configuration pour le développement local :**
 
-2. **Ajouter dans `backend/.env`** :
+1. **Ajouter dans `backend/.env`** :
    ```env
-   USE_TEST_DB=true
    GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
    ```
 
-3. **Démarrer en mode test** :
-   ```bash
-   npm run test:dev
-   ```
-
-   Ou en mode production (défaut) :
+2. **Démarrer le serveur** (toujours en mode test en local) :
    ```bash
    npm run dev
    ```
 
-   Le serveur affichera `🧪 TEST` ou `📊 PRODUCTION` pour indiquer l'environnement utilisé.
+   Le serveur affichera automatiquement `🧪 TEST` en local et `📊 PRODUCTION` sur Vercel.
 
 ## 📊 Structure Google Sheets
 

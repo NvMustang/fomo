@@ -159,7 +159,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         // Faire un zoom out modéré pour voir plus d'événements
         setTimeout(() => {
           if ((window as any).zoomOutMap) {
-            (window as any).zoomOutMap(10, 20000)
+            (window as any).zoomOutMap(8, 20000)
           }
         }, 100)
       }

@@ -105,9 +105,7 @@ fi
 
 echo ""
 echo "💡 Commandes disponibles:"
-echo "  ./start.sh       - Démarrer FOMO MVP (PRODUCTION)"
-echo "  ./start.sh test  - Démarrer FOMO MVP (MODE TEST)"
-echo "  ./stop.sh        - Arrêter FOMO MVP"
-echo "  ./restart.sh     - Redémarrer (PRODUCTION)"
-echo "  ./restart.sh test - Redémarrer (MODE TEST)"
-echo "  ./status.sh      - Vérifier le statut"
+echo "  ./start.sh   - Démarrer FOMO MVP"
+echo "  ./stop.sh    - Arrêter FOMO MVP"
+echo "  ./restart.sh - Redémarrer FOMO MVP"
+echo "  ./status.sh  - Vérifier le statut"

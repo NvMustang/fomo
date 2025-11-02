@@ -2,17 +2,9 @@
 
 # 🚀 Script de démarrage FOMO MVP
 # Tue tous les processus et relance proprement front + back
-# Usage: ./start.sh [test] - Démarre en mode test si "test" est passé en paramètre
 
-# Détecter le mode test
-if [ "$1" = "test" ] || [ "$1" = "--test" ]; then
-    USE_TEST_MODE=true
-    echo "🧪 Démarrage de FOMO MVP en MODE TEST..."
-    echo "⚠️  ATTENTION: Vous utilisez la base de données de TEST"
-else
-    USE_TEST_MODE=false
-    echo "🔄 Démarrage de FOMO MVP (PRODUCTION)..."
-fi
+echo "🔄 Démarrage de FOMO MVP..."
+
 
 # Fonction pour tuer les processus sur un port
 kill_port() {
@@ -61,6 +53,7 @@ echo "🧹 Nettoyage des logs..."
 > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log
 > /Users/eugene/Projects/FOMO\ MVP/logs/frontend.log
 echo "✅ Logs nettoyés"
+echo ""
 
 # Obtenir l'IP du réseau local
 get_local_ip() {
@@ -103,29 +96,21 @@ else
 fi
 
 # Démarrer le backend
-if [ "$USE_TEST_MODE" = "true" ]; then
-    echo "🧪 Démarrage du backend en MODE TEST..."
-    cd /Users/eugene/Projects/FOMO\ MVP/backend
-    # Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
-    USE_TEST_DB=true npm run test:dev > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
-    BACKEND_PID=$!
-    cd /Users/eugene/Projects/FOMO\ MVP/fomo
-    echo "🔍 Backend TEST démarré avec PID: $BACKEND_PID"
-else
-    echo "🚀 Démarrage du backend (PRODUCTION)..."
-    cd /Users/eugene/Projects/FOMO\ MVP/backend
-    # Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
-    npm start > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
-    BACKEND_PID=$!
-    cd /Users/eugene/Projects/FOMO\ MVP/fomo
-    echo "🔍 Backend démarré avec PID: $BACKEND_PID"
-fi
-echo "📋 Logs backend: tail -f logs/backend.log"
+echo "🚀 Démarrage du backend..."
+cd /Users/eugene/Projects/FOMO\ MVP/backend
+# Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
+# La détection automatique utilise la DB de test en local
+npm run dev > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
+BACKEND_PID=$!
+cd /Users/eugene/Projects/FOMO\ MVP/fomo
+echo "🔍 Backend démarré avec PID: $BACKEND_PID"
+
 
 # Attendre que le backend démarre
 echo "⏳ Attente du démarrage du backend..."
 sleep 5
 echo "✅ Backend démarré (PID: $BACKEND_PID)"
+echo ""
 
 # Démarrer le frontend avec l'URL de l'API configurée
 echo "🚀 Démarrage du frontend sur le port 3000..."
@@ -149,13 +134,7 @@ echo "✅ Frontend démarré (PID: $FRONTEND_PID)"
 
 # Afficher les informations de démarrage
 echo ""
-if [ "$USE_TEST_MODE" = "true" ]; then
-    echo "🎉 FOMO MVP démarré en MODE TEST avec succès !"
-    echo "🧪 Base de données: TEST (GOOGLE_SPREADSHEET_ID_TEST)"
-else
-    echo "🎉 FOMO MVP démarré avec succès !"
-    echo "📊 Base de données: PRODUCTION"
-fi
+echo "🎉 FOMO MVP démarré avec succès !"
 echo ""
 
 if [ "$USE_LOCALHOST" = "true" ]; then
@@ -165,33 +144,15 @@ if [ "$USE_LOCALHOST" = "true" ]; then
     echo "ℹ️  Configuration localhost:"
     echo "   - Frontend: localhost:3000"
     echo "   - Backend:  localhost:3001"
-    if [ "$USE_TEST_MODE" = "true" ]; then
-        echo "   - Mode: MODE TEST (développement local)"
-    else
-        echo "   - Mode: développement local uniquement"
-    fi
     echo ""
 else
     echo "📱 Frontend: http://$LOCAL_IP:3000 (PID: $FRONTEND_PID)"
     echo "🔧 Backend:  http://$LOCAL_IP:3001 (PID: $BACKEND_PID)"
     echo ""
-    echo "📱 Test mobile: http://$LOCAL_IP:3000"
-    echo "🔧 API mobile:  http://$LOCAL_IP:3001"
-    echo ""
-    echo "ℹ️  Configuration réseau:"
-    echo "   - Frontend: $LOCAL_IP:3000 (accessible mobile)"
-    echo "   - Backend:  $LOCAL_IP:3001 (accessible mobile)"
-    echo "   - Frontend se connecte au backend sur $LOCAL_IP"
-    if [ "$USE_TEST_MODE" = "true" ]; then
-        echo "   - Mode: MODE TEST (base de données de test)"
-    fi
-    echo ""
+
 fi
-echo "📋 Logs disponibles:"
-echo "   Frontend: tail -f logs/frontend.log"
-echo "   Backend:  tail -f logs/backend.log"
-echo ""
-echo "🛑 Pour arrêter: ./stop.sh"
+echo "📋 Logs disponibles dans le dossier logs/"
+echo "🛑 Pour arrêter: .fomo/stop.sh"
 echo ""
 
 # Garder le script en vie pour voir les logs

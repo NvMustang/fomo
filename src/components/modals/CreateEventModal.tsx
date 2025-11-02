@@ -30,7 +30,7 @@ interface CreateEventModalProps {
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, editMode = false, initialEvent }) => {
   const { isPublicMode } = usePrivacy()
   const { user, isPublicUser } = useAuth()
-  const { createEvent, updateEvent, getTags } = useFomoDataContext()
+  const { createEvent, updateEvent, getTags, addEventResponse } = useFomoDataContext()
   const { showToast } = useToast()
 
   // Fonctions pour gérer les toasts avec le système unifié
@@ -433,6 +433,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
 
         if (!newEvent || !newEvent.id) {
           throw new Error('Événement non créé - réponse invalide du serveur')
+        }
+
+        // Ajouter automatiquement la réponse de l'utilisateur créateur avec statut "invited"
+        if (user?.id && addEventResponse) {
+          addEventResponse(newEvent.id, 'invited')
         }
       }
 

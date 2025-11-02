@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components'
 
 interface VisitorNameModalProps {
@@ -30,7 +31,7 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({ isOpen, onCl
 
     if (!isOpen) return null
 
-    return (
+    const modalContent = (
         <div className="modal_overlay" onClick={onClose}>
             <div className="modal_container">
                 <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -109,6 +110,13 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({ isOpen, onCl
             </div>
         </div>
     )
+
+    // Utiliser un portail pour rendre le modal directement dans document.body
+    // afin qu'il soit hors du stacking context de l'EventCard
+    const portalTarget = typeof document !== 'undefined' ? document.body : null
+    if (!portalTarget) return null
+
+    return createPortal(modalContent, portalTarget)
 }
 
 VisitorNameModal.displayName = 'VisitorNameModal'

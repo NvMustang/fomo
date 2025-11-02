@@ -21,6 +21,7 @@ export { AddFriendModal } from './modals/AddFriendModal'
 export { default as CreateEventModal } from './modals/CreateEventModal'
 export { AuthModal } from './modals/AuthModal'
 export { VisitorNameModal } from './modals/VisitorNameModal'
+export { BetaModal } from './modals/BetaModal'
 
 // Composants utilitaires
 export { LocationPicker } from './ui/LocationPicker'

@@ -6,6 +6,7 @@
  */
 
 const { google } = require('googleapis')
+const path = require('path')
 require('dotenv').config()
 
 // Configuration Google Sheets et Drive avec délégation
@@ -37,8 +38,11 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     }
 } else {
     // Développement local : fichier service-account.json
+    // Utiliser un chemin absolu basé sur __dirname pour garantir la localisation correcte
+    // depuis backend/utils/sheets-config.js vers backend/service-account.json
+    const serviceAccountPath = path.join(__dirname, '..', 'service-account.json')
     authConfig = {
-        keyFile: './service-account.json',
+        keyFile: serviceAccountPath,
         scopes: [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
@@ -52,14 +56,16 @@ const auth = new google.auth.GoogleAuth(authConfig)
 const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
 
-// Support pour DB de test : utiliser GOOGLE_SPREADSHEET_ID_TEST si USE_TEST_DB=true
-// ou si GOOGLE_SPREADSHEET_ID_TEST est défini (priorité à la variable explicite)
-const useTestDb = process.env.USE_TEST_DB === 'true' || process.env.USE_TEST_DB === '1'
+// Détection automatique de l'environnement :
+// - Local (développement) : utilise toujours la DB de test si GOOGLE_SPREADSHEET_ID_TEST est défini
+// - Vercel (production) : utilise GOOGLE_SPREADSHEET_ID (production)
+const isLocal = !process.env.VERCEL
 const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
+const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ'
 
-const SPREADSHEET_ID = useTestDb && testSpreadsheetId
-    ? testSpreadsheetId
-    : (process.env.GOOGLE_SPREADSHEET_ID || '14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ')
+const SPREADSHEET_ID = isLocal && testSpreadsheetId
+    ? testSpreadsheetId  // Local : toujours utiliser la DB de test si disponible
+    : productionSpreadsheetId  // Vercel/Production : utiliser la DB de production
 
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
@@ -85,8 +91,7 @@ async function validateSpreadsheet() {
         })
 
         // Déterminer l'environnement pour l'affichage
-        const isTestDb = process.env.USE_TEST_DB === 'true' || process.env.USE_TEST_DB === '1'
-        const envType = isTestDb && process.env.GOOGLE_SPREADSHEET_ID_TEST ? '🧪 TEST' : '📊 PRODUCTION'
+        const envType = isLocal && testSpreadsheetId ? '🧪 TEST' : '📊 PRODUCTION'
         console.log(`${envType} - Feuille trouvée: ${spreadsheet.data.properties.title}`)
         return spreadsheet.data
     } catch (error) {

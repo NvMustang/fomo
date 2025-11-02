@@ -78,6 +78,16 @@ export const EventCard = React.memo<EventCardProps>(({
 
     // Timeout pour l'action différée de suppression (not_interested ou cleared)
     const pendingRemovalTimeoutRef = useRef<number | null>(null)
+    
+    // Ref pour accéder aux dernières valeurs de responses et user dans le cleanup
+    const responsesRef = useRef(responses)
+    const userIdRef = useRef(user?.id)
+    
+    // Synchroniser les refs avec les valeurs actuelles
+    useEffect(() => {
+        responsesRef.current = responses
+        userIdRef.current = user?.id
+    }, [responses, user?.id])
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded)
@@ -121,22 +131,33 @@ export const EventCard = React.memo<EventCardProps>(({
 
     const handleClose = () => {
         try {
-            // Lire directement depuis responses pour éviter les closures stale dans le cleanup
-            const current = getEventResponse(event.id)
+            // Lire directement depuis le ref (toujours à jour, pas de closure stale)
+            const latestResponses = responsesRef.current
+            const latestUserId = userIdRef.current
+            
+            const match = latestUserId 
+                ? latestResponses.find(r => r.userId === latestUserId && r.eventId === event.id)
+                : null
+            const current = match ? match.response : null
             const initial = initialResponseRef.current
-            const initialMissing = (initial as any) == null
-            const stillMissing = (current as any) == null
+            
             // Cas 1: null → null → envoie 'seen'
-            if (initialMissing && stillMissing) {
+            if ((initial == null || initial === undefined) && (current == null || current === undefined)) {
                 addEventResponse(event.id, 'seen')
+                return
             }
-            // Cas 2: 'invited' → 'invited' → envoie 'seen'
+            
+            // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen'
             if (initial === 'invited' && current === 'invited') {
                 addEventResponse(event.id, 'seen')
+                return
             }
+            
+            // Cas 3: 'invited' → autre chose (going/interested/not_interested/cleared)
+            // Ne rien faire, la réponse a déjà été envoyée par toggleResponse
+            // (pas de 'seen' car l'utilisateur a interagi)
         } catch (e) {
             // Ne pas bloquer la fermeture en cas d'erreur
-            // Log minimal volontairement omis pour rester propre
         }
     }
 

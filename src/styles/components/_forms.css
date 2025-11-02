@@ -26,6 +26,16 @@
     margin-top: var(--xs);
 }
 
+/* Error message */
+.error-message {
+    padding: var(--sm) var(--md);
+    background: var(--error-light);
+    color: var(--danger);
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    border: 1px solid var(--danger);
+}
+
 
 /* Inputs */
 .form-input,

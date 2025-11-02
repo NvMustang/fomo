@@ -15,7 +15,7 @@ import { PrivacyProvider, usePrivacy } from '@/contexts/PrivacyContext'
 import { FomoDataProvider, useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { FiltersProvider } from '@/contexts/FiltersContext'
 import { useToast } from '@/hooks'
-import { Toast } from '@/components/ui/Toast'
+import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { WelcomeScreen } from '@/components'
 
 import CalendarPage from '@/pages/CalendarPage'
@@ -205,7 +205,7 @@ const VisitorModeContent = ({
     const handleVisitorFormCompleted = useCallback((organizerName: string) => {
         // Fermer l'EventCard
         setSelectedEvent(null)
-        
+
         // Activer le toggle privacy
         setToggleDisabled(false)
 

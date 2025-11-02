@@ -539,30 +539,44 @@ export class FomoDataManager {
         try {
             // Normaliser l'email (trim + toLowerCase) avant l'envoi pour être cohérent avec le backend
             const normalizedEmail = (email || '').trim().toLowerCase()
+            const apiUrl = `${API_BASE_URL}/users/email/${encodeURIComponent(normalizedEmail)}`
+
             console.log(`🔍 [Frontend] Recherche utilisateur par email: "${normalizedEmail}"`)
-            const response = await fetch(`${API_BASE_URL}/users/email/${encodeURIComponent(normalizedEmail)}`)
+            console.log(`🔗 [Frontend] URL API: ${apiUrl}`)
+
+            const response = await fetch(apiUrl)
 
             if (response.ok) {
                 const result = await response.json()
                 if (result.success && result.data) {
+                    console.log(`✅ [Frontend] Utilisateur trouvé: ${result.data.name} (${result.data.email})`)
                     return result.data
                 }
                 // Utilisateur non trouvé (success: false ou data: null)
+                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (success: false)`)
                 return null
             }
 
             // Erreur HTTP (404, 500, etc.) - utilisateur non trouvé ou erreur serveur
             if (response.status === 404) {
                 // Utilisateur non trouvé - c'est normal, retourner null
+                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (404)`)
                 return null
             }
 
             // Autre erreur HTTP - logger et retourner null
-            console.error(`Erreur HTTP ${response.status} lors de la vérification utilisateur`)
+            const errorText = await response.text().catch(() => 'Unable to read error')
+            console.error(`❌ [Frontend] Erreur HTTP ${response.status} lors de la vérification utilisateur:`, errorText)
             return null
         } catch (error) {
             // Erreur réseau ou autre - logger et retourner null (fallback)
-            console.error('Erreur vérification utilisateur:', error)
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            const errorStack = error instanceof Error ? error.stack : undefined
+            console.error('❌ [Frontend] Erreur vérification utilisateur:', {
+                message: errorMessage,
+                stack: errorStack,
+                apiUrl: `${API_BASE_URL}/users/email/...`
+            })
             return null
         }
     }
