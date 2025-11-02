@@ -241,7 +241,7 @@ class UsersController {
 
             // Récupérer toutes les amitiés pour déterminer le statut
             const allFriendships = await DataServiceV2.getAllActiveData(
-                'Friendships!A2:G',
+                'Relations!A2:G',
                 DataServiceV2.mappers.friendship
             )
 
@@ -325,7 +325,7 @@ class UsersController {
             console.log(`👥 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
             const allFriendships = await DataServiceV2.getAllActiveData(
-                'Friendships!A2:G',
+                'Relations!A2:G',
                 DataServiceV2.mappers.friendship
             )
 
@@ -395,7 +395,7 @@ class UsersController {
 
             // Récupérer toutes les amitiés pour vérifier
             const allFriendships = await DataServiceV2.getAllActiveData(
-                'Friendships!A2:G',
+                'Relations!A2:G',
                 DataServiceV2.mappers.friendship
             )
 
@@ -426,7 +426,7 @@ class UsersController {
             ]
 
             const result = await DataServiceV2.upsertData(
-                'Friendships!A2:G',
+                'Relations!A2:G',
                 rowData,
                 0, // key column (ID)
                 friendshipId
@@ -460,7 +460,7 @@ class UsersController {
             console.log(`🗑️ Suppression amitié: ${friendshipId}`)
 
             const result = await DataServiceV2.softDelete(
-                'Friendships!A2:G',
+                'Relations!A2:G',
                 0, // key column (ID)
                 friendshipId
             )

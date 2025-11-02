@@ -172,7 +172,7 @@ class BatchController {
 
         // Pour "accept" et "block", récupérer l'amitié existante pour déterminer fromUserId/toUserId
         const allFriendships = await DataServiceV2.getAllActiveData(
-            'Friendships!A2:G',
+            'Relations!A2:G',
             DataServiceV2.mappers.friendship
         )
 
