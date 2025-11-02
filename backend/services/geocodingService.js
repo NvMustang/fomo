@@ -58,8 +58,11 @@ class GeocodingService {
         try {
             console.log(`🔍 Recherche d'adresses Mapbox: ${query}${countryCode ? ` (pays: ${countryCode})` : ' (mondiale)'}`)
 
-            // Token Mapbox
-            const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibnZtdXN0YW5nIiwiYSI6ImNtZzJ1dDVpajB5dzQya3IzdWYyc2s0b2IifQ.kjf-gDNu4oJKUrnk_8axPA'
+            // Token Mapbox depuis les variables d'environnement
+            const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN
+            if (!mapboxToken) {
+                throw new Error('MAPBOX_ACCESS_TOKEN non configuré dans .env')
+            }
 
             // Construire l'URL Mapbox
             const encodedQuery = encodeURIComponent(query)

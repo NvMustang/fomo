@@ -100,7 +100,7 @@ class ConsoleLogger {
                         // Gérer les erreurs de sérialisation circulaire
                         if (error instanceof TypeError && error.message.includes('circular structure')) {
                             // Pour les objets avec références circulaires, essayer d'extraire les propriétés essentielles
-                            if (arg.constructor?.name === 'Error') {
+                            if (arg instanceof Error) {
                                 return `[Error ${index}: ${arg.message || 'no message'}] (circular reference)`;
                             }
                             return `[Object ${index}: circular reference] (type: ${arg.constructor?.name || 'unknown'})`;

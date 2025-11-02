@@ -1,4 +1,3 @@
-import React from 'react'
 
 export default function ConversationPage() {
     console.log('🎭 [ConversationPage] COMPONENT RENDER')

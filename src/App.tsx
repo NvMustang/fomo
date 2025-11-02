@@ -353,7 +353,11 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
         }
 
         // Setup des event listeners
-        window.visualViewport.addEventListener('resize', handleViewportChange)
+        const vp = window.visualViewport
+        if (vp) {
+            // TypeScript strict mode: vp est vérifié non-null dans le if
+            vp!.addEventListener('resize', handleViewportChange)
+        }
         window.addEventListener('scroll', handleScroll, { passive: true })
 
         // Appel initial avec délai pour laisser le scroll se stabiliser
