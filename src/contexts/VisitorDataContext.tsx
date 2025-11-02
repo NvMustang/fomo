@@ -29,7 +29,7 @@ export type VisitorDataContextType =
         'users' | 'userRelations' | 'usersError' | 'eventsError' | 'responsesError' | 'relationsError' |
         'refreshEvents' | 'refreshUsers' | 'refreshResponses' | 'refreshUserRelations' | 'refreshAll' |
         'createEvent' | 'updateEvent' | 'sendFriendshipRequest' | 'addFriendshipAction' |
-        'searchUsers' | 'getTags' | 'checkUserByEmail' | 'saveUserToBackend' |
+        'searchUsers' | 'getTags' | 'checkUserByEmail' | 'matchByEmail' | 'saveUserToBackend' |
         'getUserEvents' | 'searchAddresses'
     >>
 
@@ -127,9 +127,11 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                         if (matchedId.startsWith('user-')) {
                             // User existant trouvé -> connexion automatique
                             console.log(`✅ [VisitorDataContext] User existant trouvé: ${matchedId}, connexion automatique...`)
-                            const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
-                            if (user) {
-                                await authLogin(user.name, user.city, user.email, user)
+                            if (visitorEmailRef.current) {
+                                const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
+                                if (user) {
+                                    await authLogin(user.name, user.city, user.email, user)
+                                }
                             }
                             return
                         } else if (matchedId.startsWith('visit-')) {

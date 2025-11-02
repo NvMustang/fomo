@@ -8,17 +8,14 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 import { User } from '@/types/fomoTypes'
 import { FomoDataManager } from '@/utils/dataManager'
 
-// Type étendu pour l'utilisateur avec isPublicProfile
-type UserWithPrivacy = User & { isPublicProfile: boolean }
-
 interface AuthContextType {
     user: User | null
     isAuthenticated: boolean
     isLoading: boolean
-    login: (name: string, city: string, email: string, existingUserData?: UserWithPrivacy) => Promise<void>
+    login: (name: string, city: string, email: string, existingUserData?: User) => Promise<void>
     logout: () => void
     isPublicUser: boolean
-    checkUserByEmail: (email: string) => Promise<UserWithPrivacy | null>
+    checkUserByEmail: (email: string) => Promise<User | null>
     updateUser: (updates: Partial<User>) => Promise<void>
 }
 
@@ -72,13 +69,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
     // Créer une instance directe pour éviter la référence circulaire
     const fomoData = new FomoDataManager()
 
-    const login = useCallback(async (name: string, city: string, email: string, existingUserData?: UserWithPrivacy) => {
+    const login = useCallback(async (name: string, city: string, email: string, existingUserData?: User) => {
         try {
             setIsLoading(true)
             console.log('🔍 [AuthContext] login appelé avec:', { name, email, existingUserData: existingUserData ? 'fourni' : 'non fourni' })
 
             // Si l'utilisateur existe déjà (passé en paramètre depuis AuthModal), l'utiliser directement
-            let userToConnect: UserWithPrivacy | null = null
+            let userToConnect: User | null = null
 
             if (existingUserData) {
                 // Vérifier que l'utilisateur fourni est bien un user (pas un visitor)
@@ -138,7 +135,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                             showAttendanceToFriends: true,
                             isPublicProfile: false,
                             isAmbassador: false
-                        } as UserWithPrivacy
+                        } as User
 
                         try {
                             // Utiliser updateUser avec newId pour transformer visit-xxx en user-xxx
@@ -181,7 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                         showAttendanceToFriends: true,
                         isPublicProfile: false,
                         isAmbassador: false
-                    } as UserWithPrivacy
+                    } as User
 
                     // Sauvegarder dans le backend
                     try {
@@ -240,7 +237,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
 
         // Sauvegarder dans le backend
         try {
-            await fomoData.saveUserToBackend(updatedUser as UserWithPrivacy)
+            await fomoData.saveUserToBackend(updatedUser)
         } catch (error) {
             console.error('Erreur lors de la mise à jour de l\'utilisateur:', error)
             // Rollback en cas d'erreur

@@ -11,7 +11,8 @@
  * @version 1.0.0
  */
 
-import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction } from '@/types/fomoTypes'
+import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction, BatchProcessResult, AddressSuggestion } from '@/types/fomoTypes'
+import { isFriendshipActionData } from '@/types/fomoTypes'
 import { getApiBaseUrl } from '@/config/env'
 import { format } from 'date-fns'
 
@@ -31,7 +32,7 @@ const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes
 // ===== CACHE EN MÉMOIRE =====
 
 class MemoryCache {
-    private cache = new Map<string, { data: any, timestamp: number }>()
+    private cache = new Map<string, { data: unknown, timestamp: number }>()
 
     get<T>(key: string): T | null {
         const cached = this.cache.get(key)
@@ -43,7 +44,7 @@ class MemoryCache {
             return null
         }
 
-        return cached.data
+        return cached.data as T
     }
 
     set<T>(key: string, data: T): void {
@@ -76,10 +77,11 @@ class MemoryCache {
  * - Invalidation manuelle uniquement lors des mises à jour réussies
  */
 class ResponseCache {
-    private cache = new Map<string, any>()
+    private cache = new Map<string, unknown>()
 
     get<T>(key: string): T | null {
-        return this.cache.get(key) || null
+        const value = this.cache.get(key)
+        return (value as T) || null
     }
 
     set<T>(key: string, data: T): void {
@@ -171,7 +173,7 @@ class BatchManager {
                     cache.invalidateUser(actions[0].userId)
                     // Invalider aussi le cache des autres utilisateurs impliqués
                     actions.forEach(action => {
-                        if (action.type.startsWith('friendship_') && action.data?.toUserId) {
+                        if (action.type.startsWith('friendship_') && isFriendshipActionData(action.data)) {
                             cache.invalidateUser(action.data.toUserId)
                         }
                     })
@@ -298,13 +300,13 @@ class ApiClient {
     }
 
     // ===== GEOCODING =====
-    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<any[]> {
+    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<AddressSuggestion[]> {
         const params = new URLSearchParams()
         if (options?.countryCode) params.set('countryCode', options.countryCode)
         if (typeof options?.limit === 'number') params.set('limit', String(options.limit))
         const qs = params.toString()
         const endpoint = `/geocode/search/${encodeURIComponent(query)}${qs ? `?${qs}` : ''}`
-        return this.makeRequest<any[]>(endpoint)
+        return this.makeRequest<AddressSuggestion[]>(endpoint)
     }
 
     // ===== RESPONSES =====
@@ -313,8 +315,8 @@ class ApiClient {
     }
 
     // ===== BATCH =====
-    async processBatch(actions: BatchAction[]): Promise<{ processed: number; results: any }> {
-        return this.makeRequest<{ processed: number; results: any }>('/batch', {
+    async processBatch(actions: BatchAction[]): Promise<BatchProcessResult> {
+        return this.makeRequest<BatchProcessResult>('/batch', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -428,7 +430,7 @@ export class FomoDataManager {
     }
 
     // ===== GEOCODING =====
-    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<any[]> {
+    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<AddressSuggestion[]> {
         return apiClient.searchAddresses(query, options)
     }
 
@@ -535,7 +537,7 @@ export class FomoDataManager {
 
     // ===== AUTH =====
 
-    async checkUserByEmail(email: string): Promise<(User & { isPublicProfile: boolean }) | null> {
+    async checkUserByEmail(email: string): Promise<User | null> {
         try {
             // Normaliser l'email (trim + toLowerCase) avant l'envoi pour être cohérent avec le backend
             const normalizedEmail = (email || '').trim().toLowerCase()
@@ -611,7 +613,7 @@ export class FomoDataManager {
     }
 
 
-    async updateUser(userId: string, userData: User & { isPublicProfile: boolean }, newId?: string): Promise<(User & { isPublicProfile: boolean }) | null> {
+    async updateUser(userId: string, userData: User, newId?: string): Promise<User | null> {
         try {
             // Préparer le payload avec tous les champs explicites (comme pour events)
             const payload: any = {
@@ -661,7 +663,7 @@ export class FomoDataManager {
                     showAttendanceToFriends: result.data.showAttendanceToFriends ?? true,
                     isPublicProfile: result.data.isPublicProfile ?? false,
                     isAmbassador: result.data.isAmbassador ?? false
-                } as User & { isPublicProfile: boolean }
+                } as User
             }
 
             return null
@@ -671,7 +673,7 @@ export class FomoDataManager {
         }
     }
 
-    async saveUserToBackend(userData: User & { isPublicProfile: boolean }, lastConnexion?: string): Promise<(User & { isPublicProfile: boolean }) | null> {
+    async saveUserToBackend(userData: User, lastConnexion?: string): Promise<User | null> {
         // Géocoder la ville avant de sauvegarder
         let lat = null
         let lng = null
@@ -756,8 +758,8 @@ const fomoDataApi = {
     // Auth
     checkUserByEmail: (email: string) => fomoDataManager.checkUserByEmail(email),
     matchByEmail: (email: string) => fomoDataManager.matchByEmail(email),
-    updateUser: (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => fomoDataManager.updateUser(userId, userData, newId),
-    saveUserToBackend: (userData: User & { isPublicProfile: boolean }) => fomoDataManager.saveUserToBackend(userData),
+    updateUser: (userId: string, userData: User, newId?: string) => fomoDataManager.updateUser(userId, userData, newId),
+    saveUserToBackend: (userData: User) => fomoDataManager.saveUserToBackend(userData),
 
     // Responses
     getResponses: () => fomoDataManager.getResponses(),

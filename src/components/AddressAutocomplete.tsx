@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
-
-interface AddressSuggestion {
-    display_name: string
-    lat: string
-    lon: string
-    place_id: string
-}
+import type { AddressSuggestion } from '@/types/fomoTypes'
 
 interface AddressAutocompleteProps {
     value: string

@@ -133,10 +133,49 @@ export interface UserResponse {
     invitedByUserId?: string // ID de l'utilisateur ayant invité
 }
 
+// ===== GEOCODING =====
+export interface AddressSuggestion {
+    display_name: string
+    lat: string
+    lon: string
+    place_id: string
+}
+
+// ===== BATCH ACTIONS =====
+export interface BatchEventResponseData {
+    eventId: string
+    response: UserResponseValue
+    invitedByUserId?: string
+}
+
+export interface BatchFriendshipActionData {
+    friendshipId: string
+    toUserId: string
+}
+
+export type BatchActionData = BatchEventResponseData | BatchFriendshipActionData
+
+// Type guard pour vérifier si une action d'amitié
+export function isFriendshipActionData(data: BatchActionData): data is BatchFriendshipActionData {
+    return 'friendshipId' in data && 'toUserId' in data
+}
+
 export interface BatchAction {
     id: string
     type: 'event_response' | 'friendship_accept' | 'friendship_block' | 'friendship_remove'
-    data: any
+    data: BatchActionData
     userId: string
     timestamp: number
+}
+
+export interface BatchProcessResult {
+    processed: number
+    results: Array<{
+        type: BatchAction['type']
+        action: string
+        eventId?: string
+        response?: UserResponseValue
+        friendshipId?: string
+        toUserId?: string
+    }>
 }

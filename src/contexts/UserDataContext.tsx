@@ -13,7 +13,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFomoData } from '@/utils/dataManager'
-import type { Event, User, UserResponse, Friend, Tag } from '@/types/fomoTypes'
+import type { Event, User, UserResponse, Friend, Tag, AddressSuggestion } from '@/types/fomoTypes'
 import { addEventResponseShared } from '@/utils/eventResponseUtils'
 import { format } from 'date-fns'
 
@@ -57,16 +57,16 @@ export interface FomoDataContextType {
     getTags: () => Promise<Tag[]>
 
     // Auth
-    checkUserByEmail: (email: string) => Promise<(User & { isPublicProfile: boolean }) | null>
+    checkUserByEmail: (email: string) => Promise<User | null>
     matchByEmail: (email: string) => Promise<string | null>
-    updateUser: (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => Promise<(User & { isPublicProfile: boolean }) | null>
-    saveUserToBackend: (userData: User & { isPublicProfile: boolean }) => Promise<any>
+    updateUser: (userId: string, userData: User, newId?: string) => Promise<User | null>
+    saveUserToBackend: (userData: User) => Promise<User | null>
 
     // User Events
     getUserEvents: (userId: string) => Promise<Event[]>
 
     // Geocoding
-    searchAddresses: (query: string, options?: { countryCode?: string; limit?: number }) => Promise<any[]>
+    searchAddresses: (query: string, options?: { countryCode?: string; limit?: number }) => Promise<AddressSuggestion[]>
 
     // Upload - désactivé temporairement
 
@@ -542,7 +542,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         }
     }, [fomoData])
 
-    const updateUser = useCallback(async (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => {
+    const updateUser = useCallback(async (userId: string, userData: User, newId?: string) => {
         try {
             return await fomoData.updateUser(userId, userData, newId)
         } catch (error) {
@@ -551,7 +551,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         }
     }, [fomoData])
 
-    const saveUserToBackend = useCallback(async (userData: User & { isPublicProfile: boolean }) => {
+    const saveUserToBackend = useCallback(async (userData: User) => {
         try {
             return await fomoData.saveUserToBackend(userData)
         } catch (error) {
