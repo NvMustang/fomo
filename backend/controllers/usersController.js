@@ -4,6 +4,7 @@
  */
 
 const DataServiceV2 = require('../utils/dataService')
+const ResponsesController = require('./responsesController')
 
 class UsersController {
     /**
@@ -69,7 +70,42 @@ class UsersController {
     static async upsertUser(req, res) {
         try {
             const userData = req.body
-            const userId = userData.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+            const oldId = userData.oldId // Ancien ID si migration (visit-xxx → user-xxx)
+            let userId = userData.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+
+            const normalizedEmail = (userData.email || '').trim().toLowerCase()
+
+            // Si oldId est fourni (migration d'ID depuis le frontend), migrer les réponses et supprimer l'ancien
+            if (oldId && oldId !== userId) {
+                console.log(`🔄 [upsertUser] Migration ID: ${oldId} -> ${userId}`)
+
+                // Vérifier si le nouvel ID existe déjà
+                const existingUserWithNewId = await DataServiceV2.getByKey(
+                    'Users!A2:P',
+                    DataServiceV2.mappers.user,
+                    0,
+                    userId
+                )
+
+                if (existingUserWithNewId) {
+                    return res.status(409).json({
+                        success: false,
+                        error: 'Un utilisateur avec cet ID existe déjà'
+                    })
+                }
+
+                // 1. Migrer les réponses
+                await ResponsesController.migrateResponses(oldId, userId)
+                console.log(`✅ [upsertUser] Réponses migrées: ${oldId} -> ${userId}`)
+
+                // 2. Supprimer l'ancien utilisateur (hard delete)
+                await DataServiceV2.hardDelete(
+                    'Users!A2:P',
+                    0,
+                    oldId
+                )
+                console.log(`✅ [upsertUser] Ancien utilisateur supprimé: ${oldId}`)
+            }
 
             console.log(`🔄 Upsert utilisateur: ${userId}`)
 
@@ -81,34 +117,26 @@ class UsersController {
                 userId
             )
 
-            // Préparer les données pour la feuille
+            // Préparer les données pour la feuille (tous les champs explicitement, comme pour events)
+            const createdAt = userData.createdAt || existingUser?.createdAt || new Date().toISOString()
+
             const rowData = [
                 userId,                                    // A: ID
-                userData.createdAt || new Date().toISOString(), // B: CreatedAt
+                createdAt,                                 // B: CreatedAt
                 userData.name || '',                      // C: Name
-                userData.email || '',                     // D: Email
+                normalizedEmail || '',                    // D: Email (normalisé)
                 userData.city || '',                      // E: City
-                userData.lat || '',                       // F: Latitude (NOUVEAU)
-                userData.lng || '',                       // G: Longitude (NOUVEAU)
-                userData.friendsCount || 0,               // H: Friends Count
-                userData.privacy?.showAttendanceToFriends !== undefined
-                    ? userData.privacy.showAttendanceToFriends
-                    : (existingUser?.showAttendanceToFriends !== undefined ? existingUser.showAttendanceToFriends : true), // I: Privacy (préserver valeur existante)
-                userData.isPublicProfile !== undefined
-                    ? userData.isPublicProfile
-                    : (existingUser?.isPublicProfile !== undefined ? existingUser.isPublicProfile : false), // J: Is Public Profile (préserver valeur existante)
-                userData.isActive !== undefined
-                    ? userData.isActive
-                    : (existingUser?.isActive !== undefined ? existingUser.isActive : true), // K: Status (nouveau utilisateur = true par défaut)
-                userData.isAmbassador !== undefined
-                    ? userData.isAmbassador
-                    : (existingUser?.isAmbassador !== undefined ? existingUser.isAmbassador : false), // L: Is Ambassador (préserver valeur existante)
-                userData.allowRequests !== undefined
-                    ? userData.allowRequests
-                    : (existingUser?.allowRequests !== undefined ? existingUser.allowRequests : true), // M: AllowRequests (préserver valeur existante, défaut: true)
-                new Date().toISOString(),                 // N: ModifiedAt
-                '',                                       // O: DeletedAt
-                userData.lastConnexion || (existingUser?.lastConnexion || null) // P: LastConnexion
+                userData.lat || '',                       // F: Latitude
+                userData.lng || '',                       // G: Longitude
+                userData.friendsCount !== undefined ? userData.friendsCount : (existingUser?.friendsCount || 0), // H: Friends Count
+                userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true, // I: Privacy (défaut: true)
+                userData.isPublicProfile !== undefined ? userData.isPublicProfile : false, // J: Is Public Profile (défaut: false)
+                userData.isActive !== undefined ? userData.isActive : true, // K: Is Active (défaut: true)
+                userData.isAmbassador !== undefined ? userData.isAmbassador : false, // L: Is Ambassador (défaut: false)
+                userData.allowRequests !== undefined ? userData.allowRequests : true, // M: Allow Requests (défaut: true)
+                userData.modifiedAt || new Date().toISOString(), // N: ModifiedAt (fourni ou maintenant)
+                '',                                       // O: DeletedAt (vide)
+                userData.lastConnexion || new Date().toISOString() // P: LastConnexion (fourni ou maintenant)
             ]
 
             const result = await DataServiceV2.upsertData(
@@ -175,18 +203,20 @@ class UsersController {
             console.log(`📊 Total utilisateurs dans la base: ${allUsers.length}`)
 
             // Filtrer uniquement les utilisateurs actifs (isActive === true, colonne K)
+            // ET qui ne sont pas des visitors (ID ne commence pas par "visit-")
             // Normaliser aussi les emails de la base de données pour la comparaison
             const user = allUsers.find(u => {
                 const userEmail = (u.email || '').trim().toLowerCase()
                 const emailMatch = userEmail === email
                 const isActive = u.isActive === true
+                const isNotVisitor = !u.id || !u.id.startsWith('visit-') // Exclure les visitors
 
                 // Log de débogage pour les premiers emails trouvés
                 if (userEmail && (userEmail.includes(email.split('@')[0]) || email.includes(userEmail.split('@')[0]))) {
-                    console.log(`  🔍 Comparaison: "${userEmail}" === "${email}" ? ${emailMatch} | isActive: ${isActive}`)
+                    console.log(`  🔍 Comparaison: "${userEmail}" === "${email}" ? ${emailMatch} | isActive: ${isActive} | isNotVisitor: ${isNotVisitor}`)
                 }
 
-                return emailMatch && isActive
+                return emailMatch && isActive && isNotVisitor
             })
 
             if (!user) {
@@ -476,6 +506,57 @@ class UsersController {
             res.status(500).json({ success: false, error: error.message })
         }
     }
+
+    /**
+     * Rechercher un utilisateur par email et retourner uniquement son ID
+     * Retourne: user-xxx, visit-xxx, ou null
+     * Priorité: user-xxx avant visit-xxx si les deux existent
+     * GET /api/users/match-email/:email
+     */
+    static async matchByEmail(req, res) {
+        try {
+            const rawEmail = decodeURIComponent(req.params.email || '')
+            const normalizedEmail = rawEmail.trim().toLowerCase()
+            console.log(`🔍 [matchByEmail] Recherche par email: "${normalizedEmail}"`)
+
+            const allUsers = await DataServiceV2.getAllActiveData(
+                'Users!A2:P',
+                DataServiceV2.mappers.user
+            )
+
+            // Filtrer uniquement les utilisateurs actifs (isActive === true)
+            const activeUsers = allUsers.filter(u => u.isActive === true)
+
+            // Chercher d'abord un user (priorité)
+            const user = activeUsers.find(u => {
+                const userEmail = (u.email || '').trim().toLowerCase()
+                return userEmail === normalizedEmail && u.id && u.id.startsWith('user-')
+            })
+
+            if (user) {
+                console.log(`✅ [matchByEmail] User trouvé: ${user.id}`)
+                return res.json({ success: true, data: user.id })
+            }
+
+            // Si pas de user, chercher un visitor
+            const visitor = activeUsers.find(u => {
+                const userEmail = (u.email || '').trim().toLowerCase()
+                return userEmail === normalizedEmail && u.id && u.id.startsWith('visit-')
+            })
+
+            if (visitor) {
+                console.log(`✅ [matchByEmail] Visitor trouvé: ${visitor.id}`)
+                return res.json({ success: true, data: visitor.id })
+            }
+
+            console.log(`❌ [matchByEmail] Aucun utilisateur trouvé pour: "${normalizedEmail}"`)
+            return res.json({ success: true, data: null })
+        } catch (error) {
+            console.error('❌ Erreur matchByEmail:', error)
+            res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
 }
 
 module.exports = UsersController

@@ -98,7 +98,8 @@
 .map-teaser-word {
    display: inline-flex;
    align-items: center;
-   gap: 0.1em;
+   gap: 0.05em;
+   /* Réduit de 0.1em à 0.05em pour rapprocher l'icône du texte */
 }
 
 .map-teaser-text[data-size="sm"] {

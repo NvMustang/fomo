@@ -5,8 +5,9 @@
  * Étape 2: Connexion ou inscription selon l'existence de l'utilisateur
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { Button } from '@/components'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
@@ -15,7 +16,8 @@ interface AuthModalProps { }
 type AuthStep = 'email' | 'new-user'
 
 export const AuthModal: React.FC<AuthModalProps> = () => {
-  const { checkUserByEmail, login, isLoading, isAuthenticated } = useAuth()
+  const { login, isLoading, isAuthenticated, checkUserByEmail } = useAuth()
+  const { matchByEmail } = useFomoDataContext()
   const [currentStep, setCurrentStep] = useState<AuthStep>('email')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -23,52 +25,92 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
   const [error, setError] = useState('')
   const [isCityValid, setIsCityValid] = useState(true)
 
-  // Reset modal state when opened/closed
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setCurrentStep('email')
-      setEmail('')
-      setName('')
-      setCity('')
-      setError('')
-      setIsCityValid(true)
-    }
-  }, [isAuthenticated])
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
 
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!email.trim()) {
+  // Fonction pour vérifier l'email lors de la connexion
+  const handleEmailLogInCheck = useCallback(async (emailToCheck: string) => {
+    if (!emailToCheck.trim()) {
       setError('L\'email est requis')
       return
     }
 
-    if (!isValidEmail(email.trim())) {
+    if (!isValidEmail(emailToCheck.trim())) {
       setError('Veuillez saisir une adresse email valide')
       return
     }
 
-    try {
-      console.log('🔍 [AuthModal] Vérification email:', email.trim())
-      const user = await checkUserByEmail(email.trim())
-      console.log('🔍 [AuthModal] Résultat checkUserByEmail:', user ? `Utilisateur trouvé: ${user.name}` : 'Aucun utilisateur trouvé')
+    setError('')
 
-      if (user) {
-        // Connexion directe si l'utilisateur existe
-        // Passer l'utilisateur directement à login pour éviter une double vérification
-        console.log('🔍 [AuthModal] Tentative de connexion avec:', { name: user.name, email: user.email })
-        await login(user.name, user.city, user.email, user)
-        console.log('✅ [AuthModal] Connexion réussie')
+    try {
+      console.log('🔍 [AuthModal] Vérification email pour connexion:', emailToCheck.trim())
+      const matchedId = await matchByEmail(emailToCheck.trim())
+      console.log('🔍 [AuthModal] Résultat matchByEmail:', matchedId || 'Aucun utilisateur trouvé')
+
+      if (matchedId) {
+        if (matchedId.startsWith('user-')) {
+          // User trouvé -> connexion automatique
+          console.log('✅ [AuthModal] User trouvé, connexion automatique...')
+          // Récupérer les infos du user pour la connexion
+          const user = await checkUserByEmail(emailToCheck.trim())
+          if (user) {
+            await login(user.name, user.city, user.email, user)
+            console.log('✅ [AuthModal] Connexion réussie')
+          }
+        } else if (matchedId.startsWith('visit-')) {
+          // Visitor trouvé -> rediriger vers inscription
+          console.log('⚠️ [AuthModal] Visitor détecté, passage à l\'inscription')
+          setCurrentStep('new-user')
+        }
       } else {
-        console.log('ℹ️ [AuthModal] Utilisateur non trouvé, passage à l\'étape new-user')
+        // Aucun utilisateur trouvé -> rediriger vers inscription
+        console.log('ℹ️ [AuthModal] Aucun utilisateur trouvé, passage à l\'étape new-user')
         setCurrentStep('new-user')
       }
     } catch (error) {
       console.error('❌ [AuthModal] Erreur de vérification:', error)
       setError('Erreur lors de la vérification de l\'email. Réessayez.')
     }
+  }, [matchByEmail, login, checkUserByEmail])
+
+  // Charger l'email et le nom du visitor depuis sessionStorage si disponible
+  useEffect(() => {
+    if (!isAuthenticated) {
+      try {
+        const visitorEmail = sessionStorage.getItem('fomo-visit-email')
+        const visitorName = sessionStorage.getItem('fomo-visit-name')
+
+        if (visitorEmail && visitorEmail.trim()) {
+          setEmail(visitorEmail.trim())
+          console.log('✅ [AuthModal] Email du visitor pré-rempli:', visitorEmail.trim())
+        } else {
+          setEmail('')
+        }
+
+        if (visitorName && visitorName.trim()) {
+          setName(visitorName.trim())
+          console.log('✅ [AuthModal] Nom du visitor pré-rempli:', visitorName.trim())
+        } else {
+          setName('')
+        }
+      } catch {
+        setEmail('')
+        setName('')
+      }
+
+      setCurrentStep('email')
+      setCity('')
+      setError('')
+      setIsCityValid(true)
+    }
+  }, [isAuthenticated])
+
+  // Fonction appelée uniquement lors du clic sur "Continuer"
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await handleEmailLogInCheck(email.trim())
   }
 
 
@@ -92,11 +134,6 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
       setError('Erreur lors de la création du profil. Réessayez.')
       console.error('Erreur de création:', error)
     }
-  }
-
-  const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
   }
 
   if (isAuthenticated) return null

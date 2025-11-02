@@ -222,7 +222,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           <div className="modal modal-teaser">
             <div className="modal-content">
               <p className="map-teaser-message">
-                Pour découvrir les événements autour de toi, clic ici 👇l !
+                Rejoins-nous et découvre les événements autour de toi !
               </p>
               <Button
                 variant="primary"
@@ -238,24 +238,24 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
                       style={{
                         height: '1em',
                         width: '1em',
-                        display: 'inline-block',
-                        verticalAlign: 'middle',
-                        filter: 'brightness(0) invert(1)'
+                        display: 'block',
+                        filter: 'brightness(0) invert(1)',
+                        transform: 'translateY(-0.05em)'
                       }}
                     />
                   </span>
-                  <span className="map-teaser-word">N
+                  <span className="map-teaser-word">
                     <img
                       src="/lock-icon.svg"
                       alt="O"
                       style={{
                         height: '1em',
                         width: '1em',
-                        display: 'inline-block',
-                        verticalAlign: 'middle',
-                        filter: 'brightness(0) invert(1)'
+                        display: 'block',
+                        filter: 'brightness(0) invert(1)',
+                        transform: 'translateY(-0.05em)'
                       }}
-                    />
+                    />N
                   </span>
                   <span className="map-teaser-word">F
                     <img
@@ -264,9 +264,9 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
                       style={{
                         height: '1em',
                         width: '1em',
-                        display: 'inline-block',
-                        verticalAlign: 'middle',
-                        filter: 'brightness(0) invert(1)'
+                        display: 'block',
+                        filter: 'brightness(0) invert(1)',
+                        transform: 'translateY(-0.05em)'
                       }}
                     />
                     M
@@ -276,9 +276,9 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
                       style={{
                         height: '1em',
                         width: '1em',
-                        display: 'inline-block',
-                        verticalAlign: 'middle',
-                        filter: 'brightness(0) invert(1)'
+                        display: 'block',
+                        filter: 'brightness(0) invert(1)',
+                        transform: 'translateY(-0.05em)'
                       }}
                     />
                   </span>

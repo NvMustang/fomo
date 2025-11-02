@@ -253,37 +253,62 @@ class DataServiceV2 {
      */
     static async deleteRow(range, keyColumn, keyValue) {
         try {
-            // Récupérer toutes les données
-            const allData = await this.getAllData(range, (row) => row)
+            // Extraire le nom de la feuille depuis le range (ex: "Users!A2:P" -> "Users")
+            const sheetName = range.split('!')[0]
 
-            // Trouver l'index de la ligne à supprimer
-            const rowIndex = allData.findIndex(row => row[keyColumn] === keyValue)
+            // Récupérer le sheetId réel de la feuille
+            const spreadsheet = await sheets.spreadsheets.get({
+                spreadsheetId: SPREADSHEET_ID
+            })
+            const sheet = spreadsheet.data.sheets.find(s => s.properties.title === sheetName)
+            if (!sheet) {
+                throw new Error(`Feuille "${sheetName}" non trouvée`)
+            }
+            const sheetId = sheet.properties.sheetId
+
+            // Récupérer toutes les données BRUTES (sans mapper) pour avoir les indices corrects
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: range
+            })
+
+            const rows = response.data.values || []
+
+            // Trouver l'index de la ligne à supprimer (parmi les lignes brutes)
+            const rowIndex = rows.findIndex(row => row && row[keyColumn] === keyValue)
 
             if (rowIndex === -1) {
                 throw new Error(`Ligne non trouvée pour la clé: ${keyValue}`)
             }
 
-            // Calculer l'index réel dans Google Sheets (rowIndex + 2 car on commence à A2)
-            const sheetRowIndex = rowIndex + 2
+            // Calculer l'index réel dans Google Sheets
+            // - range commence à A2, donc rowIndex 0 dans l'array = ligne 2 dans Sheets
+            // - Google Sheets utilise 0-based pour deleteDimension, donc ligne 2 = index 1
+            // - rowIndex dans l'array = ligne (rowIndex + 2) dans Sheets
+            // - deleteDimension startIndex = (rowIndex + 2) - 1 = rowIndex + 1
+            const sheetRowIndex = rowIndex + 1
+
+            console.log(`🗑️ [deleteRow] Suppression ligne ${keyValue}: sheetName=${sheetName}, sheetId=${sheetId}, rowIndex=${rowIndex}, sheetRowIndex=${sheetRowIndex}`)
 
             // Supprimer la ligne
-            await sheets.spreadsheets.batchUpdate({
+            const deleteResponse = await sheets.spreadsheets.batchUpdate({
                 spreadsheetId: SPREADSHEET_ID,
                 resource: {
                     requests: [{
                         deleteDimension: {
                             range: {
-                                sheetId: 0, // ID de la feuille (0 = première feuille)
+                                sheetId: sheetId, // ID réel de la feuille
                                 dimension: 'ROWS',
-                                startIndex: sheetRowIndex - 1, // Google Sheets utilise 0-based
-                                endIndex: sheetRowIndex
+                                startIndex: sheetRowIndex, // 0-based pour Google Sheets API
+                                endIndex: sheetRowIndex + 1
                             }
                         }
                     }]
                 }
             })
 
-            console.log(`✅ Ligne supprimée: ${keyValue} (index: ${sheetRowIndex})`)
+            console.log(`✅ Ligne supprimée: ${keyValue} (index Sheets: ${sheetRowIndex}, sheetId: ${sheetId})`)
+            return { success: true, sheetRowIndex, sheetId }
         } catch (error) {
             console.error('❌ Erreur deleteRow:', error)
             throw error

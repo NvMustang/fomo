@@ -58,6 +58,8 @@ export interface FomoDataContextType {
 
     // Auth
     checkUserByEmail: (email: string) => Promise<(User & { isPublicProfile: boolean }) | null>
+    matchByEmail: (email: string) => Promise<string | null>
+    updateUser: (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => Promise<(User & { isPublicProfile: boolean }) | null>
     saveUserToBackend: (userData: User & { isPublicProfile: boolean }) => Promise<any>
 
     // User Events
@@ -531,6 +533,24 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         }
     }, [fomoData])
 
+    const matchByEmail = useCallback(async (email: string) => {
+        try {
+            return await fomoData.matchByEmail(email)
+        } catch (error) {
+            console.error('Erreur lors du match par email:', error)
+            return null
+        }
+    }, [fomoData])
+
+    const updateUser = useCallback(async (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => {
+        try {
+            return await fomoData.updateUser(userId, userData, newId)
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour de l\'utilisateur:', error)
+            throw error
+        }
+    }, [fomoData])
+
     const saveUserToBackend = useCallback(async (userData: User & { isPublicProfile: boolean }) => {
         try {
             return await fomoData.saveUserToBackend(userData)
@@ -602,6 +622,8 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
 
         // Auth
         checkUserByEmail,
+        matchByEmail,
+        updateUser,
         saveUserToBackend,
 
         // User Events
@@ -628,7 +650,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         refreshEvents, refreshUsers, refreshResponses, refreshUserRelations, refreshAll,
         createEvent, updateEvent, addEventResponse, getTags,
         sendFriendshipRequest, addFriendshipAction, searchUsers,
-        checkUserByEmail, saveUserToBackend, getUserEvents,
+        checkUserByEmail, matchByEmail, updateUser, saveUserToBackend, getUserEvents,
         searchAddresses,
         fomoData.invalidateCache
     ])

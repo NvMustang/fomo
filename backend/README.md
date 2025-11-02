@@ -25,9 +25,9 @@ npm run dev
 
 ### Utilisateurs
 - `GET /api/users` - Récupérer tous les utilisateurs
-- `POST /api/users` - Créer un nouvel utilisateur
+- `POST /api/users` - Créer ou mettre à jour un utilisateur (UPSERT)
 - `GET /api/users/email/:email` - Récupérer un utilisateur par email
-- `PUT /api/users/:id` - Mettre à jour un utilisateur
+- `GET /api/users/match-email/:email` - Rechercher un utilisateur par email et retourner uniquement l'ID
 
 ### Réponses
 - `GET /api/responses` - Récupérer toutes les réponses

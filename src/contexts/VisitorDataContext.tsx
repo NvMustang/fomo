@@ -9,6 +9,7 @@ import { useFomoData } from '@/utils/dataManager'
 import type { Event, UserResponse } from '@/types/fomoTypes'
 import type { FomoDataContextType } from './UserDataContext'
 import { addEventResponseShared } from '@/utils/eventResponseUtils'
+import { useAuth } from './AuthContext'
 
 // ===== TYPES =====
 
@@ -43,6 +44,7 @@ interface VisitorDataProviderProps {
 
 export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ children, visitorEvent }) => {
     const fomoData = useFomoData()
+    const { login: authLogin } = useAuth()
 
     // États des données
     const [events] = useState<Event[]>(visitorEvent ? [visitorEvent] : [])
@@ -52,6 +54,7 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
     const visitorUserIdRef = useRef<string | null>(null)
     const visitorNameRef = useRef<string | null>(null)
     const visitorEmailRef = useRef<string | undefined>(undefined)
+    const visitorCreatePromiseRef = useRef<Promise<void> | null>(null)
 
     // Initialiser visitorUserId depuis sessionStorage ou le créer
     React.useEffect(() => {
@@ -113,14 +116,37 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
             return
         }
 
-        // 1. Créer le user visitor dans Users si pas déjà fait (de manière asynchrone en arrière-plan)
-        const createUserIfNeeded = async () => {
-            if (!sessionStorage.getItem(`fomo-visit-user-created-${visitorUserIdRef.current}`)) {
+        // 1. Créer le user visitor dans Users si nécessaire (une seule fois, même si addEventResponse appelé plusieurs fois)
+        if (!visitorCreatePromiseRef.current && visitorEmailRef.current) {
+            visitorCreatePromiseRef.current = (async () => {
                 try {
+                    // Vérifier si un utilisateur existe déjà avec cet email
+                    const matchedId = await fomoData.matchByEmail(visitorEmailRef.current!)
+
+                    if (matchedId) {
+                        if (matchedId.startsWith('user-')) {
+                            // User existant trouvé -> connexion automatique
+                            console.log(`✅ [VisitorDataContext] User existant trouvé: ${matchedId}, connexion automatique...`)
+                            const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
+                            if (user) {
+                                await authLogin(user.name, user.city, user.email, user)
+                            }
+                            return
+                        } else if (matchedId.startsWith('visit-')) {
+                            // Visitor existant trouvé -> réutiliser cet ID
+                            console.log(`✅ [VisitorDataContext] Visitor existant trouvé: ${matchedId}, réutilisation...`)
+                            visitorUserIdRef.current = matchedId
+                            sessionStorage.setItem('fomo-visit-user-id', matchedId)
+                            return
+                        }
+                    }
+
+                    // Aucun utilisateur trouvé -> créer nouveau visitor
+                    console.log(`📝 [VisitorDataContext] Création nouveau visitor: ${visitorUserIdRef.current}`)
                     const userData = {
                         id: visitorUserIdRef.current,
                         name: visitorNameRef.current,
-                        email: visitorEmailRef.current || '',
+                        email: visitorEmailRef.current,
                         city: '',
                         friendsCount: 0,
                         showAttendanceToFriends: false,
@@ -140,17 +166,14 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(userData)
                     })
-
-                    sessionStorage.setItem(`fomo-visit-user-created-${visitorUserIdRef.current}`, 'true')
                 } catch (error) {
                     console.error('Erreur lors de la création du user visitor:', error)
-                    // Continue quand même, le backend pourra créer le user si nécessaire
                 }
-            }
+            })()
         }
 
-        // Lancer la création du user en arrière-plan (non bloquant)
-        createUserIfNeeded()
+        // Lancer la création en arrière-plan (non bloquant, mais une seule fois grâce à visitorCreatePromiseRef)
+        visitorCreatePromiseRef.current?.catch(() => {})
 
         // 2. Utiliser la fonction partagée (optimiste + batch) - exactement comme UserDataContext
         addEventResponseShared({
@@ -206,6 +229,7 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         searchUsers: notAvailableStub,
         getTags: notAvailableStub,
         checkUserByEmail: notAvailableStub,
+        matchByEmail: (email: string) => fomoData.matchByEmail(email),
         saveUserToBackend: notAvailableStub,
         getUserEvents: notAvailableStub,
         searchAddresses: notAvailableStub,
@@ -214,7 +238,8 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         responses,
         visitorEvent,
         addEventResponse,
-        fomoData.invalidateCache
+        fomoData.invalidateCache,
+        authLogin
     ])
 
     return (

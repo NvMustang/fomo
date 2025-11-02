@@ -206,6 +206,78 @@ class ResponsesController {
             res.status(500).json({ success: false, error: error.message })
         }
     }
+
+    /**
+     * Migrer toutes les réponses d'un userId vers un autre
+     * Utilisé lors de la conversion d'un visitor en user
+     */
+    static async migrateResponses(oldUserId, newUserId) {
+        try {
+            console.log(`🔄 Migration des réponses: ${oldUserId} -> ${newUserId}`)
+
+            // Récupérer toutes les réponses de l'ancien userId
+            const allResponses = await DataServiceV2.getAllActiveData(
+                'Responses!A2:H',
+                DataServiceV2.mappers.response
+            )
+
+            const responsesToMigrate = allResponses.filter(r => r.userId === oldUserId)
+            console.log(`📝 ${responsesToMigrate.length} réponses à migrer`)
+
+            // Pour chaque réponse, créer une nouvelle réponse avec le nouveau userId
+            // et supprimer l'ancienne (soft delete)
+            for (const response of responsesToMigrate) {
+                const oldResponseId = `${response.eventId}_${oldUserId}`
+                const newResponseId = `${response.eventId}_${newUserId}`
+
+                // Vérifier si une réponse existe déjà avec le nouveau userId pour cet événement
+                const existingResponse = await DataServiceV2.getByKey(
+                    'Responses!A2:H',
+                    DataServiceV2.mappers.response,
+                    0,
+                    newResponseId
+                )
+
+                if (!existingResponse) {
+                    // Créer la nouvelle réponse avec le nouveau userId
+                    const rowData = [
+                        newResponseId,                           // A: ID
+                        response.createdAt || new Date().toISOString(), // B: CreatedAt (garder l'original)
+                        newUserId,                               // C: User ID (nouveau)
+                        response.invitedByUserId || '',           // D: InvitedByUserId
+                        response.eventId,                         // E: Event ID
+                        response.response || '',                  // F: Response
+                        new Date().toISOString(),                 // G: ModifiedAt
+                        ''                                       // H: DeletedAt
+                    ]
+
+                    await DataServiceV2.upsertData(
+                        'Responses!A2:I',
+                        rowData,
+                        0,
+                        newResponseId
+                    )
+
+                    console.log(`✅ Réponse migrée: ${oldResponseId} -> ${newResponseId}`)
+                } else {
+                    console.log(`⚠️ Réponse déjà existante pour ${newResponseId}, skip`)
+                }
+
+                // Soft delete de l'ancienne réponse
+                await DataServiceV2.softDelete(
+                    'Responses!A2:H',
+                    0,
+                    oldResponseId
+                )
+            }
+
+            console.log(`✅ Migration terminée: ${responsesToMigrate.length} réponses migrées`)
+            return { migrated: responsesToMigrate.length }
+        } catch (error) {
+            console.error('❌ Erreur migration réponses:', error)
+            throw error
+        }
+    }
 }
 
 module.exports = ResponsesController

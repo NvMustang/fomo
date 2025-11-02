@@ -581,40 +581,150 @@ export class FomoDataManager {
         }
     }
 
-    async saveUserToBackend(userData: User & { isPublicProfile: boolean }, lastConnexion?: string): Promise<any> {
+    async matchByEmail(email: string): Promise<string | null> {
+        try {
+            const normalizedEmail = (email || '').trim().toLowerCase()
+            const apiUrl = `${API_BASE_URL}/users/match-email/${encodeURIComponent(normalizedEmail)}`
+
+            console.log(`🔍 [Frontend] matchByEmail: "${normalizedEmail}"`)
+            console.log(`🔗 [Frontend] URL API: ${apiUrl}`)
+
+            const response = await fetch(apiUrl)
+
+            if (!response.ok) {
+                console.error(`❌ [Frontend] matchByEmail erreur: ${response.status} ${response.statusText}`)
+                return null
+            }
+
+            const result = await response.json()
+            if (result.success && result.data) {
+                console.log(`✅ [Frontend] matchByEmail trouvé: ${result.data}`)
+                return result.data
+            }
+
+            console.log(`ℹ️ [Frontend] matchByEmail: aucun utilisateur trouvé`)
+            return null
+        } catch (error) {
+            console.error('❌ [Frontend] Erreur matchByEmail:', error)
+            return null
+        }
+    }
+
+
+    async updateUser(userId: string, userData: User & { isPublicProfile: boolean }, newId?: string): Promise<(User & { isPublicProfile: boolean }) | null> {
+        try {
+            // Préparer le payload avec tous les champs explicites (comme pour events)
+            const payload: any = {
+                id: newId && newId !== userId ? newId : userId, // Nouvel ID si migration, sinon ID actuel
+                name: userData.name,
+                email: userData.email,
+                city: userData.city,
+                lat: userData.lat || null,
+                lng: userData.lng || null,
+                friendsCount: userData.friendsCount,
+                // Valeurs par défaut pour users (écrasent les anciennes valeurs)
+                showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true,
+                privacy: { showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true },
+                isPublicProfile: userData.isPublicProfile !== undefined ? userData.isPublicProfile : false,
+                isActive: true, // Toujours actif
+                isAmbassador: userData.isAmbassador !== undefined ? userData.isAmbassador : false,
+                allowRequests: userData.allowRequests !== undefined ? userData.allowRequests : true,
+                modifiedAt: new Date().toISOString(),
+                lastConnexion: new Date().toISOString()
+            }
+
+            // Si changement d'ID, indiquer l'ancien ID pour la migration
+            if (newId && newId !== userId) {
+                payload.oldId = userId // Ancien ID pour migration des réponses
+            }
+
+            const response = await fetch(`${API_BASE_URL}/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+
+            if (!response.ok) {
+                throw new Error(`Erreur lors de la mise à jour de l'utilisateur: ${response.status} ${response.statusText}`)
+            }
+
+            const result = await response.json()
+            if (result.success && result.data) {
+                return {
+                    id: result.data.id,
+                    name: result.data.name,
+                    email: result.data.email,
+                    city: result.data.city,
+                    friendsCount: result.data.friendsCount || 0,
+                    showAttendanceToFriends: result.data.showAttendanceToFriends ?? true,
+                    isPublicProfile: result.data.isPublicProfile ?? false,
+                    isAmbassador: result.data.isAmbassador ?? false
+                } as User & { isPublicProfile: boolean }
+            }
+
+            return null
+        } catch (error) {
+            console.error('❌ Erreur updateUser:', error)
+            throw error
+        }
+    }
+
+    async saveUserToBackend(userData: User & { isPublicProfile: boolean }, lastConnexion?: string): Promise<(User & { isPublicProfile: boolean }) | null> {
         // Géocoder la ville avant de sauvegarder
         let lat = null
         let lng = null
 
+        // Préparer le payload avec tous les champs explicites (valeurs par défaut comme pour events)
+        const payload: any = {
+            ...(userData.id && userData.id.trim() ? { id: userData.id } : {}), // Envoyer l'ID seulement s'il existe vraiment
+            name: userData.name,
+            email: userData.email,
+            city: userData.city,
+            lat: lat,
+            lng: lng,
+            friendsCount: userData.friendsCount,
+            // Valeurs par défaut pour users (écrasent les anciennes valeurs)
+            showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true,
+            privacy: { showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true },
+            isPublicProfile: userData.isPublicProfile !== undefined ? userData.isPublicProfile : false,
+            isActive: true, // Toujours actif
+            isAmbassador: userData.isAmbassador !== undefined ? userData.isAmbassador : false,
+            allowRequests: userData.allowRequests !== undefined ? userData.allowRequests : true,
+            modifiedAt: new Date().toISOString(),
+            lastConnexion: lastConnexion || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
+        }
 
         const response = await fetch(`${API_BASE_URL}/users`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                id: userData.id,
-                name: userData.name,
-                email: userData.email,
-                city: userData.city,
-                lat: lat,
-                lng: lng,
-                friendsCount: userData.friendsCount,
-                // Respect DataService typing: top-level boolean
-                showAttendanceToFriends: userData.showAttendanceToFriends,
-                // Adapter le format attendu par le backend (privacy.showAttendanceToFriends)
-                privacy: { showAttendanceToFriends: userData.showAttendanceToFriends },
-                isPublicProfile: userData.isPublicProfile,
-                createdAt: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
-                lastConnexion: lastConnexion || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
-            })
+            body: JSON.stringify(payload)
         })
 
         if (!response.ok) {
             throw new Error(`Erreur lors de la sauvegarde de l'utilisateur: ${response.status} ${response.statusText}`)
         }
 
-        return await response.json()
+        const result = await response.json()
+        if (result.success && result.data) {
+            // Retourner les données du user créé depuis le backend
+            return {
+                id: result.data.id,
+                name: result.data.name,
+                email: result.data.email,
+                city: result.data.city,
+                friendsCount: result.data.friendsCount || 0,
+                showAttendanceToFriends: result.data.showAttendanceToFriends ?? true,
+                isPublicProfile: result.data.isPublicProfile ?? false,
+                isAmbassador: result.data.isAmbassador ?? false
+            } as User & { isPublicProfile: boolean }
+        }
+
+        // Si pas de data, retourner null (ne devrait pas arriver)
+        return null
     }
 
 }
@@ -645,6 +755,8 @@ const fomoDataApi = {
 
     // Auth
     checkUserByEmail: (email: string) => fomoDataManager.checkUserByEmail(email),
+    matchByEmail: (email: string) => fomoDataManager.matchByEmail(email),
+    updateUser: (userId: string, userData: User & { isPublicProfile: boolean }, newId?: string) => fomoDataManager.updateUser(userId, userData, newId),
     saveUserToBackend: (userData: User & { isPublicProfile: boolean }) => fomoDataManager.saveUserToBackend(userData),
 
     // Responses

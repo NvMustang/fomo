@@ -78,31 +78,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
             console.log('🔍 [AuthContext] login appelé avec:', { name, email, existingUserData: existingUserData ? 'fourni' : 'non fourni' })
 
             // Si l'utilisateur existe déjà (passé en paramètre depuis AuthModal), l'utiliser directement
-            let userToConnect: UserWithPrivacy
+            let userToConnect: UserWithPrivacy | null = null
 
             if (existingUserData) {
-                // Utilisateur existant passé en paramètre (déjà vérifié dans AuthModal)
-                console.log('✅ [AuthContext] Utilisation de l\'utilisateur existant fourni:', existingUserData.name)
-                userToConnect = existingUserData
-
-                // Mettre à jour lastConnexion lors de la connexion
-                const lastConnexion = new Date().toISOString()
-                try {
-                    await fomoData.saveUserToBackend(userToConnect, lastConnexion)
-                    console.log('✅ [AuthContext] lastConnexion mis à jour')
-                } catch (error) {
-                    console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
-                    // Continue même si la mise à jour échoue
-                }
-            } else {
-                // Pas d'utilisateur fourni, vérifier s'il existe ou créer un nouveau
-                const existingUser = await fomoData.checkUserByEmail(email.trim())
-                console.log('🔍 [AuthContext] existingUser trouvé:', existingUser ? `${existingUser.name} (${existingUser.email})` : 'null')
-
-                if (existingUser) {
-                    // Utilisateur existant trouvé
-                    console.log('✅ [AuthContext] Utilisateur existant trouvé, connexion en cours...')
-                    userToConnect = existingUser
+                // Vérifier que l'utilisateur fourni est bien un user (pas un visitor)
+                if (existingUserData.id && !existingUserData.id.startsWith('user-')) {
+                    console.warn('⚠️ [AuthContext] Visitor détecté dans existingUserData, création d\'un nouveau user à la place')
+                    existingUserData = undefined // Forcer la création d'un nouveau user
+                } else {
+                    // Utilisateur existant passé en paramètre (déjà vérifié dans AuthModal)
+                    console.log('✅ [AuthContext] Utilisation de l\'utilisateur existant fourni:', existingUserData.name)
+                    userToConnect = existingUserData
 
                     // Mettre à jour lastConnexion lors de la connexion
                     const lastConnexion = new Date().toISOString()
@@ -113,27 +99,107 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                         console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
                         // Continue même si la mise à jour échoue
                     }
-                } else {
-                    // Nouvel utilisateur : créer un profil
-                    console.log('📝 [AuthContext] Nouvel utilisateur, création du profil...')
+                }
+            }
+
+            if (!userToConnect) {
+                // Pas d'utilisateur fourni, vérifier avec matchByEmail pour inscription
+                console.log('🔍 [AuthContext] Vérification matchByEmail pour inscription...')
+                const matchedId = await fomoData.matchByEmail(email.trim())
+
+                if (matchedId) {
+                    if (matchedId.startsWith('user-')) {
+                        // User existant trouvé -> connexion directe
+                        console.log('✅ [AuthContext] User existant trouvé:', matchedId)
+                        const existingUser = await fomoData.checkUserByEmail(email.trim())
+                        if (existingUser) {
+                            userToConnect = existingUser
+                            // Mettre à jour lastConnexion lors de la connexion
+                            const lastConnexion = new Date().toISOString()
+                            try {
+                                await fomoData.saveUserToBackend(userToConnect, lastConnexion)
+                                console.log('✅ [AuthContext] lastConnexion mis à jour')
+                            } catch (error) {
+                                console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
+                            }
+                        }
+                    } else if (matchedId.startsWith('visit-')) {
+                        // Visitor trouvé -> transformer visit-xxx en user-xxx dans le frontend
+                        console.log('🔄 [AuthContext] Visitor trouvé:', matchedId, '- Transformation en user-xxx...')
+                        const newUserId = matchedId.replace(/^visit-/, 'user-')
+                        console.log(`🔄 [AuthContext] Transformation ID: ${matchedId} -> ${newUserId}`)
+
+                        const userData = {
+                            id: newUserId, // Nouvel ID user-xxx
+                            name: name.trim(),
+                            email: email.trim(),
+                            city: city.trim(),
+                            friendsCount: 0,
+                            showAttendanceToFriends: true,
+                            isPublicProfile: false,
+                            isAmbassador: false
+                        } as UserWithPrivacy
+
+                        try {
+                            // Utiliser updateUser avec newId pour transformer visit-xxx en user-xxx
+                            const migratedUser = await fomoData.updateUser(matchedId, userData, newUserId)
+                            if (migratedUser) {
+                                console.log(`✅ [AuthContext] Visitor converti en user: ${matchedId} -> ${migratedUser.id}`)
+                                userToConnect = migratedUser
+
+                                // Nettoyer le sessionStorage du visitor
+                                try {
+                                    const keysToRemove: string[] = []
+                                    for (let i = 0; i < sessionStorage.length; i++) {
+                                        const key = sessionStorage.key(i)
+                                        if (key && key.startsWith('fomo-visit-')) {
+                                            keysToRemove.push(key)
+                                        }
+                                    }
+                                    keysToRemove.forEach(key => sessionStorage.removeItem(key))
+                                    console.log(`✅ [AuthContext] sessionStorage du visitor nettoyé (${keysToRemove.length} clés supprimées)`)
+                                } catch (error) {
+                                    console.error('⚠️ [AuthContext] Erreur nettoyage sessionStorage:', error)
+                                }
+                            }
+                        } catch (error) {
+                            console.error('❌ [AuthContext] Erreur migration visitor:', error)
+                            throw error
+                        }
+                    }
+                }
+
+                if (!userToConnect) {
+                    // Aucun utilisateur trouvé -> créer nouveau user
+                    console.log('📝 [AuthContext] Création d\'un nouveau profil...')
                     userToConnect = {
-                        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+                        id: '', // Pas d'ID - le backend le générera
                         name: name.trim(),
                         email: email.trim(),
                         city: city.trim(),
                         friendsCount: 0,
                         showAttendanceToFriends: true,
-                        isPublicProfile: false, // Tous les utilisateurs commencent avec un profil privé
+                        isPublicProfile: false,
                         isAmbassador: false
-                    }
+                    } as UserWithPrivacy
 
-                    // Sauvegarder dans le backend (Google Sheets)
+                    // Sauvegarder dans le backend
                     try {
-                        await fomoData.saveUserToBackend(userToConnect)
-                        console.log('✅ [AuthContext] Nouvel utilisateur sauvegardé dans le backend')
+                        const savedUser = await fomoData.saveUserToBackend(userToConnect)
+                        if (savedUser) {
+                            console.log(`✅ [AuthContext] User créé: ${savedUser.id}`)
+                            userToConnect = savedUser
+                        } else {
+                            // Si pas de user retourné, re-vérifier par email
+                            const userAfterSave = await fomoData.checkUserByEmail(email.trim())
+                            if (userAfterSave) {
+                                console.log(`✅ [AuthContext] User trouvé après sauvegarde: ${userAfterSave.id}`)
+                                userToConnect = userAfterSave
+                            }
+                        }
                     } catch (error) {
                         console.error('❌ [AuthContext] Erreur sauvegarde backend:', error)
-                        // Continue même si la sauvegarde backend échoue
+                        throw error
                     }
                 }
             }
