@@ -263,8 +263,9 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     // TODO: Optimiser pour éviter les rerenders inutiles
     useEffect(() => {
         // ⚠️ TEMPORAIREMENT DÉSACTIVÉ - Toast qui suit le viewport
-        return
+        return undefined
 
+        // eslint-disable-next-line no-unreachable
         console.log('🔄 [App] useEffect viewport monitoring - platformInfo:', platformInfo?.isMobile, 'visualViewport:', !!window.visualViewport)
 
         if (!platformInfo?.isMobile || !window.visualViewport) return
