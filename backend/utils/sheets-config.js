@@ -9,15 +9,45 @@ const { google } = require('googleapis')
 require('dotenv').config()
 
 // Configuration Google Sheets et Drive avec délégation
-const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || './service-account.json',
-    scopes: [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ],
-    // Délégation vers votre compte personnel
-    subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
-})
+// Support pour Vercel (JSON string) et développement local (fichier)
+let authConfig
+
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    // Vercel/Production : JSON string dans variable d'environnement
+    try {
+        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+        authConfig = {
+            credentials,
+            scopes: [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ],
+            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
+        }
+    } catch (error) {
+        // Si ce n'est pas un JSON valide, traiter comme chemin de fichier
+        authConfig = {
+            keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+            scopes: [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ],
+            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
+        }
+    }
+} else {
+    // Développement local : fichier service-account.json
+    authConfig = {
+        keyFile: './service-account.json',
+        scopes: [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ],
+        subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
+    }
+}
+
+const auth = new google.auth.GoogleAuth(authConfig)
 
 const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
