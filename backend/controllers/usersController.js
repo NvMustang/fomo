@@ -109,26 +109,20 @@ class UsersController {
 
             console.log(`🔄 Upsert utilisateur: ${userId}`)
 
-            // Récupérer l'utilisateur existant pour préserver lastConnexion si non fourni
-            const existingUser = await DataServiceV2.getByKey(
-                'Users!A2:P',
-                DataServiceV2.mappers.user,
-                0,
-                userId
-            )
-
             // Préparer les données pour la feuille (tous les champs explicitement, comme pour events)
-            const createdAt = userData.createdAt || existingUser?.createdAt || new Date().toISOString()
+            // createdAt : sera préservé automatiquement lors d'un update (ne jamais modifier)
+            // Sera défini uniquement lors d'une création si non fourni
+            const createdAt = ''
 
             const rowData = [
                 userId,                                    // A: ID
-                createdAt,                                 // B: CreatedAt
+                createdAt,                                 // B: CreatedAt (sera préservé si vide et update)
                 userData.name || '',                      // C: Name
                 normalizedEmail || '',                    // D: Email (normalisé)
                 userData.city || '',                      // E: City
                 userData.lat || '',                       // F: Latitude
                 userData.lng || '',                       // G: Longitude
-                userData.friendsCount !== undefined ? userData.friendsCount : (existingUser?.friendsCount || 0), // H: Friends Count
+                userData.friendsCount !== undefined ? userData.friendsCount : 0, // H: Friends Count
                 userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true, // I: Privacy (défaut: true)
                 userData.isPublicProfile !== undefined ? userData.isPublicProfile : false, // J: Is Public Profile (défaut: false)
                 userData.isActive !== undefined ? userData.isActive : true, // K: Is Active (défaut: true)
@@ -136,14 +130,15 @@ class UsersController {
                 userData.allowRequests !== undefined ? userData.allowRequests : true, // M: Allow Requests (défaut: true)
                 userData.modifiedAt || new Date().toISOString(), // N: ModifiedAt (fourni ou maintenant)
                 '',                                       // O: DeletedAt (vide)
-                userData.lastConnexion || new Date().toISOString() // P: LastConnexion (fourni ou maintenant)
+                new Date().toISOString()                  // P: LastConnexion (toujours mis à jour à maintenant)
             ]
 
             const result = await DataServiceV2.upsertData(
                 'Users!A2:P',
                 rowData,
                 0, // key column (ID)
-                userId
+                userId,
+                true // preserveCreatedAt: préserver createdAt lors d'un update si non fourni
             )
 
             console.log(`✅ Utilisateur ${result.action}: ${userId}`)

@@ -169,7 +169,6 @@ const VisitorModeContent = ({
 }) => {
     const { isPublicMode, setToggleDisabled } = usePrivacy()
     const { showToast } = useToast()
-    const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
 
     // Désactiver le toggle au démarrage en mode visitor (sera activé après complétion du formulaire)
     // Vérifier si le formulaire a déjà été complété (visitorName existe en sessionStorage)
@@ -186,26 +185,8 @@ const VisitorModeContent = ({
         }
     }, [setToggleDisabled])
 
-    // Ouvrir automatiquement l'EventCard au démarrage seulement si le formulaire n'a pas encore été complété
-    useEffect(() => {
-        if (visitorEvent && !visitorEventError) {
-            try {
-                const hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
-                if (!hasCompletedForm) {
-                    setSelectedEvent(visitorEvent)
-                }
-            } catch {
-                // Si sessionStorage indisponible, ouvrir par défaut
-                setSelectedEvent(visitorEvent)
-            }
-        }
-    }, [visitorEvent, visitorEventError])
-
     // Handler appelé quand le formulaire visitor est complété
     const handleVisitorFormCompleted = useCallback((organizerName: string) => {
-        // Fermer l'EventCard
-        setSelectedEvent(null)
-
         // Activer le toggle privacy
         setToggleDisabled(false)
 
@@ -248,8 +229,6 @@ const VisitorModeContent = ({
                     visitorEvent={visitorEvent}
                     onEventCardMount={onEventCardMount}
                     onVisitorFormCompleted={handleVisitorFormCompleted}
-                    visitorSelectedEvent={selectedEvent}
-                    onVisitorSelectedEventChange={setSelectedEvent}
                 />
             </main>
             {/* NavBar masquée en mode visitor */}

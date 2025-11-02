@@ -4,7 +4,6 @@
  * Page de découverte d'événements autour de l'utilisateur
  */
 
-
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { MapRenderer } from '@/map/MapRenderer'
 import { EventCard, Button } from '@/components'
@@ -17,6 +16,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { userResponsesMapper } from '@/utils/filterTools'
 import { WelcomeScreen } from '@/components/modals/WelcomeScreen'
 
+// ===== TYPES =====
 interface DiscoverPageProps {
   isModalOpen: (modalID: string) => boolean
   onMapReady?: () => void
@@ -24,84 +24,41 @@ interface DiscoverPageProps {
   visitorEvent?: Event | null
   onEventCardMount?: () => void
   onVisitorFormCompleted?: (organizerName: string) => void
-  visitorSelectedEvent?: Event | null // EventCard contrôlée depuis le parent en mode visitor
-  onVisitorSelectedEventChange?: (event: Event | null) => void // Callback pour changer l'événement sélectionné
 }
 
+// ===== COMPOSANT =====
 const DiscoverPage: React.FC<DiscoverPageProps> = ({
   isModalOpen,
   onMapReady,
   isVisitorMode = false,
   visitorEvent = null,
   onEventCardMount,
-  onVisitorFormCompleted,
-  visitorSelectedEvent = null,
-  onVisitorSelectedEventChange
+  onVisitorFormCompleted
 }) => {
+  // ===== HOOKS CONTEXTUELS =====
   const { getLocalDiscoverEvents } = useFilters()
   const { responses } = useFomoDataContext()
   const { user, isAuthenticated } = useAuth()
   const { isPublicMode } = usePrivacy()
 
-  // État local pour l'événement sélectionné (affiché en overlay)
-  // En mode visitor, utiliser l'état contrôlé depuis le parent si fourni
+  // ===== ÉTATS LOCAUX =====
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-
-  // En mode visitor, utiliser l'état contrôlé si le callback est fourni
-  const actualSelectedEvent = isVisitorMode && onVisitorSelectedEventChange && visitorSelectedEvent !== undefined
-    ? visitorSelectedEvent
-    : selectedEvent
-  // État pour afficher les pins fantômes (teaser) en mode visiteur
   const [showTeaserPins, setShowTeaserPins] = useState(false)
-  // État pour afficher WelcomeScreen depuis le bouton CTA
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
-  // Ref pour suivre l'ancienne valeur de isPublicMode
   const prevIsPublicModeRef = useRef(isPublicMode)
 
-  // En mode visitor, utiliser directement visitorEvent
+  // ===== CONSTANTES ET CALCULS SIMPLES =====
   const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getLocalDiscoverEvents().events
 
-  // En mode visitor, l'EventCard est géré par le parent (VisitorModeContent)
-  // On ne l'ouvre plus automatiquement ici
-
-
-  // Notifier le parent que l'EventCard est monté
-  useEffect(() => {
-    if (isVisitorMode && actualSelectedEvent && onEventCardMount) {
-      onEventCardMount()
-    }
-  }, [isVisitorMode, actualSelectedEvent, onEventCardMount])
-
-  // Construire userResponses pour MapRenderer (seulement ici car utilisé uniquement pour le styling des markers)
-  const userResponses = useMemo(() => {
-    const responsesWithUserId = responses.map(r => ({
-      eventId: r.eventId,
-      userId: r.userId,
-      response: r.response
-    }))
-    return userResponsesMapper(filteredEvents, responsesWithUserId, user?.id)
-  }, [filteredEvents, responses, user?.id])
-
-  // Fermer l'EventCard si ouvert lors de l'ouverture d'un modal
-  useEffect(() => {
-    if (isModalOpen('createEvent') && selectedEvent) {
-      setSelectedEvent(null)
-    }
-  }, [isModalOpen, selectedEvent])
-
-  // Fonction pour générer des points aléatoires dans un rayon de 50km
+  // ===== FONCTIONS UTILITAIRES =====
   const generateRandomPointsInRadius = useCallback((centerLat: number, centerLng: number, radiusKm: number, count: number): Array<{ lat: number; lng: number }> => {
     const points: Array<{ lat: number; lng: number }> = []
-    // 1 degré de latitude ≈ 111 km
-    const degreesPerKm = 1 / 111
+    const degreesPerKm = 1 / 111 // 1 degré de latitude ≈ 111 km
 
     for (let i = 0; i < count; i++) {
-      // Angle aléatoire (0 à 2π)
       const angle = Math.random() * 2 * Math.PI
-      // Distance aléatoire (0 à radiusKm)
       const distanceKm = Math.random() * radiusKm
 
-      // Conversion en degrés
       const latOffset = distanceKm * degreesPerKm * Math.cos(angle)
       const lngOffset = distanceKm * degreesPerKm * Math.sin(angle) / Math.cos(centerLat * Math.PI / 180)
 
@@ -114,7 +71,32 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return points
   }, [])
 
-  // Générer les fake events (pins fantômes) quand showTeaserPins est activé
+  // ===== HANDLERS =====
+  // Handlers de la carte
+  const handleEventClick = useCallback((event: Event | null) => {
+    if (event) {
+      setSelectedEvent(event)
+    }
+  }, [])
+
+  const handleClusterClick = useCallback((_feature: unknown) => {
+    if (isVisitorMode) {
+      return // Désactiver les clics sur cluster en mode visitor
+    }
+    setSelectedEvent(null) // Fermer l'EventCard si ouvert
+  }, [isVisitorMode])
+
+
+  // ===== CALCULS MÉMORISÉS =====
+  const userResponses = useMemo(() => {
+    const responsesWithUserId = responses.map(r => ({
+      eventId: r.eventId,
+      userId: r.userId,
+      response: r.response
+    }))
+    return userResponsesMapper(filteredEvents, responsesWithUserId, user?.id)
+  }, [filteredEvents, responses, user?.id])
+
   const fakeEvents = useMemo(() => {
     if (!showTeaserPins || !visitorEvent?.venue?.lat || !visitorEvent?.venue?.lng) {
       return []
@@ -141,34 +123,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     } as Event))
   }, [showTeaserPins, visitorEvent, generateRandomPointsInRadius])
 
-  // Fermer WelcomeScreen si l'utilisateur se connecte
-  useEffect(() => {
-    if (isAuthenticated && showWelcomeScreen) {
-      setShowWelcomeScreen(false)
-      setShowTeaserPins(false)
-    }
-  }, [isAuthenticated, showWelcomeScreen])
-
-  // Détecter le toggle privacy et activer les pins fantômes en mode visiteur
-  useEffect(() => {
-    if (prevIsPublicModeRef.current !== isPublicMode) {
-      prevIsPublicModeRef.current = isPublicMode
-      // En mode visiteur, activer les pins fantômes après toggle privacy
-      if (isVisitorMode) {
-        setShowTeaserPins(true)
-        // Faire un zoom out modéré pour voir plus d'événements
-        setTimeout(() => {
-          if ((window as any).zoomOutMap) {
-            (window as any).zoomOutMap(8, 20000)
-          }
-        }, 100)
-      }
-      // Note: on ne ferme plus automatiquement l'EventCard au toggle privacy en mode visitor
-      // car il se ferme déjà automatiquement après complétion du formulaire
-    }
-  }, [isPublicMode, isVisitorMode])
-
-  // Combiner les vrais events avec les fake events
   const allEventsToDisplay = useMemo(() => {
     if (showTeaserPins && fakeEvents.length > 0) {
       return [...filteredEvents, ...fakeEvents]
@@ -176,23 +130,50 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return filteredEvents
   }, [filteredEvents, fakeEvents, showTeaserPins])
 
-  // Handlers de la carte
-  const handleEventClick = useCallback((event: Event | null) => {
-    // En mode visitor, désactiver les clics (mais permettre navigation/zoom)
-    if (isVisitorMode) {
-      return
+  // ===== EFFETS =====
+  // Notifier le parent que l'EventCard est monté (mode visitor)
+  useEffect(() => {
+    if (isVisitorMode && selectedEvent && onEventCardMount) {
+      onEventCardMount()
     }
-    setSelectedEvent(event)
-  }, [isVisitorMode])
+  }, [isVisitorMode, selectedEvent, onEventCardMount])
 
-  const handleClusterClick = useCallback((_feature: unknown) => {
-    // En mode visitor, désactiver les clics sur cluster
-    if (isVisitorMode) {
-      return
+
+  // Fermer l'EventCard lors de l'ouverture du modal CreateEvent
+  useEffect(() => {
+    if (isModalOpen('createEvent') && selectedEvent) {
+      setSelectedEvent(null)
     }
-    // Fermer l'EventCard si ouvert lors d'un clic sur cluster
-    setSelectedEvent(null)
-  }, [isVisitorMode])
+  }, [isModalOpen, selectedEvent])
+
+  // Détecter le changement de privacy et fermer l'EventCard
+  // Logique spécifique pour les pins fantômes en mode visitor
+  useEffect(() => {
+    if (prevIsPublicModeRef.current !== isPublicMode) {
+      prevIsPublicModeRef.current = isPublicMode
+      // Fermer l'EventCard lors du changement de privacy
+      if (selectedEvent) {
+        setSelectedEvent(null)
+      }
+      // En mode visiteur, activer les pins fantômes après toggle privacy
+      if (isVisitorMode) {
+        setShowTeaserPins(true)
+        setTimeout(() => {
+          if ((window as any).zoomOutMap) {
+            (window as any).zoomOutMap(8, 20000)
+          }
+        }, 100)
+      }
+    }
+  }, [isPublicMode, isVisitorMode, selectedEvent])
+
+  // Fermer WelcomeScreen si l'utilisateur se connecte
+  useEffect(() => {
+    if (isAuthenticated && showWelcomeScreen) {
+      setShowWelcomeScreen(false)
+      setShowTeaserPins(false)
+    }
+  }, [isAuthenticated, showWelcomeScreen])
 
   return (
     <>
@@ -294,22 +275,15 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         <WelcomeScreen />
       )}
 
-      {actualSelectedEvent && (
+      {selectedEvent && (
         <div className="event-card-container">
           <EventCard
-            key={actualSelectedEvent.id}
-            event={actualSelectedEvent}
+            key={selectedEvent.id}
+            event={selectedEvent}
             showToggleResponse={true}
             isFading={false}
             isVisitorMode={isVisitorMode}
-            onClose={() => {
-              // En mode visitor, utiliser le callback du parent si fourni
-              if (isVisitorMode && onVisitorSelectedEventChange) {
-                onVisitorSelectedEventChange(null)
-              } else if (!isVisitorMode) {
-                setSelectedEvent(null)
-              }
-            }}
+            onClose={() => setSelectedEvent(null)}
             onVisitorFormCompleted={onVisitorFormCompleted}
           />
         </div>

@@ -88,16 +88,28 @@ class DataServiceV2 {
      * @param {string} keyValue - Valeur de la clé
      * @returns {Object} Résultat de l'opération
      */
-    static async upsertData(range, rowData, keyColumn, keyValue) {
+    static async upsertData(range, rowData, keyColumn, keyValue, preserveCreatedAt = false) {
         try {
             // D'abord, vérifier si la donnée existe
             const existingData = await this.getByKey(range, (row) => row, keyColumn, keyValue)
 
             if (existingData) {
+                // Si preserveCreatedAt est activé, toujours préserver createdAt (ne jamais le modifier)
+                if (preserveCreatedAt) {
+                    // createdAt est à l'index 1 (colonne B)
+                    // existingData est déjà la ligne brute retournée par getByKey
+                    if (existingData[1]) {
+                        rowData[1] = existingData[1]
+                    }
+                }
                 // Mettre à jour la ligne existante
                 return await this.updateRow(range, rowData, keyColumn, keyValue)
             } else {
                 // Créer une nouvelle ligne
+                // Si createdAt n'est pas fourni, le définir à maintenant
+                if (!rowData[1] || rowData[1] === '') {
+                    rowData[1] = new Date().toISOString()
+                }
                 return await this.createRow(range, rowData)
             }
         } catch (error) {

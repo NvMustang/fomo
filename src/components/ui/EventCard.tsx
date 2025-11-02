@@ -180,25 +180,6 @@ export const EventCard = React.memo<EventCardProps>(({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isProfilePage])
 
-    // Surveiller si la réponse devient "not_interested" pour déclencher l'animation fade-out
-    // En mode visitor, ne PAS lancer le fading out
-    useEffect(() => {
-        if (isVisitorMode) return // Pas de fading en mode visitor
-        if (!user?.id) return
-
-        // Lire directement depuis responses (pas de problème de closure ici car dans les dépendances)
-        const match = responses.find(r => r.userId === user.id && r.eventId === event.id)
-        const currentResponse = match ? match.response : null
-
-        if (currentResponse === 'not_interested' && !shouldFade) {
-            setShouldFade(true)
-            // Fermer après l'animation (2 secondes)
-            const timer = setTimeout(() => {
-                onClose?.()
-            }, 2000)
-            return () => clearTimeout(timer)
-        }
-    }, [responses, shouldFade, onClose, user?.id, event.id, isVisitorMode])
 
     // Combiner isFading (prop) et shouldFade (état local pour not_interested)
     const isFadingActive = isFading || shouldFade
@@ -397,6 +378,8 @@ export const EventCard = React.memo<EventCardProps>(({
                                 pendingRemovalTimeoutRef.current = window.setTimeout(() => {
                                     toggleResponse(event.id, 'not_interested')
                                     pendingRemovalTimeoutRef.current = null
+                                    // Fermer l'EventCard après l'animation et la mise à jour de la réponse
+                                    onClose?.()
                                 }, 2000)
                                 return
                             }
