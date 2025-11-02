@@ -51,7 +51,16 @@ const auth = new google.auth.GoogleAuth(authConfig)
 
 const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ'
+
+// Support pour DB de test : utiliser GOOGLE_SPREADSHEET_ID_TEST si USE_TEST_DB=true
+// ou si GOOGLE_SPREADSHEET_ID_TEST est défini (priorité à la variable explicite)
+const useTestDb = process.env.USE_TEST_DB === 'true' || process.env.USE_TEST_DB === '1'
+const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
+
+const SPREADSHEET_ID = useTestDb && testSpreadsheetId
+    ? testSpreadsheetId
+    : (process.env.GOOGLE_SPREADSHEET_ID || '14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ')
+
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
 /**
@@ -75,7 +84,10 @@ async function validateSpreadsheet() {
             spreadsheetId: SPREADSHEET_ID
         })
 
-        console.log(`✅ Feuille trouvée: ${spreadsheet.data.properties.title}`)
+        // Déterminer l'environnement pour l'affichage
+        const isTestDb = process.env.USE_TEST_DB === 'true' || process.env.USE_TEST_DB === '1'
+        const envType = isTestDb && process.env.GOOGLE_SPREADSHEET_ID_TEST ? '🧪 TEST' : '📊 PRODUCTION'
+        console.log(`${envType} - Feuille trouvée: ${spreadsheet.data.properties.title}`)
         return spreadsheet.data
     } catch (error) {
         throw new Error(`Impossible d'accéder à la feuille de calcul: ${error.message}`)

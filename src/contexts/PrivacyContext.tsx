@@ -10,6 +10,8 @@ import React, { createContext, useState, useContext, ReactNode, useCallback, use
 interface PrivacyContextType {
     isPublicMode: boolean
     togglePrivacy: () => void
+    isToggleDisabled: boolean
+    setToggleDisabled: (disabled: boolean) => void
 }
 
 // ===== CONTEXTE =====
@@ -48,6 +50,9 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
         return true // Valeur par défaut
     })
 
+    // État pour désactiver le toggle (utilisé en mode visitor avant complétion du formulaire)
+    const [isToggleDisabled, setIsToggleDisabled] = useState(false)
+
 
 
     // Initialiser les variables CSS au démarrage et quand isPublicMode change
@@ -70,6 +75,10 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
     }, [isPublicMode])
 
     const togglePrivacy = useCallback(() => {
+        // Ne pas permettre le toggle si désactivé
+        if (isToggleDisabled) {
+            return
+        }
         const newIsPublicMode = !isPublicMode
         console.log('🎬 [PrivacyContext] Toggle privacy:', {
             from: isPublicMode,
@@ -77,11 +86,17 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
         })
         setIsPublicMode(newIsPublicMode)
         updateCSSVariables(newIsPublicMode)
-    }, [isPublicMode, updateCSSVariables])
+    }, [isPublicMode, updateCSSVariables, isToggleDisabled])
+
+    const setToggleDisabled = useCallback((disabled: boolean) => {
+        setIsToggleDisabled(disabled)
+    }, [])
 
     const value = {
         isPublicMode,
-        togglePrivacy
+        togglePrivacy,
+        isToggleDisabled,
+        setToggleDisabled
     }
 
     return (

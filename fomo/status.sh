@@ -30,7 +30,7 @@ echo ""
 
 # Vérifier les processus Node.js
 echo "🔍 Processus Node.js actifs:"
-node_processes=$(pgrep -f "node.*server.js\|npm.*start\|npm.*dev\|vite" 2>/dev/null)
+node_processes=$(pgrep -f "node.*server.js\|npm.*start\|npm.*dev\|npm.*test:dev\|vite" 2>/dev/null)
 if [ ! -z "$node_processes" ]; then
     echo "$node_processes" | while read pid; do
         if [ ! -z "$pid" ]; then
@@ -105,7 +105,9 @@ fi
 
 echo ""
 echo "💡 Commandes disponibles:"
-echo "  ./start.sh   - Démarrer FOMO MVP"
-echo "  ./stop.sh    - Arrêter FOMO MVP"
-echo "  ./reload.sh  - Recharger FOMO MVP"
-echo "  ./status.sh  - Vérifier le statut"
+echo "  ./start.sh       - Démarrer FOMO MVP (PRODUCTION)"
+echo "  ./start.sh test  - Démarrer FOMO MVP (MODE TEST)"
+echo "  ./stop.sh        - Arrêter FOMO MVP"
+echo "  ./restart.sh     - Redémarrer (PRODUCTION)"
+echo "  ./restart.sh test - Redémarrer (MODE TEST)"
+echo "  ./status.sh      - Vérifier le statut"

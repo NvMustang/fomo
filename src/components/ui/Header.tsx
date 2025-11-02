@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = React.memo(() => {
-    const { isPublicMode, togglePrivacy } = usePrivacy()
+    const { isPublicMode, togglePrivacy, isToggleDisabled } = usePrivacy()
 
     return (
         <header className="app-header">
@@ -26,11 +26,16 @@ export const Header: React.FC<HeaderProps> = React.memo(() => {
                 {/* 2. Toggle button moderne */}
                 <div className="header-actions">
                     <div
-                        className="toggle-switch"
-                        onClick={togglePrivacy}
+                        className={`toggle-switch ${isToggleDisabled ? 'toggle-switch--disabled' : ''}`}
+                        onClick={isToggleDisabled ? undefined : togglePrivacy}
                         role="switch"
                         aria-checked={isPublicMode}
+                        aria-disabled={isToggleDisabled}
                         aria-label="Basculer entre mode public et privé"
+                        style={{
+                            cursor: isToggleDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isToggleDisabled ? 0.5 : 1
+                        }}
                     >
                         {/* Container visuel avec forme et icônes */}
                         <div className="toggle-track">

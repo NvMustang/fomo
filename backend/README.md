@@ -54,7 +54,35 @@ GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 PORT=3001
 CORS_ORIGIN=http://localhost:5173
 IMGBB_API_KEY=your_imgbb_api_key
+
+# Optionnel : DB de test (pour développement local sans affecter la production)
+USE_TEST_DB=true
+GOOGLE_SPREADSHEET_ID_TEST=your_test_spreadsheet_id
 ```
+
+### 🧪 Utilisation de la DB de test
+
+Pour développer avec une base de données de test sans modifier la production :
+
+1. **Créer une feuille Google Sheets de test** (copie de la production)
+
+2. **Ajouter dans `backend/.env`** :
+   ```env
+   USE_TEST_DB=true
+   GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
+   ```
+
+3. **Démarrer en mode test** :
+   ```bash
+   npm run test:dev
+   ```
+
+   Ou en mode production (défaut) :
+   ```bash
+   npm run dev
+   ```
+
+   Le serveur affichera `🧪 TEST` ou `📊 PRODUCTION` pour indiquer l'environnement utilisé.
 
 ## 📊 Structure Google Sheets
 

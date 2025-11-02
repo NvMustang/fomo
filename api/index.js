@@ -10,10 +10,10 @@ const app = require('../backend/app')
 
 // Middleware pour logger le path reçu (debug)
 app.use((req, res, next) => {
-  if (process.env.VERCEL) {
-    console.log('🔍 [Vercel] Path reçu:', req.url, 'Method:', req.method)
-  }
-  next()
+    if (process.env.VERCEL) {
+        console.log('🔍 [Vercel] Path reçu:', req.url, 'Method:', req.method)
+    }
+    next()
 })
 
 // Export de l'app Express pour Vercel

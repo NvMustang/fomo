@@ -29,9 +29,9 @@ try {
 // Middleware globaux
 // CORS : utiliser variable d'environnement ou autoriser toutes les origines en dev
 // En Vercel Preview, autoriser toutes les origines pour faciliter les tests
-const corsOrigin = process.env.CORS_ORIGIN || 
-    (process.env.VERCEL_ENV === 'preview' ? true : 
-     (process.env.NODE_ENV === 'production' ? false : true))
+const corsOrigin = process.env.CORS_ORIGIN ||
+    (process.env.VERCEL_ENV === 'preview' ? true :
+        (process.env.NODE_ENV === 'production' ? false : true))
 app.use(cors({
     origin: corsOrigin,
     credentials: true

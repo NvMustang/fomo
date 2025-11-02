@@ -21,6 +21,7 @@ kill_node() {
     pkill -f "node.*server.js" 2>/dev/null
     pkill -f "npm.*start" 2>/dev/null
     pkill -f "npm.*dev" 2>/dev/null
+    pkill -f "npm.*test:dev" 2>/dev/null
     pkill -f "vite" 2>/dev/null
 }
 

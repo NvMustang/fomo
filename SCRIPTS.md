@@ -8,18 +8,27 @@
 ```
 
 ### 🔧 Scripts Individuels
-- `./start.sh` - Démarre FOMO MVP
+- `./start.sh` - Démarre FOMO MVP (PRODUCTION)
+- `./start.sh test` - Démarre FOMO MVP en MODE TEST
 - `./stop.sh` - Arrête FOMO MVP  
-- `./restart.sh` - Redémarre FOMO MVP (stop + start)
+- `./restart.sh` - Redémarre FOMO MVP (PRODUCTION)
+- `./restart.sh test` - Redémarre FOMO MVP en MODE TEST
 - `./status.sh` - Vérifie le statut des services
 
 ## 🚀 Commandes Disponibles
 
 ### Démarrage
+
+**Mode Production (défaut):**
 ```bash
 ./fomo.sh start
 # ou
 ./start.sh
+```
+
+**Mode Test (base de données de test):**
+```bash
+./start.sh test
 ```
 
 ### Arrêt
@@ -30,10 +39,17 @@
 ```
 
 ### Redémarrage
+
+**Mode Production:**
 ```bash
 ./fomo.sh restart
 # ou
 ./restart.sh
+```
+
+**Mode Test:**
+```bash
+./restart.sh test
 ```
 
 ### Statut
@@ -52,6 +68,8 @@
 ## 🎯 Utilisation Recommandée
 
 ### Développement Quotidien
+
+**Mode Production:**
 ```bash
 # Démarrer le projet
 ./fomo.sh start
@@ -65,6 +83,20 @@
 # Redémarrer après modifications
 ./fomo.sh restart
 ```
+
+**Mode Test (pour tester sans affecter la production):**
+```bash
+# Démarrer en mode test
+./start.sh test
+
+# Redémarrer en mode test
+./restart.sh test
+
+# Vérifier le statut
+./status.sh
+```
+
+⚠️ **Important**: En mode test, le backend utilise `GOOGLE_SPREADSHEET_ID_TEST` au lieu de `GOOGLE_SPREADSHEET_ID`. Assurez-vous d'avoir configuré cette variable dans `backend/.env`.
 
 ### Dépannage
 ```bash
@@ -108,6 +140,7 @@ Les logs sont sauvegardés dans le dossier `logs/`:
 
 ## 🎉 Exemple Complet
 
+**Mode Production:**
 ```bash
 # Premier démarrage
 ./fomo.sh start
@@ -126,6 +159,24 @@ Les logs sont sauvegardés dans le dossier `logs/`:
 
 # Arrêter en fin de journée
 ./fomo.sh stop
+```
+
+**Mode Test:**
+```bash
+# Démarrer en mode test (base de données de test)
+./start.sh test
+
+# Vérifier que tout fonctionne
+./status.sh
+
+# Tester vos modifications...
+# (modifications du code)
+
+# Redémarrer en mode test
+./restart.sh test
+
+# Arrêter
+./stop.sh
 ```
 
 ---

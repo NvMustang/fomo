@@ -25,6 +25,7 @@ interface EventCardProps {
     isVisitorMode?: boolean // Si true, mode visitor (pas authentifié)
     onClose?: () => void // Callback de fermeture pour notifier le parent
     onEdit?: (event: Event) => void // Callback pour éditer l'événement
+    onVisitorFormCompleted?: (organizerName: string) => void // Callback quand le formulaire visitor est complété
 }
 
 export const EventCard = React.memo<EventCardProps>(({
@@ -36,6 +37,7 @@ export const EventCard = React.memo<EventCardProps>(({
     isVisitorMode = false,
     onClose,
     onEdit,
+    onVisitorFormCompleted,
 }: EventCardProps) => {
 
     // État pour l'expansion des détails
@@ -83,6 +85,7 @@ export const EventCard = React.memo<EventCardProps>(({
 
     // Handler pour confirmer le nom visitor
     const handleVisitorNameConfirm = (name: string, email?: string) => {
+        const wasFirstTime = !visitorName // Vérifier si c'était la première fois
         setVisitorName(name)
         try {
             sessionStorage.setItem('fomo-visit-name', name)
@@ -101,6 +104,11 @@ export const EventCard = React.memo<EventCardProps>(({
             addEventResponse(event.id, newResponse)
         }
         setPendingResponse(null)
+
+        // Si c'était la première fois (formulaire complété), notifier le parent
+        if (wasFirstTime && onVisitorFormCompleted) {
+            onVisitorFormCompleted(event.organizerName || 'L\'organisateur')
+        }
     }
 
     const handleOpen = () => {

@@ -99,7 +99,7 @@ class UsersController {
                     : (existingUser?.isPublicProfile !== undefined ? existingUser.isPublicProfile : false), // J: Is Public Profile (préserver valeur existante)
                 userData.isActive !== undefined
                     ? userData.isActive
-                    : (existingUser?.isActive !== undefined ? existingUser.isActive : false), // K: Status (préserver valeur existante)
+                    : (existingUser?.isActive !== undefined ? existingUser.isActive : true), // K: Status (nouveau utilisateur = true par défaut)
                 userData.isAmbassador !== undefined
                     ? userData.isAmbassador
                     : (existingUser?.isAmbassador !== undefined ? existingUser.isAmbassador : false), // L: Is Ambassador (préserver valeur existante)

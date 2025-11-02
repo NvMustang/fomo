@@ -167,7 +167,57 @@ const VisitorModeContent = ({
     visitorEventError: string | null
     onEventCardMount: () => void
 }) => {
-    const { isPublicMode } = usePrivacy()
+    const { isPublicMode, setToggleDisabled } = usePrivacy()
+    const { showToast } = useToast()
+    const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+
+    // Désactiver le toggle au démarrage en mode visitor (sera activé après complétion du formulaire)
+    // Vérifier si le formulaire a déjà été complété (visitorName existe en sessionStorage)
+    useEffect(() => {
+        try {
+            const hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
+            setToggleDisabled(!hasCompletedForm)
+        } catch {
+            // Si sessionStorage indisponible, désactiver par défaut
+            setToggleDisabled(true)
+        }
+        return () => {
+            setToggleDisabled(false) // Réactiver en cas de démontage
+        }
+    }, [setToggleDisabled])
+
+    // Ouvrir automatiquement l'EventCard au démarrage seulement si le formulaire n'a pas encore été complété
+    useEffect(() => {
+        if (visitorEvent && !visitorEventError) {
+            try {
+                const hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
+                if (!hasCompletedForm) {
+                    setSelectedEvent(visitorEvent)
+                }
+            } catch {
+                // Si sessionStorage indisponible, ouvrir par défaut
+                setSelectedEvent(visitorEvent)
+            }
+        }
+    }, [visitorEvent, visitorEventError])
+
+    // Handler appelé quand le formulaire visitor est complété
+    const handleVisitorFormCompleted = useCallback((organizerName: string) => {
+        // Fermer l'EventCard
+        setSelectedEvent(null)
+        
+        // Activer le toggle privacy
+        setToggleDisabled(false)
+
+        // Afficher le toast de remerciement
+        const toastMessage: ToastMessage = {
+            title: `${organizerName} vous remercie pour votre réponse !`,
+            message: 'Découvrez les événements autour de chez vous via le bouton en haut à droite.',
+            type: 'success',
+            duration: 5000
+        }
+        showToast(toastMessage)
+    }, [setToggleDisabled, showToast])
 
     const isModalOpen = useCallback((_modalID: string): boolean => {
         // En mode visitor, aucun modal n'est ouvert
@@ -186,6 +236,8 @@ const VisitorModeContent = ({
         )
     }
 
+    const { currentToast, hideToast } = useToast()
+
     return (
         <div className={`app ${isPublicMode ? 'public' : 'private'}`}>
             <Header />
@@ -195,9 +247,13 @@ const VisitorModeContent = ({
                     isVisitorMode={true}
                     visitorEvent={visitorEvent}
                     onEventCardMount={onEventCardMount}
+                    onVisitorFormCompleted={handleVisitorFormCompleted}
+                    visitorSelectedEvent={selectedEvent}
+                    onVisitorSelectedEventChange={setSelectedEvent}
                 />
             </main>
             {/* NavBar masquée en mode visitor */}
+            <Toast toast={currentToast} onClose={hideToast} />
         </div>
     )
 }

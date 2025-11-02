@@ -23,6 +23,9 @@ interface DiscoverPageProps {
   isVisitorMode?: boolean
   visitorEvent?: Event | null
   onEventCardMount?: () => void
+  onVisitorFormCompleted?: (organizerName: string) => void
+  visitorSelectedEvent?: Event | null // EventCard contrôlée depuis le parent en mode visitor
+  onVisitorSelectedEventChange?: (event: Event | null) => void // Callback pour changer l'événement sélectionné
 }
 
 const DiscoverPage: React.FC<DiscoverPageProps> = ({
@@ -30,7 +33,10 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   onMapReady,
   isVisitorMode = false,
   visitorEvent = null,
-  onEventCardMount
+  onEventCardMount,
+  onVisitorFormCompleted,
+  visitorSelectedEvent = null,
+  onVisitorSelectedEventChange
 }) => {
   const { getLocalDiscoverEvents } = useFilters()
   const { responses } = useFomoDataContext()
@@ -38,7 +44,13 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const { isPublicMode } = usePrivacy()
 
   // État local pour l'événement sélectionné (affiché en overlay)
+  // En mode visitor, utiliser l'état contrôlé depuis le parent si fourni
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+
+  // En mode visitor, utiliser l'état contrôlé si le callback est fourni
+  const actualSelectedEvent = isVisitorMode && onVisitorSelectedEventChange && visitorSelectedEvent !== undefined
+    ? visitorSelectedEvent
+    : selectedEvent
   // État pour afficher les pins fantômes (teaser) en mode visiteur
   const [showTeaserPins, setShowTeaserPins] = useState(false)
   // État pour afficher WelcomeScreen depuis le bouton CTA
@@ -49,20 +61,16 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   // En mode visitor, utiliser directement visitorEvent
   const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getLocalDiscoverEvents().events
 
-  // En mode visitor, ouvrir automatiquement l'EventCard (sauf si les pins fantômes sont affichés)
-  useEffect(() => {
-    if (isVisitorMode && visitorEvent && !selectedEvent && !showTeaserPins) {
-      setSelectedEvent(visitorEvent)
-    }
-  }, [isVisitorMode, visitorEvent, selectedEvent, showTeaserPins])
+  // En mode visitor, l'EventCard est géré par le parent (VisitorModeContent)
+  // On ne l'ouvre plus automatiquement ici
 
 
   // Notifier le parent que l'EventCard est monté
   useEffect(() => {
-    if (isVisitorMode && selectedEvent && onEventCardMount) {
+    if (isVisitorMode && actualSelectedEvent && onEventCardMount) {
       onEventCardMount()
     }
-  }, [isVisitorMode, selectedEvent, onEventCardMount])
+  }, [isVisitorMode, actualSelectedEvent, onEventCardMount])
 
   // Construire userResponses pour MapRenderer (seulement ici car utilisé uniquement pour le styling des markers)
   const userResponses = useMemo(() => {
@@ -151,16 +159,14 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         // Faire un zoom out modéré pour voir plus d'événements
         setTimeout(() => {
           if ((window as any).zoomOutMap) {
-            (window as any).zoomOutMap(8, 20000)
+            (window as any).zoomOutMap(10, 20000)
           }
         }, 100)
       }
-      // Fermer l'EventCard ouvert lors du changement de privacy
-      if (selectedEvent) {
-        setSelectedEvent(null)
-      }
+      // Note: on ne ferme plus automatiquement l'EventCard au toggle privacy en mode visitor
+      // car il se ferme déjà automatiquement après complétion du formulaire
     }
-  }, [isPublicMode, isVisitorMode, selectedEvent])
+  }, [isPublicMode, isVisitorMode])
 
   // Combiner les vrais events avec les fake events
   const allEventsToDisplay = useMemo(() => {
@@ -216,7 +222,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           <div className="modal modal-teaser">
             <div className="modal-content">
               <p className="map-teaser-message">
-                Pour découvrir les événements autour de toi, laisse-nous ton adresse email !
+                Pour découvrir les événements autour de toi, clic ici 👇l !
               </p>
               <Button
                 variant="primary"
@@ -288,20 +294,23 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         <WelcomeScreen />
       )}
 
-      {selectedEvent && (
+      {actualSelectedEvent && (
         <div className="event-card-container">
           <EventCard
-            key={selectedEvent.id}
-            event={selectedEvent}
+            key={actualSelectedEvent.id}
+            event={actualSelectedEvent}
             showToggleResponse={true}
             isFading={false}
             isVisitorMode={isVisitorMode}
             onClose={() => {
-              // En mode visitor, empêcher la fermeture
-              if (!isVisitorMode) {
+              // En mode visitor, utiliser le callback du parent si fourni
+              if (isVisitorMode && onVisitorSelectedEventChange) {
+                onVisitorSelectedEventChange(null)
+              } else if (!isVisitorMode) {
                 setSelectedEvent(null)
               }
             }}
+            onVisitorFormCompleted={onVisitorFormCompleted}
           />
         </div>
       )}

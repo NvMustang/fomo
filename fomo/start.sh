@@ -2,8 +2,17 @@
 
 # 🚀 Script de démarrage FOMO MVP
 # Tue tous les processus et relance proprement front + back
+# Usage: ./start.sh [test] - Démarre en mode test si "test" est passé en paramètre
 
-echo "🔄 Démarrage de FOMO MVP..."
+# Détecter le mode test
+if [ "$1" = "test" ] || [ "$1" = "--test" ]; then
+    USE_TEST_MODE=true
+    echo "🧪 Démarrage de FOMO MVP en MODE TEST..."
+    echo "⚠️  ATTENTION: Vous utilisez la base de données de TEST"
+else
+    USE_TEST_MODE=false
+    echo "🔄 Démarrage de FOMO MVP (PRODUCTION)..."
+fi
 
 # Fonction pour tuer les processus sur un port
 kill_port() {
@@ -94,14 +103,23 @@ else
 fi
 
 # Démarrer le backend
-echo "🚀 Démarrage du backend..."
-cd /Users/eugene/Projects/FOMO\ MVP/backend
-# Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
-npm start > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
-BACKEND_PID=$!
-cd /Users/eugene/Projects/FOMO\ MVP/fomo
-
-echo "🔍 Backend démarré avec PID: $BACKEND_PID"
+if [ "$USE_TEST_MODE" = "true" ]; then
+    echo "🧪 Démarrage du backend en MODE TEST..."
+    cd /Users/eugene/Projects/FOMO\ MVP/backend
+    # Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
+    USE_TEST_DB=true npm run test:dev > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
+    BACKEND_PID=$!
+    cd /Users/eugene/Projects/FOMO\ MVP/fomo
+    echo "🔍 Backend TEST démarré avec PID: $BACKEND_PID"
+else
+    echo "🚀 Démarrage du backend (PRODUCTION)..."
+    cd /Users/eugene/Projects/FOMO\ MVP/backend
+    # Le serveur écoute sur 0.0.0.0, donc accessible depuis le réseau
+    npm start > /Users/eugene/Projects/FOMO\ MVP/logs/backend.log 2>&1 &
+    BACKEND_PID=$!
+    cd /Users/eugene/Projects/FOMO\ MVP/fomo
+    echo "🔍 Backend démarré avec PID: $BACKEND_PID"
+fi
 echo "📋 Logs backend: tail -f logs/backend.log"
 
 # Attendre que le backend démarre
@@ -131,7 +149,13 @@ echo "✅ Frontend démarré (PID: $FRONTEND_PID)"
 
 # Afficher les informations de démarrage
 echo ""
-echo "🎉 FOMO MVP démarré avec succès !"
+if [ "$USE_TEST_MODE" = "true" ]; then
+    echo "🎉 FOMO MVP démarré en MODE TEST avec succès !"
+    echo "🧪 Base de données: TEST (GOOGLE_SPREADSHEET_ID_TEST)"
+else
+    echo "🎉 FOMO MVP démarré avec succès !"
+    echo "📊 Base de données: PRODUCTION"
+fi
 echo ""
 
 if [ "$USE_LOCALHOST" = "true" ]; then
@@ -141,7 +165,11 @@ if [ "$USE_LOCALHOST" = "true" ]; then
     echo "ℹ️  Configuration localhost:"
     echo "   - Frontend: localhost:3000"
     echo "   - Backend:  localhost:3001"
-    echo "   - Mode: développement local uniquement"
+    if [ "$USE_TEST_MODE" = "true" ]; then
+        echo "   - Mode: MODE TEST (développement local)"
+    else
+        echo "   - Mode: développement local uniquement"
+    fi
     echo ""
 else
     echo "📱 Frontend: http://$LOCAL_IP:3000 (PID: $FRONTEND_PID)"
@@ -154,6 +182,9 @@ else
     echo "   - Frontend: $LOCAL_IP:3000 (accessible mobile)"
     echo "   - Backend:  $LOCAL_IP:3001 (accessible mobile)"
     echo "   - Frontend se connecte au backend sur $LOCAL_IP"
+    if [ "$USE_TEST_MODE" = "true" ]; then
+        echo "   - Mode: MODE TEST (base de données de test)"
+    fi
     echo ""
 fi
 echo "📋 Logs disponibles:"
