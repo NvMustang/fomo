@@ -15,16 +15,25 @@ require('dotenv').config()
 const app = express()
 
 // Valider la configuration au démarrage
+// En Vercel Serverless, on ne peut pas faire process.exit(), donc on log seulement
 try {
     validateConfig()
 } catch (error) {
     console.error('❌ Configuration invalide:', error.message)
-    process.exit(1)
+    // En production Vercel, ne pas faire process.exit() car c'est une fonction serverless
+    if (process.env.NODE_ENV !== 'production') {
+        process.exit(1)
+    }
 }
 
 // Middleware globaux
+// CORS : utiliser variable d'environnement ou autoriser toutes les origines en dev
+// En Vercel Preview, autoriser toutes les origines pour faciliter les tests
+const corsOrigin = process.env.CORS_ORIGIN || 
+    (process.env.VERCEL_ENV === 'preview' ? true : 
+     (process.env.NODE_ENV === 'production' ? false : true))
 app.use(cors({
-    origin: true, // Autoriser toutes les origines pour le développement
+    origin: corsOrigin,
     credentials: true
 }))
 app.use(express.json())
@@ -71,17 +80,24 @@ app.get('/', (req, res) => {
 })
 
 // Montage des routes API
-app.use('/api', apiRoutes)
+// En Vercel, le path /api est déjà géré par le routing, donc on monte à la racine
+// En développement/local, on monte sur /api
+const isVercel = process.env.VERCEL || process.env.VERCEL_ENV
+const apiBasePath = isVercel ? '/' : '/api'
+
+app.use(apiBasePath === '/' ? '/' : '/api', apiRoutes)
 
 // Health check
-app.get('/api/health', (req, res) => {
+const healthPath = isVercel ? '/health' : '/api/health'
+app.get(healthPath, (req, res) => {
     res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         database: 'Google Sheets',
         imageHost: 'ImgBB',
-        architecture: 'Modulaire avec Soft Updates'
+        architecture: 'Modulaire avec Soft Updates',
+        environment: isVercel ? 'Vercel' : 'Local'
     })
 })
 
