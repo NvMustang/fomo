@@ -209,21 +209,4 @@
     font-weight: 500;
 }
 
-/* Burger menu bars */
-.burger-1,
-.burger-2,
-.burger-3 {
-    width: var(--bar-length);
-    height: var(--bar-thickness);
-    background: currentColor;
-    border-radius: calc(var(--bar-thickness) / 2);
-    transition: transform var(--transition-fast);
-}
-
-.burger-2 {
-    width: calc(var(--bar-length) * 0.75);
-}
-
-.burger-3 {
-    width: calc(var(--bar-length) * 0.5);
-}
+/* Burger menu bars - supprimé (non utilisé) */

@@ -118,11 +118,11 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
 
             {/* Boutons d'action */}
             <div className="location-picker-actions">
-                <button className="btn btn--outline" onClick={onClose}>
+                <button className="button secondary" onClick={onClose}>
                     Annuler
                 </button>
                 <button
-                    className="btn btn--primary"
+                    className="button primary"
                     onClick={handleConfirm}
                     disabled={isLoading}
                 >

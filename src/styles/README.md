@@ -3,23 +3,31 @@
 ## Files
 - base.css: variables, reset, aliases, breakpoints
 - layout.css: containers, flex/grid utilities, spacing, responsive helpers
-- components.css: generic UI primitives (btn, card, input, badge, modal)
-- animations.css: keyframes and animation utilities
-- typography.css: headings and text color utilities
-- friends.css, events.css: feature-specific styles (temporary during refactor)
+- components.css: main components import file (imports all component modules)
+- components/_buttons.css: button styles
+- components/_forms.css: form input styles
+- components/_modals.css: modal overlay and container styles
+- components/_navigation.css: navigation bar and icons
+- components/_events.css: event card styles
+- components/_overlays.css: overlay and backdrop styles
+- components/_friends.css: friends and user card styles
+- components/_profile.css: profile page styles
+- components/_calendar.css: calendar page styles
+- components/_loading.css: loading states and welcome screen
+- components/_animations.css: keyframes and animation utilities
+- components/_utilities.css: utility classes
+- components/_filterbar.css: filter bar styles
 
 ## Generic classes
-- Buttons: `.btn`, `.btn--primary`, `.btn--outline`, `.btn--success`, `.btn--danger`, `.btn--sm`, `.btn--lg`
-- Cards: `.card`, `.card--hover`
-- Inputs: `.input`, `.select`, `.textarea`
-- Badges: `.badge`, `.badge--neutral|success|warning|error`
-- Modals: `.modal-backdrop`, `.modal`, `.modal__header`, `.modal__title`, `.modal__body`, `.modal__footer`
-- Layout: `.container`, `.flex`, `.flex-col`, `.items-center`, `.justify-between`, `.grid`, `.grid-auto-200|320`, `.gap-sm|md|lg`
-- Typography: `.heading-lg`, `.heading-md`, `.text-muted`, `.text-secondary`
+- Buttons: `.button`, `.button.primary`, `.button.secondary`, `.button.ghost`, `.circular-button`
+- Cards: `.event-card`, `.card`
+- Inputs: `.form-input`, `.form-label`
+- Modals: `.modal-overlay`, `.modal-container`, `.modal`, `.modal-content`
+- Layout: utilities in layout.css and _utilities.css
 
 ## Variables
 - Transitions: `--transition-fast: 0.15s ease-in-out;`, `--transition-medium: 0.25s ease-in-out;`
-- Colors: `--primary`, `--text`, `--text-muted`, `--white`, `--black`, plus privacy colors
+- Colors: `--primary`, `--text`, `--text-muted`, `--white`, `--black`, plus privacy colors (`--color-public`, `--color-private`)
 - Spacing: `--xs, --sm, --md, --lg, --xl`
 - Typography sizes: `--text-xs, --text-sm, --text-md, --text-lg, --text-xl, --text-2xl`
 
@@ -27,5 +35,3 @@
 - BEM allégé: `.component--variant`
 - Pas de styles inline; préférer classes génériques
 - Réutiliser couleurs, espacements et transitions via variables
-
-

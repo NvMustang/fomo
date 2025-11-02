@@ -65,6 +65,7 @@
     box-shadow: var(--shadow);
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    background: var(--current-color);
 }
 
 .circular-button:hover {
@@ -74,10 +75,6 @@
 
 .circular-button:active {
     transform: scale(0.98);
-}
-
-.circular-button {
-    background: var(--current-color);
 }
 
 .circular-button.rotated {

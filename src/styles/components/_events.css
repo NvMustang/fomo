@@ -561,37 +561,7 @@
     gap: var(--sm);
 }
 
-.events-content {
-    margin-bottom: var(--sm);
-}
-
-.events-nav {
-    display: flex;
-    background: var(--surface);
-    border-radius: var(--radius-lg);
-    padding: var(--xs);
-    margin-bottom: var(--sm);
-    box-shadow: var(--shadow);
-    gap: var(--xs);
-}
-
-.events-nav-button {
-    flex: 1;
-    padding: var(--sm) var(--md);
-    border: none;
-    background: transparent;
-    border-radius: var(--radius);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-}
-
-.events-nav-button.active {
-    background: var(--current-color);
-    color: white;
-}
+/* Classes events-nav, events-nav-button, events-content, events-list supprimées (non utilisées) */
 
 /* Animation de suppression pour EventCard */
 .event-card.fading-out {

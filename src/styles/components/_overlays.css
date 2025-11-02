@@ -25,9 +25,7 @@
 
 
 /* Classes d'alias pour compatibilité */
-.modal-backdrop,
-.auth-overlay,
-.overlay-container {
+.modal-backdrop {
     position: fixed;
     inset: 0;
     display: flex;

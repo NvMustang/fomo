@@ -5,8 +5,6 @@
  */
 
 import React from 'react'
-import { Link } from 'react-router-dom'
-
 
 type ButtonBase = {
     variant?: 'primary' | 'secondary' | 'ghost'
@@ -19,17 +17,12 @@ type ButtonAsButton = ButtonBase & {
     as?: 'button'
 } & React.ButtonHTMLAttributes<HTMLButtonElement>
 
-type ButtonAsLink = ButtonBase & {
-    as: 'link'
-    to: string
-} & React.AnchorHTMLAttributes<HTMLAnchorElement>
-
 type ButtonAsAnchor = ButtonBase & {
     as: 'a'
     href: string
 } & React.AnchorHTMLAttributes<HTMLAnchorElement>
 
-export type ButtonProps = ButtonAsButton | ButtonAsLink | ButtonAsAnchor
+export type ButtonProps = ButtonAsButton | ButtonAsAnchor
 
 export function Button(props: ButtonProps) {
     const {
@@ -58,15 +51,6 @@ export function Button(props: ButtonProps) {
         sizeClasses[size as keyof typeof sizeClasses],
         className
     ].filter(Boolean).join(' ')
-
-    if ((props as ButtonAsLink).as === 'link') {
-        const { to, ...linkProps } = rest as any
-        return (
-            <Link to={to} className={classes} {...linkProps}>
-                {children}
-            </Link>
-        )
-    }
 
     if ((props as ButtonAsAnchor).as === 'a') {
         const { href, ...anchorProps } = rest as any

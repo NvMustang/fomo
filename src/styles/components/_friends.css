@@ -441,15 +441,7 @@
     }
 }
 
-.friend-card-wrapper {
-    display: flex;
-    flex-direction: column;
-}
-
-.friend-card-wrapper.card-pending {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    pointer-events: auto;
-}
+/* friend-card-wrapper supprimé (non utilisé directement, seulement card-pending est utilisé via className) */
 
 /* UserCard dans la section amis - même style que le UserCard du profil */
 .friends-grid .event-card {
@@ -574,7 +566,4 @@
 
 /* La carte peut être cliquée pour afficher/masquer les boutons */
 
-.friends-grid .friend-card-wrapper {
-    display: flex;
-    flex-direction: column;
-}
+/* friends-grid .friend-card-wrapper supprimé (non utilisé) */

@@ -104,18 +104,7 @@
     padding-bottom: var(--lg);
 }
 
-/* État vide pour une période */
-
-.calendar-period-empty-icon {
-    font-size: 32px;
-    margin-bottom: var(--sm);
-    opacity: 0.6;
-}
-
-.calendar-period-empty-text {
-    font-size: var(--text-sm);
-    margin: 0;
-}
+/* État vide pour une période - supprimé (non utilisé) */
 
 /* Animation pour l'apparition des périodes */
 .calendar-period {

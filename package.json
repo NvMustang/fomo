@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "geocode": "npx tsx src/utils/geocoding.ts"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@types/react-datepicker": "^6.2.0",

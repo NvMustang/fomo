@@ -1,0 +1,164 @@
+/* ======================================================================
+   FilterBar (overlay + layout)
+   ====================================================================== */
+.filterbar-overlay {
+   position: absolute;
+   top: 70px;
+   left: 50%;
+   transform: translateX(-50%);
+   width: 90vw;
+   z-index: var(--z-index-modal);
+}
+
+.filterbar {
+   align-items: center;
+   margin-top: 10px;
+   background: var(--bg, #f9fafb);
+   border-radius: 12px;
+   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+   opacity: 0.8;
+   transition: padding var(--transition-fast), opacity var(--transition-fast);
+}
+
+.filterbar:focus-within,
+.filterbar:hover {
+   opacity: 1;
+}
+
+/* Query always visible (top row) */
+.filterbar__query {
+   width: 100%;
+   display: flex;
+   flex-direction: column;
+   gap: 0.5rem;
+}
+
+.filterbar__query .filter-chips {
+   margin-top: 0;
+}
+
+/* Collapsible container for non-query filters */
+.filterbar__expandable {
+   overflow: hidden;
+   transition: max-height var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
+
+   /* expanded default; large enough for content */
+}
+
+/* Collapsed mode: only show query; collapse expandable container */
+.filterbar--collapsed {
+   padding: 0.35rem;
+}
+
+.filterbar--collapsed .filterbar__expandable {
+   max-height: 0;
+   opacity: 0;
+   transform: translateY(-6px);
+   pointer-events: none;
+}
+
+.filterbar input[type="search"] {
+   width: 100%;
+   min-height: 38px;
+   padding: var(--sm) var(--md);
+   border: 1px solid var(--border);
+   border-style: solid;
+   border-radius: var(--radius);
+   background: #fff;
+   color: var(--text);
+   font-size: inherit;
+   font-family: inherit;
+   font-weight: inherit;
+   line-height: inherit;
+   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+   outline: none;
+   box-shadow: none;
+}
+
+.filterbar input[type="search"]:focus {
+   border-color: var(--current-color);
+   border-style: solid;
+   box-shadow: 0 0 0 3px var(--current-color-10);
+}
+
+.filterbar input[type="search"]:hover:not(:focus) {
+   border-color: var(--border);
+}
+
+.filterbar .filter-reset {
+   min-height: 38px;
+   padding: 10px 12px;
+   border: 1px solid var(--border);
+   border-radius: var(--radius);
+   background: #fff;
+   color: var(--text);
+   transition: border-color var(--transition-fast), background var(--transition-fast);
+   outline: none;
+}
+
+.filterbar .filter-reset:hover {
+   background: #f3f4f6;
+   border-color: var(--border);
+}
+
+.filterbar .filter-reset:focus {
+   border-color: var(--current-color);
+   box-shadow: 0 0 0 3px var(--current-color-10);
+}
+
+.filter-chips {
+   grid-column: 1 / -1;
+   display: flex;
+   gap: 0.5rem;
+   flex-wrap: wrap;
+   margin-top: 0.5rem;
+}
+
+.filter-chip {
+   display: inline-flex;
+   align-items: center;
+   gap: 0.4rem;
+   font-size: 0.8rem;
+   padding: 0.3rem 0.6rem;
+   border-radius: 999px;
+   background: var(--current-color-10);
+   color: var(--current-color);
+   border: 1px solid var(--current-color-10);
+   user-select: none;
+}
+
+.filter-chip button {
+   all: unset;
+   cursor: pointer;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   font-weight: bold;
+   width: 16px;
+   height: 16px;
+   border-radius: 999px;
+   background: var(--current-color-10);
+   color: var(--current-color);
+   line-height: 1;
+   transition: background var(--transition-fast);
+}
+
+.filter-chip button:hover {
+   background: var(--current-color-10);
+}
+
+/* Tag option avec count */
+.filterbar-tag-option {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   width: 100%;
+}
+
+.filterbar-tag-count {
+   font-size: 0.75rem;
+   color: #666;
+   margin-left: 8px;
+   font-weight: normal;
+}
+
