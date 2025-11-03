@@ -533,7 +533,7 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
  */
 export function getPeriod(event: Event): { key: string; label: string; startDate: Date; endDate: Date } {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const nowTz = toZonedTime(new Date(), userTimezone)
+   
 
     // Dates converties dans le fuseau local
     const startTz = toZonedTime(event.startsAt, userTimezone)

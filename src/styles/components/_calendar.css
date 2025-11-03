@@ -71,7 +71,8 @@
 
 /* Label de période */
 .calendar-period-label {
-    position: relative;
+    position: sticky;
+    top: 50px;
     left: 50%;
     transform: translateX(-50%);
     width: fit-content;

@@ -134,8 +134,8 @@ const createEventsSource = (eventsToShow: Event[], userResponsesMap: Record<stri
     data: { type: "FeatureCollection" as const, features },
     promoteId: 'id',
     cluster: true,
-    clusterRadius: 80,      // un poil plus doux que 50
-    clusterMaxZoom: 14,
+    clusterRadius: 30,      // Rayon réduit : les pins doivent être très proches pour se clusteriser (pins restent visibles plus longtemps)
+    clusterMaxZoom: 12,     // Zoom maximum réduit : les clusters disparaissent plus tôt, les pins individuels apparaissent plus vite
     clusterProperties: {
       scoreSum: ["+", ["get", "score"]], // cumule un indicateur d'intérêt
     },
@@ -328,18 +328,29 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   const { getMapFilterIds } = useFilters()
 
   // Récupérer les réponses utilisateur pour mapper les réponses initiales dans les properties
+  // (seulement pour les valeurs initiales au montage, les mises à jour sont gérées par stylingPinsController)
   const { responses } = useFomoDataContext()
   const { user } = useAuth()
-
-  // Mapper les réponses utilisateur pour avoir les réponses initiales par eventId
-  const userResponsesMap = userResponsesMapper(events || [], responses, user?.id)
 
   const mapRef = useRef<MapRef>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
 
-  // Source stable : créer une fois avec tous les événements et leurs réponses initiales
-  // On mettra à jour les données filtrées via setData (plus performant que recréer la source)
-  const eventsSource = events && events.length > 0 ? createEventsSource(events, userResponsesMap) : null
+  // Ref pour capturer les réponses initiales une seule fois (quand events ou user?.id change)
+  // La source ne sera recréée que si events ou user?.id change, pas si responses change
+  const initialResponsesRef = useRef<typeof responses>(responses)
+  const prevEventsRef = useRef(events)
+  const prevUserIdRef = useRef(user?.id)
+
+  if (events !== prevEventsRef.current || user?.id !== prevUserIdRef.current) {
+    initialResponsesRef.current = responses
+    prevEventsRef.current = events
+    prevUserIdRef.current = user?.id
+  }
+
+  // Source stable : créer une fois avec TOUS les événements de getDiscoverEvents() et leurs réponses initiales
+  // Le filtrage se fait uniquement via setFilter() sur les layers, pas via setData()
+  const userResponsesMapForSource = userResponsesMapper(events || [], initialResponsesRef.current, user?.id)
+  const eventsSource = events && events.length > 0 ? createEventsSource(events, userResponsesMapForSource) : null
 
   // Fonction helper pour centrer sur un événement (réutilise la logique existante)
   const centerOnEvent = useCallback((event: Event) => {
@@ -475,9 +486,12 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     }
   }, [onMapReady])
 
-  // Mettre à jour les données de la source avec les événements filtrés
-  // Utilise setData au lieu de recréer la source (plus performant)
-  // MapLibre recalcule automatiquement les clusters sur les nouvelles données
+  // Appliquer les filtres et mettre à jour la source avec les événements filtrés
+  // Les clusters doivent être recalculés avec seulement les événements filtrés (via setData())
+  // setFilter() ne suffit pas car les clusters sont calculés à partir des données de la source
+  // Note: setData() déclenche un re-rendu MapLibre (pas React), nécessaire pour mettre à jour la carte
+  const prevFilteredIdsRef = useRef<string[]>([])
+
   useEffect(() => {
     if (!mapLoaded || !events || events.length === 0) return
 
@@ -487,18 +501,33 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     const source = map.getSource('events') as any
     if (!source || source.setData === undefined) return
 
-    // Filtrer les événements selon les filtres actifs
-    const filteredIds = new Set(getMapFilterIds())
-    const filteredEvents = events.filter(e => filteredIds.has(e.id))
+    // Récupérer les IDs filtrés
+    const filteredIds = getMapFilterIds()
 
-    // Mapper les réponses utilisateur pour les événements filtrés (mise à jour si responses changent)
-    const filteredUserResponsesMap = userResponsesMapper(filteredEvents, responses, user?.id)
+    // Vérifier si les IDs ont changé (éviter les appels setData() inutiles)
+    const idsChanged =
+      filteredIds.length !== prevFilteredIdsRef.current.length ||
+      !filteredIds.every(id => prevFilteredIdsRef.current.includes(id))
 
-    // Créer le GeoJSON filtré avec les réponses initiales
+    if (!idsChanged) {
+      // Les filtres n'ont pas changé, pas besoin de mettre à jour la source
+      return
+    }
+
+    prevFilteredIdsRef.current = filteredIds
+    const filteredIdsSet = new Set(filteredIds)
+
+    // Filtrer les événements pour ne garder que ceux qui passent les filtres
+    const filteredEvents = events.filter(e => filteredIdsSet.has(e.id))
+
+    // Mapper les réponses initiales pour les événements filtrés
+    const userResponsesMapForFiltered = userResponsesMapper(filteredEvents, initialResponsesRef.current, user?.id)
+
+    // Créer le GeoJSON avec seulement les événements filtrés (pour recalculer les clusters)
     const filteredGeoJson = {
       type: "FeatureCollection" as const,
       features: filteredEvents.map((e) => {
-        const initialResponse = filteredUserResponsesMap[e.id] || ''
+        const initialResponse = userResponsesMapForFiltered[e.id] || ''
         return {
           type: "Feature" as const,
           id: e.id,
@@ -506,7 +535,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
             id: e.id,
             score: (e.stats?.going || 0) + (e.stats?.interested || 0),
             isPublic: e.isPublic || 'false',
-            // Réponse initiale pour le styling (priorité inférieure à feature-state)
             userResponse: initialResponse,
           },
           geometry: {
@@ -518,13 +546,13 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     }
 
     try {
-      // Mettre à jour les données de la source (recalcule les clusters automatiquement)
+      // Mettre à jour la source avec les événements filtrés (MapLibre recalcule automatiquement les clusters)
+      // Cela déclenche un re-rendu MapLibre (pas React) pour afficher les nouvelles données
       source.setData(filteredGeoJson)
     } catch (error) {
-      // Ignorer les erreurs si la source n'est pas encore prête
       console.debug('[MapRenderer] setData error:', error)
     }
-  }, [mapLoaded, events, getMapFilterIds, responses, user?.id])
+  }, [mapLoaded, events, getMapFilterIds, user?.id])
 
 
 
@@ -538,8 +566,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     return () => detachStylingPinsController()
   }, [])
 
-  // Note: Plus besoin de détacher/appliquer les filtres via setFilter
-  // car on filtre maintenant directement la source GeoJSON via filteredEventsForMap
+  // Note: Les filtres sont appliqués via setData() (mise à jour des données) ET setFilter() (filtrage des layers)
+  // pour maintenir le filtrage même après re-render ou fermeture d'EventCard
 
 
 

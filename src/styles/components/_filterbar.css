@@ -162,3 +162,19 @@
    font-weight: normal;
 }
 
+/* Toggle "Inclure les événements passés" */
+.filterbar__toggle-past {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: var(--md);
+   padding: var(--sm) var(--md);
+   min-height: 32px;
+}
+
+.filterbar__toggle-label {
+   font-size: 0.875rem;
+   color: var(--text);
+   cursor: pointer;
+   user-select: none;
+}

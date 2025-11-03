@@ -439,6 +439,45 @@ export function FilterBar() {
                     menuPosition="fixed"
                     styles={secondaryMenuPortalStylesSingle}
                 />
+
+                {/* Toggle "Inclure les événements passés" */}
+                <div className="filterbar__toggle-past">
+                    <label htmlFor="filterbar-past-toggle" className="filterbar__toggle-label">
+                        Inclure les événements passés
+                    </label>
+                    <button
+                        type="button"
+                        id="filterbar-past-toggle"
+                        role="switch"
+                        aria-checked={filters.includePastEvents}
+                        aria-label={filters.includePastEvents ? 'Masquer les événements passés' : 'Afficher les événements passés'}
+                        onClick={() => setFilters(prev => ({ ...prev, includePastEvents: !prev.includePastEvents }))}
+                        className="filterbar__toggle-switch"
+                        style={{
+                            backgroundColor: filters.includePastEvents ? 'var(--success, #10b981)' : 'var(--text-muted, #9ca3af)',
+                            width: '44px',
+                            height: '24px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            transition: 'background-color var(--transition-fast)',
+                            flexShrink: 0
+                        }}
+                    >
+                        <div style={{
+                            position: 'absolute',
+                            top: '2px',
+                            left: filters.includePastEvents ? '22px' : '2px',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: '#fff',
+                            transition: 'left var(--transition-fast)',
+                            boxShadow: 'var(--shadow)'
+                        }} />
+                    </button>
+                </div>
             </div>
 
 
