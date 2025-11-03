@@ -30,7 +30,7 @@ class UsersController {
      * Récupérer uniquement les utilisateurs actifs
      */
     static async getActiveUsers() {
-        const allUsers = await this._getAllUsersFromDb()
+        const allUsers = await UsersController._getAllUsersFromDb()
         return allUsers.filter(user => user.isActive === true)
     }
 
@@ -41,9 +41,9 @@ class UsersController {
      * @returns {Object|null} Visitor trouvé ou null
      */
     static async findVisitorByEmail(allUsers = null, email) {
-        const users = allUsers || await this._getAllUsersFromDb()
+        const users = allUsers || await UsersController._getAllUsersFromDb()
         return users.find(u => {
-            const userEmail = this.normalizeEmail(u.email)
+            const userEmail = UsersController.normalizeEmail(u.email)
             return userEmail === email &&
                 u.id &&
                 u.id.startsWith('visit-') &&
@@ -64,7 +64,7 @@ class UsersController {
             console.log(`👥 [${requestId}] Headers:`, req.headers['user-agent'] || 'unknown')
             console.log(`👥 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
-            const users = await this.getActiveUsers()
+            const users = await UsersController.getActiveUsers()
 
             console.log(`✅ [${requestId}] ${users.length} utilisateurs actifs récupérés`)
             res.json({ success: true, data: users })
@@ -113,7 +113,7 @@ class UsersController {
             const oldId = userData.oldId // Ancien ID si migration (visit-xxx → user-xxx)
             let userId = userData.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
 
-            const normalizedEmail = this.normalizeEmail(userData.email)
+            const normalizedEmail = UsersController.normalizeEmail(userData.email)
 
             // Détecter et migrer les réponses d'un visitor vers le user
             let visitorIdToMigrate = null
@@ -125,7 +125,7 @@ class UsersController {
             }
             // Sinon, chercher automatiquement un visitor avec le même email
             else if (normalizedEmail) {
-                const visitor = await this.findVisitorByEmail(null, normalizedEmail)
+                const visitor = await UsersController.findVisitorByEmail(null, normalizedEmail)
 
                 if (visitor && visitor.id !== userId) {
                     visitorIdToMigrate = visitor.id
@@ -248,15 +248,15 @@ class UsersController {
         try {
             // Décoder l'email depuis l'URL (Express décode automatiquement, mais on s'assure)
             const rawEmail = decodeURIComponent(req.params.email || '')
-            const email = this.normalizeEmail(rawEmail)
+            const email = UsersController.normalizeEmail(rawEmail)
             console.log(`👥 Recherche utilisateur par email: "${email}" (raw: "${rawEmail}")`)
 
-            const allUsers = await this._getAllUsersFromDb()
+            const allUsers = await UsersController._getAllUsersFromDb()
             console.log(`📊 Total utilisateurs dans la base: ${allUsers.length}`)
 
             // Filtrer uniquement les utilisateurs actifs qui ne sont pas des visitors
             const user = allUsers.find(u => {
-                const userEmail = this.normalizeEmail(u.email)
+                const userEmail = UsersController.normalizeEmail(u.email)
                 const emailMatch = userEmail === email
                 const isActive = u.isActive === true
                 const isNotVisitor = !u.id || !u.id.startsWith('visit-') // Exclure les visitors
@@ -271,7 +271,7 @@ class UsersController {
 
             if (!user) {
                 // Log tous les emails actifs pour débogage
-                const activeUsers = await this.getActiveUsers()
+                const activeUsers = await UsersController.getActiveUsers()
                 console.log(`❌ Utilisateur non trouvé. Emails actifs dans la base:`, activeUsers.map(u => `"${u.email}"`).join(', '))
                 return res.status(404).json({
                     success: false,
@@ -309,7 +309,7 @@ class UsersController {
             console.log(`🔍 Recherche utilisateurs: "${query}" (par ${currentUserId})`)
 
             // Récupérer tous les utilisateurs
-            const allUsers = await this._getAllUsersFromDb()
+            const allUsers = await UsersController._getAllUsersFromDb()
 
             console.log(`  📊 ${allUsers.length} utilisateurs récupérés au total`)
             allUsers.forEach(u => {
@@ -412,7 +412,7 @@ class UsersController {
             )
 
             // Récupérer les détails des amis
-            const allUsers = await this.getAllUsers()
+            const allUsers = await UsersController._getAllUsersFromDb()
 
             const friends = []
             for (const friendship of userFriendships) {
@@ -560,14 +560,14 @@ class UsersController {
     static async matchByEmail(req, res) {
         try {
             const rawEmail = decodeURIComponent(req.params.email || '')
-            const normalizedEmail = this.normalizeEmail(rawEmail)
+            const normalizedEmail = UsersController.normalizeEmail(rawEmail)
             console.log(`🔍 [matchByEmail] Recherche par email: "${normalizedEmail}"`)
 
-            const activeUsers = await this.getActiveUsers()
+            const activeUsers = await UsersController.getActiveUsers()
 
             // Chercher d'abord un user (priorité)
             const user = activeUsers.find(u => {
-                const userEmail = this.normalizeEmail(u.email)
+                const userEmail = UsersController.normalizeEmail(u.email)
                 return userEmail === normalizedEmail && u.id && u.id.startsWith('user-')
             })
 
@@ -577,7 +577,7 @@ class UsersController {
             }
 
             // Si pas de user, chercher un visitor
-            const visitor = await this.findVisitorByEmail(activeUsers, normalizedEmail)
+            const visitor = await UsersController.findVisitorByEmail(activeUsers, normalizedEmail)
 
             if (visitor) {
                 console.log(`✅ [matchByEmail] Visitor trouvé: ${visitor.id}`)

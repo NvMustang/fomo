@@ -6,7 +6,8 @@
 
 const DataServiceV2 = require('../utils/dataService')
 
-// Plage Google Sheets pour les réponses (NOUVEAU SCHÉMA: A-J)
+// Plage Google Sheets pour les réponses (NOUVEAU SCHÉMA: A-G)
+// Structure: A=ID, B=CreatedAt, C=UserId, D=InvitedByUserId, E=EventId, F=InitialResponse, G=FinalResponse
 const RESPONSES_RANGE = 'Responses!A2:G'
 
 class ResponsesController {
@@ -264,7 +265,7 @@ class ResponsesController {
         try {
             console.log(`🔄 Migration des réponses: ${oldUserId} -> ${newUserId}`)
 
-            // Récupérer toutes les réponses de l'ancien userId
+            // Récupérer toutes les réponses actives de l'ancien userId
             const allResponses = await DataServiceV2.getAllActiveData(
                 RESPONSES_RANGE,
                 DataServiceV2.mappers.response
@@ -276,50 +277,46 @@ class ResponsesController {
             // Pour chaque réponse, créer une nouvelle réponse avec le nouveau userId
             // et supprimer l'ancienne (soft delete)
             for (const response of responsesToMigrate) {
-                const oldResponseId = `${response.eventId}_${oldUserId}`
-                const newResponseId = `${response.eventId}_${newUserId}`
+                const oldResponseId = response.id // Utiliser l'ID réel de la réponse
 
-                // Vérifier si une réponse existe déjà avec le nouveau userId pour cet événement
-                const existingResponse = await DataServiceV2.getByKey(
+                // Générer un nouvel ID selon le format du nouveau schéma
+                const timestamp = Date.now()
+                const randomSuffix = Math.random().toString(36).substring(2, 8)
+                const newResponseId = `${response.eventId}_${newUserId}_${timestamp}_${randomSuffix}`
+
+                // Créer la nouvelle réponse avec le nouveau userId (NOUVEAU SCHÉMA)
+                // Utiliser les mêmes valeurs initialResponse/finalResponse de l'ancienne réponse
+                const rowData = [
+                    newResponseId,                           // A: ID (nouveau format avec timestamp)
+                    response.createdAt || new Date().toISOString(), // B: CreatedAt (garder l'original)
+                    newUserId,                               // C: User ID (nouveau - CORRIGÉ)
+                    response.invitedByUserId || 'none',      // D: InvitedByUserId ('none' si non renseigné)
+                    response.eventId,                         // E: Event ID
+                    response.initialResponse || '',           // F: InitialResponse (garder l'original)
+                    response.finalResponse || '',             // G: FinalResponse (garder l'original)
+                ]
+
+                await DataServiceV2.upsertData(
                     RESPONSES_RANGE,
-                    DataServiceV2.mappers.response,
+                    rowData,
                     0,
                     newResponseId
                 )
 
-                if (!existingResponse) {
-                    // Créer la nouvelle réponse avec le nouveau userId (NOUVEAU SCHÉMA)
-                    // Utiliser finalResponse de l'ancienne réponse comme initialResponse et finalResponse
-                    // car on migre une réponse existante sans changement d'état
-                    const finalResponse = response.finalResponse || null
-                    const rowData = [
-                        newResponseId,                           // A: ID
-                        response.createdAt || new Date().toISOString(), // B: CreatedAt (garder l'original)
-                        newUserId,                               // C: User ID (nouveau)
-                        response.invitedByUserId || 'none',      // D: InvitedByUserId ('none' si non renseigné)
-                        response.eventId,                         // E: Event ID
-                        finalResponse || '',                      // F: InitialResponse (même que final pour migration)
-                        finalResponse || '',                     // G: FinalResponse
-                    ]
+                console.log(`✅ Réponse migrée: ${oldResponseId} -> ${newResponseId} (userId: ${oldUserId} -> ${newUserId})`)
 
-                    await DataServiceV2.upsertData(
+                // Hard delete de l'ancienne réponse (suppression complète)
+                try {
+                    await DataServiceV2.hardDelete(
                         RESPONSES_RANGE,
-                        rowData,
                         0,
-                        newResponseId
+                        oldResponseId
                     )
-
-                    console.log(`✅ Réponse migrée: ${oldResponseId} -> ${newResponseId}`)
-                } else {
-                    console.log(`⚠️ Réponse déjà existante pour ${newResponseId}, skip`)
+                    console.log(`✅ Ancienne réponse hard-deleted: ${oldResponseId}`)
+                } catch (error) {
+                    // Si la réponse n'existe pas ou est déjà supprimée, ignorer l'erreur et continuer
+                    console.log(`⚠️ Impossible de hard-delete ${oldResponseId}, peut-être déjà supprimée: ${error.message}`)
                 }
-
-                // Hard delete de l'ancienne réponse (nouveau schéma ne supporte plus soft delete)
-                await DataServiceV2.hardDelete(
-                    RESPONSES_RANGE,
-                    0,
-                    oldResponseId
-                )
             }
 
             console.log(`✅ Migration terminée: ${responsesToMigrate.length} réponses migrées`)

@@ -21,7 +21,7 @@ const toBool = (v) => {
 class DataServiceV2 {
     /**
      * Récupérer toutes les données actives d'une table
-     * @param {string} range - Range Google Sheets (ex: 'Events!A2:Q')
+     * @param {string} range - Range Google Sheets (ex: 'Events!A2:R')
      * @param {function} mapper - Fonction pour mapper une ligne vers un objet
      * @returns {Array} Données mappées (uniquement les données actives)
      */
