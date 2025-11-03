@@ -126,11 +126,14 @@ export interface UserFriendshipResponse {
 
 // ===== DATA MANAGER SHARED TYPES =====
 export interface UserResponse {
+    id: string // ID unique de l'entrée d'historique
     userId: string
     eventId: string
-    response: UserResponseValue
+    initialResponse: UserResponseValue // Réponse AVANT le changement
+    finalResponse: UserResponseValue // Réponse APRÈS le changement (était "response")
     createdAt: string
     invitedByUserId?: string // ID de l'utilisateur ayant invité
+    email?: string // Email (optionnel)
 }
 
 // ===== GEOCODING =====
@@ -144,7 +147,8 @@ export interface AddressSuggestion {
 // ===== BATCH ACTIONS =====
 export interface BatchEventResponseData {
     eventId: string
-    response: UserResponseValue
+    initialResponse: UserResponseValue
+    finalResponse: UserResponseValue
     invitedByUserId?: string
 }
 

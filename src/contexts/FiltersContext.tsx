@@ -134,7 +134,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     })
 
     // Importer les contextes nécessaires pour le filtrage
-    const { events, eventsError, dataReady, responses, userRelations } = useFomoDataContext()
+    const { events, eventsError, dataReady, responses, userRelations, getLatestResponsesByEvent, getLatestResponsesByUser } = useFomoDataContext()
     const { user } = useAuth()
     const { isPublicMode } = usePrivacy()
 
@@ -551,11 +551,11 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
 
         // Filtrer les événements privés : inclure uniquement si l'utilisateur a une réponse valide
         if (user?.id) {
+            // NOUVEAU SYSTÈME : Utiliser les helpers du contexte pour obtenir les dernières réponses
+            const latestResponsesMap = getLatestResponsesByEvent(user.id)
             const userResponseMap = new Map<string, UserResponseValue>()
-            responses.forEach(r => {
-                if (r.userId === user.id) {
-                    userResponseMap.set(r.eventId, r.response)
-                }
+            latestResponsesMap.forEach((r, eventId) => {
+                userResponseMap.set(eventId, r.finalResponse)
             })
 
             localDiscoverEvents = localDiscoverEvents.filter(e => {
@@ -730,11 +730,12 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         const friendIds = new Set(friends.map(f => f.id))
 
         // Obtenir les réponses pour cet événement avec les types valides
+        // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses par utilisateur
+        const latestResponsesMap = getLatestResponsesByUser(eventId)
         const validResponses: UserResponseValue[] = ['going', 'interested', 'not_interested', 'seen', 'cleared', 'invited']
-        const eventResponses = responses.filter(r =>
-            r.eventId === eventId &&
-            r.response &&
-            validResponses.includes(r.response)
+        const eventResponses = Array.from(latestResponsesMap.values()).filter(r =>
+            r.finalResponse &&
+            validResponses.includes(r.finalResponse)
         )
 
         // Utiliser intersectEventIds pour calculer l'intersection

@@ -88,28 +88,16 @@ class DataServiceV2 {
      * @param {string} keyValue - Valeur de la clé
      * @returns {Object} Résultat de l'opération
      */
-    static async upsertData(range, rowData, keyColumn, keyValue, preserveCreatedAt = false) {
+    static async upsertData(range, rowData, keyColumn, keyValue) {
         try {
             // D'abord, vérifier si la donnée existe
             const existingData = await this.getByKey(range, (row) => row, keyColumn, keyValue)
 
             if (existingData) {
-                // Si preserveCreatedAt est activé, toujours préserver createdAt (ne jamais le modifier)
-                if (preserveCreatedAt) {
-                    // createdAt est à l'index 1 (colonne B)
-                    // existingData est déjà la ligne brute retournée par getByKey
-                    if (existingData[1]) {
-                        rowData[1] = existingData[1]
-                    }
-                }
                 // Mettre à jour la ligne existante
                 return await this.updateRow(range, rowData, keyColumn, keyValue)
             } else {
                 // Créer une nouvelle ligne
-                // Si createdAt n'est pas fourni, le définir à maintenant
-                if (!rowData[1] || rowData[1] === '') {
-                    rowData[1] = new Date().toISOString()
-                }
                 return await this.createRow(range, rowData)
             }
         } catch (error) {
@@ -231,7 +219,7 @@ class DataServiceV2 {
 
     /**
      * Suppression complète d'une ligne (hard delete)
-     * @param {string} range - Plage de données (ex: 'Responses!A2:H')
+     * @param {string} range - Plage de données (ex: 'Responses!A2:G')
      * @param {number} keyColumn - Index de la colonne clé (0-based)
      * @param {string} keyValue - Valeur de la clé à supprimer
      */
@@ -408,16 +396,16 @@ class DataServiceV2 {
             lastConnexion: row[15] || null // Colonne P: LastConnexion
         }),
 
+        // NOUVEAU SCHÉMA : Historique complet avec initialResponse et finalResponse
+        // Structure: A=ID, B=CreatedAt, C=UserId, D=InvitedByUserId, E=EventId, F=InitialResponse, G=FinalResponse
         response: (row) => ({
-            id: row[0], // A - ID (eventId_userId)
-            createdAt: row[1] || new Date().toISOString(), // B - Timestamp
+            id: row[0], // A - ID (auto-généré, unique par changement)
+            createdAt: row[1] || new Date().toISOString(), // B - CreatedAt (timestamp du changement)
             userId: row[2], // C - User ID
-            invitedByUserId: row[3] || undefined, // D - InvitedByUserId
-            eventId: row[4], // E - Event ID (décalé de D à E)
-            response: row[5], // F - Response (décalé de E à F)
-            modifiedAt: row[6] || new Date().toISOString(), // G - ModifiedAt (décalé de F à G)
-            deletedAt: row[7] || null, // H - DeletedAt (décalé de G à H)
-
+            invitedByUserId: row[3] && row[3] !== 'none' ? row[3] : undefined, // D - InvitedByUserId ('none' converti en undefined)
+            eventId: row[4], // E - Event ID
+            initialResponse: row[5] || null, // F - InitialResponse (réponse AVANT le changement)
+            finalResponse: row[6] || null, // G - FinalResponse (réponse APRÈS le changement)
         }),
 
         friendship: (row) => ({

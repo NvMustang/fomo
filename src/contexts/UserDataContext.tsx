@@ -23,7 +23,7 @@ export interface FomoDataContextType {
     // Données
     events: Event[]
     users: User[]
-    responses: UserResponse[]
+    responses: UserResponse[] // Historique complet avec initialResponse/finalResponse
     userRelations: Friend[]
 
     // Erreurs
@@ -31,6 +31,12 @@ export interface FomoDataContextType {
     usersError: string | null
     responsesError: string | null
     relationsError: string | null
+
+    // Helpers pour réponses (NOUVEAU SYSTÈME)
+    getLatestResponse: (userId: string, eventId: string) => UserResponse | null
+    getCurrentResponse: (userId: string, eventId: string) => UserResponseValue
+    getLatestResponsesByEvent: (userId: string) => Map<string, UserResponse>
+    getLatestResponsesByUser: (eventId: string) => Map<string, UserResponse>
 
     // Actions
     refreshEvents: () => Promise<void>
@@ -44,7 +50,7 @@ export interface FomoDataContextType {
     updateEvent: (eventId: string, eventData: Event) => Promise<Event | null>
     addEventResponse: (
         eventId: string,
-        response: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
+        finalResponse: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
         options?: {
             email?: string
             targetUserId?: string // Si présent, utilise cet userId au lieu de user.id
@@ -357,10 +363,50 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         }
     }, [fomoData, events])
 
+    // ===== HELPERS POUR RÉPONSES (NOUVEAU SYSTÈME) =====
+
+    const getLatestResponse = useCallback((userId: string, eventId: string): UserResponse | null => {
+        const userEventResponses = responses
+            .filter(r => r.userId === userId && r.eventId === eventId && !r.deletedAt)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        return userEventResponses.length > 0 ? userEventResponses[0] : null
+    }, [responses])
+
+    const getCurrentResponse = useCallback((userId: string, eventId: string): UserResponseValue => {
+        const latest = getLatestResponse(userId, eventId)
+        return latest ? latest.finalResponse : null
+    }, [getLatestResponse])
+
+    const getLatestResponsesByEvent = useCallback((userId: string): Map<string, UserResponse> => {
+        const userResponses = responses.filter(r => r.userId === userId && !r.deletedAt)
+        const latestMap = new Map<string, UserResponse>()
+        userResponses.forEach(r => {
+            const existing = latestMap.get(r.eventId)
+            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                latestMap.set(r.eventId, r)
+            }
+        })
+        return latestMap
+    }, [responses])
+
+    const getLatestResponsesByUser = useCallback((eventId: string): Map<string, UserResponse> => {
+        const eventResponses = responses.filter(r => r.eventId === eventId && !r.deletedAt)
+        const latestMap = new Map<string, UserResponse>()
+        eventResponses.forEach(r => {
+            const existing = latestMap.get(r.userId)
+            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                latestMap.set(r.userId, r)
+            }
+        })
+        return latestMap
+    }, [responses])
+
     /**
      * STRATÉGIE DE GESTION DES RÉPONSES AUX ÉVÉNEMENTS
      * 
-     * 1. Mise à jour optimiste immédiate de l'UI
+     * NOUVEAU SYSTÈME : Historique complet avec initialResponse et finalResponse
+     * 
+     * 1. Mise à jour optimiste immédiate de l'UI (nouvelle entrée)
      * 2. Appel API en arrière-plan
      * 3. Rollback en cas d'erreur
      * 
@@ -370,7 +416,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
      */
     const addEventResponse = useCallback((
         eventId: string,
-        response: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
+        finalResponse: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
         options?: {
             targetUserId?: string // Si présent, utilise cet userId au lieu de user.id
             invitedByUserId?: string
@@ -388,7 +434,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         addEventResponseShared({
             userId: targetUserId,
             eventId,
-            response,
+            finalResponse,
             invitedByUserId: options?.invitedByUserId,
             setResponses,
             fomoData,
@@ -604,6 +650,12 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         responsesError,
         relationsError,
 
+        // Helpers pour réponses (NOUVEAU SYSTÈME)
+        getLatestResponse,
+        getCurrentResponse,
+        getLatestResponsesByEvent,
+        getLatestResponsesByUser,
+
         // Actions
         refreshEvents,
         refreshUsers,
@@ -646,6 +698,8 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         events, users, responses, userRelations,
         eventsError, usersError, responsesError, relationsError,
         isLoading, hasError, dataReady,
+        // Helpers pour réponses
+        getLatestResponse, getCurrentResponse, getLatestResponsesByEvent, getLatestResponsesByUser,
         // Fonctions stabilisées avec useCallback
         refreshEvents, refreshUsers, refreshResponses, refreshUserRelations, refreshAll,
         createEvent, updateEvent, addEventResponse, getTags,

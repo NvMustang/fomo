@@ -31,7 +31,7 @@ interface UseEventResponsesReturn {
 }
 
 export function useEventResponses(): UseEventResponsesReturn {
-    const { responses, addEventResponse, dataReady } = useFomoDataContext()
+    const { getCurrentResponse, getLatestResponsesByEvent, addEventResponse, dataReady } = useFomoDataContext()
     const { user } = useAuth()
 
     // Récupérer la réponse d'un utilisateur pour un événement
@@ -53,27 +53,29 @@ export function useEventResponses(): UseEventResponsesReturn {
 
         if (!userId) return null
 
-        const match = responses.find(r => r.userId === userId && r.eventId === eventId)
-        return match ? match.response : null
-    }, [dataReady, user?.id, responses])
+        // NOUVEAU SYSTÈME : Utiliser le helper du contexte
+        return getCurrentResponse(userId, eventId)
+    }, [dataReady, user?.id, getCurrentResponse])
 
     // Toggle une réponse (going/interested/not_interested)
     const toggleResponse = useCallback((eventId: string, responseType: 'going' | 'interested' | 'not_interested') => {
         if (!user?.id) return
 
         // Déterminer la nouvelle réponse (toggle)
-        const current = responses.find(r => r.userId === user.id && r.eventId === eventId)?.response || null
-        const newResponse = current === responseType ? 'cleared' : responseType
+        const current = getCurrentResponse(user.id, eventId)
+        const finalResponse = current === responseType ? 'cleared' : responseType
 
         // Utiliser le système de données unifié (mise à jour optimiste + batch)
-        addEventResponse(eventId, newResponse)
-    }, [user?.id, responses, addEventResponse])
+        addEventResponse(eventId, finalResponse)
+    }, [user?.id, getCurrentResponse, addEventResponse])
 
     // Statistiques
     const totalResponses = useMemo(() => {
         if (!dataReady || !user?.id) return 0
-        return responses.reduce((count, r) => count + (r.userId === user.id && r.response ? 1 : 0), 0)
-    }, [dataReady, user?.id, responses])
+        const latestMap = getLatestResponsesByEvent(user.id)
+        // Compter uniquement les réponses non-null
+        return Array.from(latestMap.values()).filter(r => r.finalResponse !== null).length
+    }, [dataReady, user?.id, getLatestResponsesByEvent])
 
     // 🚀 OPTIMISATION: Mémoriser le retour pour éviter les re-renders
     return useMemo(() => ({

@@ -297,6 +297,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     onMapReady,
     style = {},
     autoCenterEvent,
+    onEventCentered,
   }
 ) => {
   // Récupérer isPublicMode du contexte PrivacyContext
@@ -325,9 +326,13 @@ const MapRendererComponent: React.FC<MapViewProps> = (
         centerOnEvent(autoCenterEvent)
         // Appeler aussi onEventClick pour ouvrir l'EventCard si nécessaire
         onEventClick?.(autoCenterEvent)
+        // Notifier que le centrage est terminé
+        setTimeout(() => {
+          onEventCentered?.()
+        }, 4500) // Après la durée de l'animation (4000ms)
       }, 500)
     }
-  }, [autoCenterEvent, mapLoaded, centerOnEvent, onEventClick])
+  }, [autoCenterEvent, mapLoaded, centerOnEvent, onEventClick, onEventCentered])
 
   // Fonction helper pour zoom out
   const zoomOut = useCallback((targetZoom?: number, duration?: number) => {
@@ -353,8 +358,12 @@ const MapRendererComponent: React.FC<MapViewProps> = (
         }
         // Exposer la fonction zoomOut pour DiscoverPage
         ; (window as any).zoomOutMap = zoomOut
+        // Exposer la fonction centerOnEvent pour LastActivities
+        ; (window as any).centerMapOnEvent = (event: Event) => {
+          centerOnEvent(event)
+        }
     }
-  }, [mapLoaded, zoomOut])
+  }, [mapLoaded, zoomOut, centerOnEvent])
 
 
 

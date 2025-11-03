@@ -87,9 +87,11 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
     useEffect(() => {
         if (!event || !user?.id || !responses) return
 
-        const existingInvitations = responses.filter(r =>
-            r.eventId === event.id &&
-            r.response === 'invited' &&
+        // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses
+        const { getLatestResponsesByUser } = useFomoDataContext()
+        const latestResponsesMap = getLatestResponsesByUser(event.id)
+        const existingInvitations = Array.from(latestResponsesMap.values()).filter(r =>
+            r.finalResponse === 'invited' &&
             r.invitedByUserId === user.id
         )
 

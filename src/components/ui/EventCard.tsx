@@ -9,6 +9,8 @@ import { useEventResponses } from '@/hooks'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { useAuth } from '@/contexts/AuthContext'
 
+// notifyResponseChange supprimé : LastActivities lit directement initialResponse/finalResponse depuis le contexte
+
 // Options de réponses affichées sous la carte
 const RESPONSE_OPTIONS = [
     { type: 'going' as const, label: "J'y vais" },
@@ -78,11 +80,11 @@ export const EventCard = React.memo<EventCardProps>(({
 
     // Timeout pour l'action différée de suppression (not_interested ou cleared)
     const pendingRemovalTimeoutRef = useRef<number | null>(null)
-    
+
     // Ref pour accéder aux dernières valeurs de responses et user dans le cleanup
     const responsesRef = useRef(responses)
     const userIdRef = useRef(user?.id)
-    
+
     // Synchroniser les refs avec les valeurs actuelles
     useEffect(() => {
         responsesRef.current = responses
@@ -134,25 +136,25 @@ export const EventCard = React.memo<EventCardProps>(({
             // Lire directement depuis le ref (toujours à jour, pas de closure stale)
             const latestResponses = responsesRef.current
             const latestUserId = userIdRef.current
-            
-            const match = latestUserId 
+
+            const match = latestUserId
                 ? latestResponses.find(r => r.userId === latestUserId && r.eventId === event.id)
                 : null
-            const current = match ? match.response : null
+            const current = match ? match.finalResponse : null
             const initial = initialResponseRef.current
-            
+
             // Cas 1: null → null → envoie 'seen'
             if ((initial == null || initial === undefined) && (current == null || current === undefined)) {
                 addEventResponse(event.id, 'seen')
                 return
             }
-            
+
             // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen'
             if (initial === 'invited' && current === 'invited') {
                 addEventResponse(event.id, 'seen')
                 return
             }
-            
+
             // Cas 3: 'invited' → autre chose (going/interested/not_interested/cleared)
             // Ne rien faire, la réponse a déjà été envoyée par toggleResponse
             // (pas de 'seen' car l'utilisateur a interagi)
@@ -352,6 +354,9 @@ export const EventCard = React.memo<EventCardProps>(({
                         const variant = current === type ? 'primary' : 'secondary'
 
                         const onClick = () => {
+                            // Capturer la réponse précédente avant le changement
+                            const previousResponse = current
+
                             // Mode visitor : vérifier si nom saisi
                             if (isVisitorMode) {
                                 if (!visitorName) {
@@ -364,9 +369,15 @@ export const EventCard = React.memo<EventCardProps>(({
                                 const newResponse = current === type ? 'cleared' : type
 
                                 // Utiliser le même système que les users : addEventResponse du context (optimiste + batch)
+                                // LastActivities lit directement initialResponse/finalResponse depuis le contexte
                                 addEventResponse(event.id, newResponse)
                                 return
                             }
+
+                            // Déterminer la nouvelle réponse
+                            const newResponse = current === type ? 'cleared' : type
+
+                            // LastActivities lit directement initialResponse/finalResponse depuis le contexte
 
                             // Cas 1: bouton "Pas intéressé" → toujours animé + différé 2s (sauf en mode visitor)
                             if (type === 'not_interested') {

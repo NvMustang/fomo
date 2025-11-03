@@ -285,6 +285,7 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     // === ÉTATS APP ===
     const [currentPage, setCurrentPage] = useState<string>('map') // Démarre directement sur map
     const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState<boolean>(false)
+    const [selectedEventFromProfile, setSelectedEventFromProfile] = useState<Event | null>(null)
 
 
     const { showToast, hideToast, currentToast } = useToast()
@@ -419,7 +420,21 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     const handleNavClick = (page: string) => {
         console.log('🔄 [App] Navigation: changing page from', currentPage, 'to', page)
         setCurrentPage(page)
+        // Réinitialiser l'événement sélectionné lors d'un changement de page manuel
+        if (page !== 'map') {
+            setSelectedEventFromProfile(null)
+        }
     }
+
+    // Exposer la fonction de navigation vers map pour LastActivities
+    useEffect(() => {
+        window.navigateToMapPage = () => {
+            setCurrentPage('map')
+        }
+        return () => {
+            delete (window as any).navigateToMapPage
+        }
+    }, [])
 
     // Gestion du modal de création d'événement
     const handleCreateEventClick = () => {
@@ -443,7 +458,14 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             <Header />
             <main className="app-body">
                 {/* Rendre seulement la page active pour éviter les re-renders inutiles */}
-                {currentPage === 'map' && <DiscoverPage isModalOpen={isModalOpen} onMapReady={onMapReady} />}
+                {currentPage === 'map' && (
+                    <DiscoverPage
+                        isModalOpen={isModalOpen}
+                        onMapReady={onMapReady}
+                        autoCenterEvent={selectedEventFromProfile || undefined}
+                        onEventCentered={() => setSelectedEventFromProfile(null)}
+                    />
+                )}
                 {currentPage === 'list' && <CalendarPage />}
                 {currentPage === 'chat' && <ConversationPageComponent />}
                 {currentPage === 'profil' && <ProfilePageComponent />}

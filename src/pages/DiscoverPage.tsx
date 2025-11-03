@@ -24,6 +24,8 @@ interface DiscoverPageProps {
   visitorEvent?: Event | null
   onEventCardMount?: () => void
   onVisitorFormCompleted?: (organizerName: string) => void
+  autoCenterEvent?: Event
+  onEventCentered?: () => void
 }
 
 // ===== COMPOSANT =====
@@ -33,11 +35,13 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   isVisitorMode = false,
   visitorEvent = null,
   onEventCardMount,
-  onVisitorFormCompleted
+  onVisitorFormCompleted,
+  autoCenterEvent,
+  onEventCentered
 }) => {
   // ===== HOOKS CONTEXTUELS =====
   const { getLocalDiscoverEvents } = useFilters()
-  const { responses } = useFomoDataContext()
+  const { getLatestResponsesByEvent } = useFomoDataContext()
   const { user, isAuthenticated } = useAuth()
   const { isPublicMode } = usePrivacy()
 
@@ -46,6 +50,26 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const [showTeaserPins, setShowTeaserPins] = useState(false)
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
   const prevIsPublicModeRef = useRef(isPublicMode)
+
+  // Exposer setSelectedEvent globalement pour LastActivities
+  useEffect(() => {
+    if (!isVisitorMode) {
+      window.setSelectedEventFromProfile = (event: Event) => {
+        setSelectedEvent(event)
+        // Si on est sur la page Discover, centrer sur l'événement
+        if (event.venue) {
+          setTimeout(() => {
+            if ((window as any).centerMapOnEvent) {
+              (window as any).centerMapOnEvent(event)
+            }
+          }, 100)
+        }
+      }
+    }
+    return () => {
+      delete (window as any).setSelectedEventFromProfile
+    }
+  }, [isVisitorMode])
 
   // ===== CONSTANTES ET CALCULS SIMPLES =====
   const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getLocalDiscoverEvents().events
@@ -89,13 +113,16 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
   // ===== CALCULS MÉMORISÉS =====
   const userResponses = useMemo(() => {
-    const responsesWithUserId = responses.map(r => ({
+    // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses
+    if (!user?.id) return {}
+    const latestResponsesMap = getLatestResponsesByEvent(user.id)
+    const responsesWithUserId = Array.from(latestResponsesMap.values()).map(r => ({
       eventId: r.eventId,
       userId: r.userId,
-      response: r.response
+      response: r.finalResponse // Utiliser finalResponse pour compatibilité avec userResponsesMapper
     }))
-    return userResponsesMapper(filteredEvents, responsesWithUserId, user?.id)
-  }, [filteredEvents, responses, user?.id])
+    return userResponsesMapper(filteredEvents, responsesWithUserId, user.id)
+  }, [filteredEvents, user?.id, getLatestResponsesByEvent])
 
   const fakeEvents = useMemo(() => {
     if (!showTeaserPins || !visitorEvent?.venue?.lat || !visitorEvent?.venue?.lng) {
@@ -146,6 +173,14 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [isModalOpen, selectedEvent])
 
+  // Gérer autoCenterEvent depuis ProfilePage (legacy, maintenant géré par setSelectedEventFromProfile)
+  useEffect(() => {
+    if (autoCenterEvent && !isVisitorMode) {
+      setSelectedEvent(autoCenterEvent)
+      onEventCentered?.()
+    }
+  }, [autoCenterEvent, isVisitorMode, onEventCentered])
+
   // Détecter le changement de privacy et fermer l'EventCard
   // Logique spécifique pour les pins fantômes en mode visitor
   useEffect(() => {
@@ -184,7 +219,10 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           onEventClick={handleEventClick}
           onClusterClick={handleClusterClick}
           onMapReady={onMapReady}
-          autoCenterEvent={isVisitorMode && visitorEvent ? visitorEvent : undefined}
+          autoCenterEvent={
+            autoCenterEvent || (isVisitorMode && visitorEvent ? visitorEvent : undefined)
+          }
+          onEventCentered={onEventCentered}
         />
 
         {/* FilterBar en overlay centré - masquée en mode visitor */}

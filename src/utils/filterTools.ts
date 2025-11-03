@@ -79,7 +79,7 @@ export interface FilterConfig {
     allowedResponses?: UserResponseValue[] // N'afficher que les événements avec ces réponses (ex: ['going', 'interested'])
 }
 
-// Utilitaire: type de réponse minimal
+// Utilitaire: type de réponse minimal (compatibilité ancien système)
 type MinimalResponse = { eventId: string; userId?: string; response: UserResponseValue }
 
 
@@ -255,14 +255,23 @@ export function userResponsesMapper(
 
     const eventIds = new Set(events.map(e => e.id))
 
+    // NOUVEAU SYSTÈME : Utiliser la dernière réponse par event (finalResponse)
+    // Grouper par eventId et garder la plus récente
+    const latestByEvent = new Map<string, UserResponse>()
     userResponses.forEach(r => {
         if (r.userId === currentUserId && eventIds.has(r.eventId)) {
-            // Normaliser: toujours une chaîne (pas null/undefined)
-            // Si response est null ou undefined, on garde '' (déjà initialisé)
-            if (r.response && typeof r.response === 'string') {
-                result[r.eventId] = r.response
+            const existing = latestByEvent.get(r.eventId)
+            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                latestByEvent.set(r.eventId, r)
             }
-            // Sinon, on garde '' (déjà défini ci-dessus)
+        }
+    })
+
+    latestByEvent.forEach((r, eventId) => {
+        // Normaliser: toujours une chaîne (pas null/undefined)
+        // Si finalResponse est null ou undefined, on garde '' (déjà initialisé)
+        if (r.finalResponse && typeof r.finalResponse === 'string') {
+            result[eventId] = r.finalResponse
         }
     })
 
@@ -626,7 +635,7 @@ export function groupUsersByResponses(
     }
 
     responses.forEach(response => {
-        switch (response.response) {
+        switch (response.finalResponse) {
             case 'invited':
                 grouped.invited.push(response)
                 break

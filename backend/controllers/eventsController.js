@@ -184,16 +184,26 @@ class EventsController {
             console.log(`📊 Calcul statistiques événement: ${eventId}`)
 
             const responses = await DataServiceV2.getAllActiveData(
-                'Responses!A2:H',
+                'Responses!A2:G',
                 DataServiceV2.mappers.response
             )
 
-            // Filtrer par eventId et compter
-            const eventResponses = responses.filter(r => r.eventId === eventId)
+            // Filtrer par eventId et obtenir uniquement les dernières réponses par user
+            const latestResponsesMap = new Map()
+            responses
+                .filter(r => r.eventId === eventId)
+                .forEach(r => {
+                    const existing = latestResponsesMap.get(r.userId)
+                    if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                        latestResponsesMap.set(r.userId, r)
+                    }
+                })
+
+            const eventResponses = Array.from(latestResponsesMap.values())
             const stats = { going: 0, interested: 0, not_interested: 0 }
 
             for (const response of eventResponses) {
-                switch (response.response) {
+                switch (response.finalResponse) {
                     case 'going':
                         stats.going++
                         break

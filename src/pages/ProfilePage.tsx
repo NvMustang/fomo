@@ -7,16 +7,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button, UserCard, EventCard, CreateEventModal, ToggleLabelsWithExpendableList, AddFriendModal } from '@/components'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
+import { LastActivities } from '@/components/ui/LastActivities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { useFilters } from '@/contexts/FiltersContext'
 import { filterQuery } from '@/utils/filterTools'
 import type { Event } from '@/types/fomoTypes'
 
-
 export const ProfilePageWeb: React.FC = () => {
   const { user, logout, updateUser } = useAuth()
-  const { events, responses, dataReady } = useFomoDataContext()
+  const { getLatestResponsesByEvent } = useFomoDataContext()
   const { getFriendsGroupedByFrienship } = useFilters()
   const {
     relationsError,
@@ -56,27 +56,14 @@ export const ProfilePageWeb: React.FC = () => {
     }
 
     const created = userEvents.length
-    const going = responses.filter(r => r.userId === user.id && r.response === 'going').length
-    const interested = responses.filter(r => r.userId === user.id && r.response === 'interested').length
+    const latestResponsesMap = getLatestResponsesByEvent(user.id)
+    const going = Array.from(latestResponsesMap.values()).filter(r => r.finalResponse === 'going').length
+    const interested = Array.from(latestResponsesMap.values()).filter(r => r.finalResponse === 'interested').length
 
     return { created, going, interested }
-  }, [userEvents, responses, user?.id])
+  }, [userEvents, user?.id, getLatestResponsesByEvent])
 
 
-  // Calculer l'activité récente (événements auxquels l'utilisateur a répondu)
-  const recentActivity = useMemo(() => {
-    if (!user?.id || !dataReady) return []
-
-    const userResponses = responses
-      .filter(r => r.userId === user.id && (r.response === 'going' || r.response === 'interested'))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5) // 5 plus récents
-
-    return userResponses.map(response => {
-      const event = events.find(e => e.id === response.eventId)
-      return event ? { event, response: response.response as 'going' | 'interested' } : null
-    }).filter(Boolean) as Array<{ event: Event; response: 'going' | 'interested' }>
-  }, [responses, events, user?.id, dataReady])
 
   // Calculer les relations d'amitié
   const { activeFriends, pendingFriends, sentRequests } = useMemo(() => {
@@ -232,77 +219,7 @@ export const ProfilePageWeb: React.FC = () => {
       </div>
 
       {/* Activité récente */}
-      {recentActivity.length > 0 && (
-        <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
-          <h3 style={{
-            fontSize: 'var(--text-lg)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: 'var(--text)',
-            margin: '0 0 var(--md) 0',
-            paddingBottom: 'var(--sm)',
-            borderBottom: '1px solid var(--border)'
-          }}>
-            Activité récente
-          </h3>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--sm)'
-          }}>
-            {recentActivity.map(({ event, response }) => (
-              <div
-                key={event.id}
-                style={{
-                  padding: 'var(--sm)',
-                  backgroundColor: 'var(--bg)',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  cursor: 'pointer',
-                  transition: 'background-color var(--transition-fast)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--background-hover)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg)'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 'var(--sm)'
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 'var(--text-md)',
-                      fontWeight: 'var(--font-weight-semibold)',
-                      color: 'var(--text)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {event.title}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 'var(--font-weight-semibold)',
-                    padding: 'var(--xs) var(--sm)',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: response === 'going' ? 'var(--success-light)' : 'var(--warning-light)',
-                    color: response === 'going' ? 'var(--success)' : 'var(--warning)',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}>
-                    {response === 'going' ? "J'y vais" : 'Intéressé'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <LastActivities />
 
       {/* Relations d'amitié (amis actifs + demandes en attente) */}
       <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>

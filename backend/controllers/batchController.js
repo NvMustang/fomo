@@ -97,25 +97,25 @@ class BatchController {
      * Traiter une réponse à un événement
      */
     static async processEventResponse(action, userId) {
-        const { eventId, response, email, invitedByUserId } = action.data
+        const { eventId, initialResponse, finalResponse, invitedByUserId } = action.data
 
         // Utiliser action.userId si disponible, sinon fallback sur userId global
         // Important : chaque action peut avoir son propre userId (ex: invitations pour différents amis)
         const targetUserId = action.userId || userId
 
-        console.log(`🔄 [BatchController] Traitement réponse - eventId: ${eventId}, response: ${response}, userId: ${targetUserId}${invitedByUserId ? `, invitedByUserId: ${invitedByUserId}` : ''}`)
+        console.log(`🔄 [BatchController] Traitement réponse - eventId: ${eventId}, ${initialResponse} -> ${finalResponse}, userId: ${targetUserId}${invitedByUserId ? `, invitedByUserId: ${invitedByUserId}` : ''}`)
 
         if (!eventId) {
             throw new Error('eventId est requis pour event_response')
         }
 
-        // Toujours utiliser upsertResponse pour toutes les réponses (going, interested, not_interested, cleared, seen, invited, null)
+        // NOUVEAU SYSTÈME : Créer une nouvelle entrée d'historique avec initialResponse et finalResponse
         const mockReq = {
             body: {
                 userId: targetUserId,
                 eventId,
-                response: response,
-
+                initialResponse: initialResponse || null,
+                finalResponse: finalResponse || null,
                 ...(invitedByUserId !== undefined && { invitedByUserId })
             }
         }
@@ -125,14 +125,16 @@ class BatchController {
             status: (code) => ({ json: (data) => data })
         }
 
-        const result = await ResponsesController.upsertResponse(mockReq, mockRes)
+        const result = await ResponsesController.createResponse(mockReq, mockRes)
 
-        console.log(`✅ [BatchController] Réponse upsertée: ${eventId}_${targetUserId}, action: ${result?.action || 'unknown'}`)
+        console.log(`✅ [BatchController] Réponse historique créée: ${result?.data?.id || 'unknown'}, ${initialResponse} -> ${finalResponse}`)
 
         return {
             type: 'event_response',
-            action: 'upserted',
+            action: 'created',
             eventId,
+            initialResponse,
+            finalResponse,
             response: result
         }
     }

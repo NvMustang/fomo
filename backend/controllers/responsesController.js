@@ -1,9 +1,13 @@
 /**
- * Contrôleur pour les réponses d'événements - NOUVELLE STRATÉGIE OVERWRITE
- * Gère la logique métier avec overwrite + colonnes système
+ * Contrôleur pour les réponses d'événements - NOUVELLE STRATÉGIE HISTORIQUE
+ * Gère la logique métier avec historique complet : chaque changement crée une nouvelle entrée
+ * avec initialResponse et finalResponse
  */
 
 const DataServiceV2 = require('../utils/dataService')
+
+// Plage Google Sheets pour les réponses (NOUVEAU SCHÉMA: A-J)
+const RESPONSES_RANGE = 'Responses!A2:G'
 
 class ResponsesController {
     /**
@@ -18,7 +22,7 @@ class ResponsesController {
             console.log(`📝 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
             const responses = await DataServiceV2.getAllActiveData(
-                'Responses!A2:H',
+                RESPONSES_RANGE,
                 DataServiceV2.mappers.response
             )
 
@@ -39,7 +43,7 @@ class ResponsesController {
             console.log(`📝 Récupération réponse: ${responseId}`)
 
             const response = await DataServiceV2.getByKey(
-                'Responses!A2:H',
+                RESPONSES_RANGE,
                 DataServiceV2.mappers.response,
                 0, // key column (ID)
                 responseId
@@ -61,11 +65,12 @@ class ResponsesController {
     }
 
     /**
-     * Créer ou mettre à jour une réponse (UPSERT)
+     * Créer une nouvelle entrée d'historique de réponse
+     * Chaque changement crée une nouvelle ligne avec initialResponse et finalResponse
      */
-    static async upsertResponse(req, res) {
+    static async createResponse(req, res) {
         try {
-            const { userId, eventId, response, email, invitedByUserId } = req.body
+            const { userId, eventId, initialResponse, finalResponse, invitedByUserId } = req.body
 
             if (!userId || !eventId) {
                 return res.status(400).json({
@@ -74,78 +79,102 @@ class ResponsesController {
                 })
             }
 
-            // Accepter null comme valeur valide pour response
-            if (response !== null && !['going', 'interested', 'not_interested', 'cleared', 'seen', 'invited'].includes(response)) {
+            // Validation des réponses
+            const validResponses = ['going', 'interested', 'not_interested', 'cleared', 'seen', 'invited', null]
+            if (initialResponse !== null && !validResponses.includes(initialResponse)) {
                 return res.status(400).json({
                     success: false,
-                    error: 'response doit être "going", "interested", "not_interested", "cleared", "seen", "invited" ou null'
+                    error: 'initialResponse doit être valide ou null'
+                })
+            }
+            if (finalResponse !== null && !validResponses.includes(finalResponse)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'finalResponse doit être valide ou null'
                 })
             }
 
-            const responseId = `${eventId}_${userId}`
-            console.log(`🔄 Upsert réponse: ${responseId}, response: ${response}, invitedByUserId: ${invitedByUserId || 'none'}`)
+            // Générer un ID unique pour cette entrée d'historique
+            const timestamp = Date.now()
+            const randomSuffix = Math.random().toString(36).substr(2, 6)
+            const responseId = `${eventId}_${userId}_${timestamp}_${randomSuffix}`
+
+            console.log(`🔄 Création réponse historique: ${responseId}, ${initialResponse} -> ${finalResponse}, invitedByUserId: ${invitedByUserId || 'none'}`)
 
             // Préparer les données pour la feuille
-            // Structure: A=ID, B=CreatedAt, C=UserId, D=InvitedByUserId, E=EventId, F=Response, G=ModifiedAt, H=DeletedAt, I=Email
+            // Nouveau schéma: A=ID, B=CreatedAt, C=UserId, D=InvitedByUserId, E=EventId, F=InitialResponse, G=FinalResponse
             const rowData = [
-                responseId,                                 // A: ID (eventId_userId)
+                responseId,                                 // A: ID (unique par changement)
                 new Date().toISOString(),                   // B: CreatedAt
                 userId,                                     // C: User ID
-                invitedByUserId || '',                      // D: InvitedByUserId
-                eventId,                                    // E: Event ID (décalé)
-                response || '',                             // F: Response (vide si null, décalé)
-                new Date().toISOString(),                   // G: ModifiedAt (décalé)
-                req.body.deletedAt || '',                   // H: DeletedAt (si fourni, décalé)
-
+                invitedByUserId || 'none',                 // D: InvitedByUserId ('none' si non renseigné)
+                eventId,                                    // E: Event ID
+                initialResponse || '',                      // F: InitialResponse (vide si null)
+                finalResponse || '',                        // G: FinalResponse (vide si null)
             ]
 
-            const result = await DataServiceV2.upsertData(
-                'Responses!A2:I',
-                rowData,
-                0, // key column (ID)
-                responseId
+            const result = await DataServiceV2.createRow(
+                RESPONSES_RANGE,
+                rowData
             )
 
-            console.log(`✅ Réponse ${result.action}: ${responseId}`)
+            console.log(`✅ Réponse historique créée: ${responseId}`)
             res.json({
                 success: true,
                 data: {
                     id: responseId,
                     userId,
                     eventId,
-                    response,
-                    email: email || undefined,
-                    invitedByUserId: invitedByUserId || undefined,
-                    createdAt: rowData[1],
-                    modifiedAt: rowData[6]
+                    initialResponse: initialResponse || null,
+                    finalResponse: finalResponse || null,
+                    invitedByUserId: invitedByUserId || 'none',
+                    createdAt: rowData[1]
                 },
-                action: result.action
+                action: 'created'
             })
         } catch (error) {
-            console.error('❌ Erreur upsert réponse:', error)
+            console.error('❌ Erreur création réponse:', error)
             res.status(500).json({ success: false, error: error.message })
         }
     }
 
     /**
-     * Supprimer une réponse (soft delete)
+     * Helper : Obtenir la dernière réponse d'un utilisateur pour un événement
+     * Utile pour la rétrocompatibilité et pour obtenir l'état actuel
+     */
+    static async getLatestResponse(userId, eventId) {
+        const allResponses = await DataServiceV2.getAllActiveData(
+            RESPONSES_RANGE,
+            DataServiceV2.mappers.response
+        )
+
+        // Filtrer par user et event, trier par createdAt décroissant, prendre le premier
+        const userEventResponses = allResponses
+            .filter(r => r.userId === userId && r.eventId === eventId)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+        return userEventResponses.length > 0 ? userEventResponses[0] : null
+    }
+
+    /**
+     * Supprimer une réponse (hard delete)
+     * NOTE: Le nouveau schéma ne supporte plus le soft delete (pas de colonne deletedAt)
      */
     static async deleteResponse(req, res) {
         try {
             const responseId = req.params.id
-            // Suppression soft de la réponse
+            // Suppression complète de la réponse
 
-            const result = await DataServiceV2.softDelete(
-                'Responses!A2:H',
+            await DataServiceV2.hardDelete(
+                RESPONSES_RANGE,
                 0, // key column (ID)
                 responseId
             )
 
-            console.log(`✅ Réponse supprimée (soft delete): ${responseId}`)
+            console.log(`✅ Réponse supprimée (hard delete): ${responseId}`)
             res.json({
                 success: true,
-                message: 'Réponse supprimée avec succès',
-                deletedAt: result.deletedAt
+                message: 'Réponse supprimée avec succès'
             })
         } catch (error) {
             console.error('❌ Erreur suppression réponse:', error)
@@ -162,12 +191,22 @@ class ResponsesController {
             console.log(`📝 Récupération réponses utilisateur: ${userId}`)
 
             const allResponses = await DataServiceV2.getAllActiveData(
-                'Responses!A2:H',
+                RESPONSES_RANGE,
                 DataServiceV2.mappers.response
             )
 
-            // Filtrer par utilisateur
-            const userResponses = allResponses.filter(r => r.userId === userId)
+            // Filtrer par utilisateur et obtenir uniquement les dernières réponses par event
+            const userResponsesMap = new Map()
+            allResponses
+                .filter(r => r.userId === userId)
+                .forEach(r => {
+                    const key = r.eventId
+                    const existing = userResponsesMap.get(key)
+                    if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                        userResponsesMap.set(key, r)
+                    }
+                })
+            const userResponses = Array.from(userResponsesMap.values())
 
             console.log(`✅ ${userResponses.length} réponses récupérées pour ${userId}`)
             res.json({
@@ -189,12 +228,22 @@ class ResponsesController {
             console.log(`📝 Récupération réponses événement: ${eventId}`)
 
             const allResponses = await DataServiceV2.getAllActiveData(
-                'Responses!A2:H',
+                RESPONSES_RANGE,
                 DataServiceV2.mappers.response
             )
 
-            // Filtrer par événement
-            const eventResponses = allResponses.filter(r => r.eventId === eventId)
+            // Filtrer par événement et obtenir uniquement les dernières réponses par user
+            const eventResponsesMap = new Map()
+            allResponses
+                .filter(r => r.eventId === eventId)
+                .forEach(r => {
+                    const key = r.userId
+                    const existing = eventResponsesMap.get(key)
+                    if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+                        eventResponsesMap.set(key, r)
+                    }
+                })
+            const eventResponses = Array.from(eventResponsesMap.values())
 
             console.log(`✅ ${eventResponses.length} réponses récupérées pour ${eventId}`)
             res.json({
@@ -217,7 +266,7 @@ class ResponsesController {
 
             // Récupérer toutes les réponses de l'ancien userId
             const allResponses = await DataServiceV2.getAllActiveData(
-                'Responses!A2:H',
+                RESPONSES_RANGE,
                 DataServiceV2.mappers.response
             )
 
@@ -232,27 +281,29 @@ class ResponsesController {
 
                 // Vérifier si une réponse existe déjà avec le nouveau userId pour cet événement
                 const existingResponse = await DataServiceV2.getByKey(
-                    'Responses!A2:H',
+                    RESPONSES_RANGE,
                     DataServiceV2.mappers.response,
                     0,
                     newResponseId
                 )
 
                 if (!existingResponse) {
-                    // Créer la nouvelle réponse avec le nouveau userId
+                    // Créer la nouvelle réponse avec le nouveau userId (NOUVEAU SCHÉMA)
+                    // Utiliser finalResponse de l'ancienne réponse comme initialResponse et finalResponse
+                    // car on migre une réponse existante sans changement d'état
+                    const finalResponse = response.finalResponse || null
                     const rowData = [
                         newResponseId,                           // A: ID
                         response.createdAt || new Date().toISOString(), // B: CreatedAt (garder l'original)
                         newUserId,                               // C: User ID (nouveau)
-                        response.invitedByUserId || '',           // D: InvitedByUserId
+                        response.invitedByUserId || 'none',      // D: InvitedByUserId ('none' si non renseigné)
                         response.eventId,                         // E: Event ID
-                        response.response || '',                  // F: Response
-                        new Date().toISOString(),                 // G: ModifiedAt
-                        ''                                       // H: DeletedAt
+                        finalResponse || '',                      // F: InitialResponse (même que final pour migration)
+                        finalResponse || '',                     // G: FinalResponse
                     ]
 
                     await DataServiceV2.upsertData(
-                        'Responses!A2:I',
+                        RESPONSES_RANGE,
                         rowData,
                         0,
                         newResponseId
@@ -263,9 +314,9 @@ class ResponsesController {
                     console.log(`⚠️ Réponse déjà existante pour ${newResponseId}, skip`)
                 }
 
-                // Soft delete de l'ancienne réponse
-                await DataServiceV2.softDelete(
-                    'Responses!A2:H',
+                // Hard delete de l'ancienne réponse (nouveau schéma ne supporte plus soft delete)
+                await DataServiceV2.hardDelete(
+                    RESPONSES_RANGE,
                     0,
                     oldResponseId
                 )

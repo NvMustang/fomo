@@ -52,6 +52,7 @@ export interface MapViewProps {
 
   // Auto-centrer sur un événement au chargement
   autoCenterEvent?: Event | null
+  onEventCentered?: () => void
 
   // Style
   style?: React.CSSProperties

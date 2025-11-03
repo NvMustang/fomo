@@ -478,13 +478,14 @@ export class FomoDataManager {
 
     // ===== BATCH ACTIONS =====
 
-    addEventResponse(userId: string, eventId: string, response: UserResponseValue, invitedByUserId: string): void {
+    addEventResponse(userId: string, eventId: string, initialResponse: UserResponseValue, finalResponse: UserResponseValue, invitedByUserId: string): void {
         const action: BatchAction = {
             id: `event_response_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             type: 'event_response',
             data: {
                 eventId,
-                response,
+                initialResponse,
+                finalResponse,
                 invitedByUserId,
             },
             userId,
@@ -492,7 +493,7 @@ export class FomoDataManager {
         }
 
         batchManager.addAction(action)
-        console.log(`➕ Réponse ajoutée au batch: userId ${userId} - ${response} pour ${eventId}${invitedByUserId !== 'none' ? ` (invitedByUserId: ${invitedByUserId})` : ''}`)
+        console.log(`➕ Réponse ajoutée au batch: userId ${userId} - ${initialResponse} -> ${finalResponse} pour ${eventId}${invitedByUserId !== 'none' ? ` (invitedByUserId: ${invitedByUserId})` : ''}`)
     }
 
     addFriendshipAction(userId: string, type: 'accept' | 'block' | 'remove', friendshipId: string, toUserId: string): void {
@@ -524,8 +525,11 @@ export class FomoDataManager {
     // ===== UTILITAIRES =====
 
     getUserResponse(userId: string, eventId: string, responses: UserResponse[]): UserResponseValue {
-        const response = responses.find(r => r.userId === userId && r.eventId === eventId)
-        return response ? response.response : null
+        // NOUVEAU SYSTÈME : Trouver la dernière réponse (la plus récente)
+        const userEventResponses = responses
+            .filter(r => r.userId === userId && r.eventId === eventId && !r.deletedAt)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        return userEventResponses.length > 0 ? userEventResponses[0].finalResponse : null
     }
 
     async savePendingActions(): Promise<void> {

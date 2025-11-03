@@ -151,3 +151,108 @@
     padding-top: var(--xs);
     border-top: 1px solid var(--border);
 }
+
+/* ========================
+   ACTIVITÉ RÉCENTE
+======================== */
+
+.recent-activity-section {
+    padding: var(--md);
+}
+
+.recent-activity-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--text);
+    margin: 0 0 var(--md) 0;
+    padding-bottom: var(--xs);
+    border-bottom: 1px solid var(--border);
+}
+
+.recent-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}
+
+.recent-activity-item {
+    padding: var(--xs) 0;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-top: 1px solid transparent;
+    border-bottom: 1px solid transparent;
+}
+
+.recent-activity-item:hover {
+    padding-left: var(--xs);
+    border-top-color: var(--border);
+    border-bottom-color: var(--border);
+}
+
+.recent-activity-item:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.recent-activity-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xs);
+}
+
+.recent-activity-title-text {
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-activity-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--xs);
+    font-size: var(--text-xs);
+    flex-wrap: wrap;
+}
+
+.recent-activity-arrow {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    margin: 0 var(--xs);
+}
+
+.recent-activity-badge {
+    padding: 2px var(--xs);
+    border-radius: var(--radius-sm);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    font-size: var(--text-xs);
+}
+
+.recent-activity-badge[data-response="going"] {
+    background-color: var(--success-light);
+    color: var(--success);
+}
+
+.recent-activity-badge[data-response="interested"] {
+    background-color: var(--warning-light);
+    color: var(--warning);
+}
+
+.recent-activity-badge[data-response="not_interested"] {
+    background-color: var(--error-light);
+    color: var(--error);
+}
+
+.recent-activity-badge[data-response="cleared"] {
+    background-color: var(--background-secondary);
+    color: var(--text-muted);
+}
+
+.recent-activity-time {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
