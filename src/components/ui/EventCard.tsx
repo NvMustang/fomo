@@ -41,7 +41,6 @@ export const EventCard = React.memo<EventCardProps>(({
     onEdit,
     onVisitorFormCompleted,
 }: EventCardProps) => {
-
     // État pour l'expansion des détails
     const [isExpanded, setIsExpanded] = useState(false)
     // État pour l'animation fade-out quand not_interested
@@ -191,6 +190,9 @@ export const EventCard = React.memo<EventCardProps>(({
 
     // Gestion du toggle Online/Offline (mise à jour optimiste comme addEventResponse)
     const handleToggleOnline = () => {
+        // Ne pas appeler updateEvent en mode visitor (n'est pas disponible)
+        if (isVisitorMode || !updateEvent) return
+
         // Lire l'état actuel directement depuis l'événement (comme getEventResponse pour les réponses)
         const currentIsOnline = event.isOnline !== false // true si undefined ou true, false si explicitement false
         const newIsOnline = !currentIsOnline

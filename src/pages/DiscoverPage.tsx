@@ -47,7 +47,8 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
   // ===== ÉTATS LOCAUX =====
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [showTeaserPins, setShowTeaserPins] = useState(false)
+  const [showTeaserPins, setShowTeaserPins] = useState(false) // Génère les fake pins
+  const [showTeaserMessage, setShowTeaserMessage] = useState(false) // Affiche le message teaser
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
   const prevIsPublicModeRef = useRef(isPublicMode)
 
@@ -99,9 +100,17 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   // Handlers de la carte
   const handleEventClick = useCallback((event: Event | null) => {
     if (event) {
+      // Si c'est un fake event en mode visitor, afficher le teaser au lieu d'ouvrir l'EventCard
+      if (isVisitorMode && event.id.startsWith('fake-')) {
+        setShowTeaserMessage(true) // Afficher le message teaser
+        return
+      }
       setSelectedEvent(event)
+    } else {
+      // Fermer l'EventCard lors d'un clic sur la carte (sans features)
+      setSelectedEvent(null)
     }
-  }, [])
+  }, [isVisitorMode])
 
   const handleClusterClick = useCallback((_feature: unknown) => {
     if (isVisitorMode) {
@@ -190,9 +199,10 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       if (selectedEvent) {
         setSelectedEvent(null)
       }
-      // En mode visiteur, activer les pins fantômes après toggle privacy
+      // En mode visiteur, générer les pins fantômes après toggle privacy (mais ne pas afficher le teaser)
       if (isVisitorMode) {
-        setShowTeaserPins(true)
+        setShowTeaserPins(true) // Génère les pins pour qu'ils soient visibles sur la carte
+        setShowTeaserMessage(false) // Ne pas afficher le message par défaut
         setTimeout(() => {
           if ((window as any).zoomOutMap) {
             (window as any).zoomOutMap(8, 20000)
@@ -207,6 +217,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     if (isAuthenticated && showWelcomeScreen) {
       setShowWelcomeScreen(false)
       setShowTeaserPins(false)
+      setShowTeaserMessage(false)
     }
   }, [isAuthenticated, showWelcomeScreen])
 
@@ -235,13 +246,13 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         )}
       </div>
 
-      {/* Teaser en bas de page (mode visiteur après toggle privacy) */}
-      {showTeaserPins && (
+      {/* Teaser en bas de page (mode visiteur après clic sur fake pin) */}
+      {showTeaserMessage && (
         <div className="modal_container">
           <div className="modal modal-teaser">
             <div className="modal-content">
               <p className="map-teaser-message">
-                Rejoins-nous et découvre les événements autour de toi !
+                Pour voir les informations de cet événement, rejoins FOMO !
               </p>
               <Button
                 variant="primary"
