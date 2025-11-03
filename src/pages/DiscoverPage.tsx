@@ -8,12 +8,12 @@ import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { MapRenderer } from '@/map/MapRenderer'
 import { EventCard, Button } from '@/components'
 import { useFilters } from '@/contexts/FiltersContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+
 import { useAuth } from '@/contexts/AuthContext'
 import { usePrivacy } from '@/contexts/PrivacyContext'
 import type { Event } from '@/types/fomoTypes'
 import { FilterBar } from '@/components/ui/FilterBar'
-import { userResponsesMapper } from '@/utils/filterTools'
+
 import { WelcomeScreen } from '@/components/modals/WelcomeScreen'
 
 // ===== TYPES =====
@@ -41,8 +41,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
 }) => {
   // ===== HOOKS CONTEXTUELS =====
   const { getLocalDiscoverEvents } = useFilters()
-  const { getLatestResponsesByEvent } = useFomoDataContext()
-  const { user, isAuthenticated } = useAuth()
+  const { isAuthenticated } = useAuth()
   const { isPublicMode } = usePrivacy()
 
   // ===== ÉTATS LOCAUX =====
@@ -50,6 +49,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const [showTeaserPins, setShowTeaserPins] = useState(false) // Génère les fake pins
   const [showTeaserMessage, setShowTeaserMessage] = useState(false) // Affiche le message teaser
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
+
   const prevIsPublicModeRef = useRef(isPublicMode)
 
   // Exposer setSelectedEvent globalement pour LastActivities
@@ -120,18 +120,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   }, [isVisitorMode])
 
 
-  // ===== CALCULS MÉMORISÉS =====
-  const userResponses = useMemo(() => {
-    // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses
-    if (!user?.id) return {}
-    const latestResponsesMap = getLatestResponsesByEvent(user.id)
-    const responsesWithUserId = Array.from(latestResponsesMap.values()).map(r => ({
-      eventId: r.eventId,
-      userId: r.userId,
-      response: r.finalResponse // Utiliser finalResponse pour compatibilité avec userResponsesMapper
-    }))
-    return userResponsesMapper(filteredEvents, responsesWithUserId, user.id)
-  }, [filteredEvents, user?.id, getLatestResponsesByEvent])
+  // ===== CALCULS =====
 
   const fakeEvents = useMemo(() => {
     if (!showTeaserPins || !visitorEvent?.venue?.lat || !visitorEvent?.venue?.lng) {
@@ -226,7 +215,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       <div className="map-container">
         <MapRenderer
           events={allEventsToDisplay}
-          userResponses={userResponses}
           onEventClick={handleEventClick}
           onClusterClick={handleClusterClick}
           onMapReady={onMapReady}
@@ -330,9 +318,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
             key={selectedEvent.id}
             event={selectedEvent}
             showToggleResponse={true}
-            isFading={false}
             isVisitorMode={isVisitorMode}
-            onClose={() => setSelectedEvent(null)}
             onVisitorFormCompleted={onVisitorFormCompleted}
           />
         </div>

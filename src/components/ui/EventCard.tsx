@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { Event, UserResponseValue } from '@/types/fomoTypes'
-import { Button, VisitorNameModal } from '@/components'
+import { Button } from '@/components'
+import ButtonGroup from '@/components/ui/ButtonGroup'
 import { ShareContent } from '@/components/ui/ShareContent'
 import { format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
-import { useEventResponses } from '@/hooks'
+
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { useAuth } from '@/contexts/AuthContext'
+import { setUserResponseFeatureState } from '@/map/featureStateController'
 
 // notifyResponseChange supprimé : LastActivities lit directement initialResponse/finalResponse depuis le contexte
 
@@ -23,9 +25,6 @@ interface EventCardProps {
     showToggleResponse?: boolean
     isProfilePage?: boolean // Si true, affiche automatiquement le bouton d'édition pour l'organisateur
     isMyEventsPage?: boolean // Pour distinguer le comportement sur My Events
-    isFading?: boolean // Si true, applique l'animation fade-out
-    isVisitorMode?: boolean // Si true, mode visitor (pas authentifié)
-    onClose?: () => void // Callback de fermeture pour notifier le parent
     onEdit?: (event: Event) => void // Callback pour éditer l'événement
     onVisitorFormCompleted?: (organizerName: string) => void // Callback quand le formulaire visitor est complété
 }
@@ -34,35 +33,18 @@ export const EventCard = React.memo<EventCardProps>(({
     event,
     showToggleResponse,
     isProfilePage = false,
-    isMyEventsPage = false,
-    isFading = false,
-    isVisitorMode = false,
-    onClose,
     onEdit,
-    onVisitorFormCompleted,
 }: EventCardProps) => {
     // État pour l'expansion des détails
-    const [isExpanded, setIsExpanded] = useState(false)
-    // État pour l'animation fade-out quand not_interested
-    const [shouldFade, setShouldFade] = useState(false)
+    const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+
     // État pour l'expansion de la zone de partage (uniquement sur page profile)
     const [isShareExpanded, setIsShareExpanded] = useState(false)
-    // État pour le modal de nom visitor
-    const [isVisitorNameModalOpen, setIsVisitorNameModalOpen] = useState(false)
-    // État pour le nom visitor (stocké en session)
-    const [visitorName, setVisitorName] = useState<string | null>(() => {
-        // Charger depuis sessionStorage si présent
-        try {
-            return sessionStorage.getItem('fomo-visit-name')
-        } catch {
-            return null
-        }
-    })
-    // État pour la réponse en attente (pendant la saisie du nom)
-    const [pendingResponse, setPendingResponse] = useState<'going' | 'interested' | 'not_interested' | null>(null)
+    // Réponse choisie pendant l'ouverture de la carte (finalResponse local, non envoyée) - stockée en ref (synchrone)
+    const localFinalResponseRef = useRef<'going' | 'interested' | 'not_interested' | 'cleared' | null>(null)
 
-    const { getEventResponse, toggleResponse } = useEventResponses()
-    const { addEventResponse, responses, updateEvent, users } = useFomoDataContext()
+
+    const { responses, updateEvent, users, addEventResponse } = useFomoDataContext()
     const { user } = useAuth()
 
     // Récupérer la réponse de l'utilisateur pour cet événement et extraire l'invitateur
@@ -77,8 +59,7 @@ export const EventCard = React.memo<EventCardProps>(({
     // Mémorise la réponse utilisateur à l'ouverture
     const initialResponseRef = useRef<UserResponseValue | undefined>(undefined)
 
-    // Timeout pour l'action différée de suppression (not_interested ou cleared)
-    const pendingRemovalTimeoutRef = useRef<number | null>(null)
+
 
     // Ref pour accéder aux dernières valeurs de responses et user dans le cleanup
     const responsesRef = useRef(responses)
@@ -91,99 +72,91 @@ export const EventCard = React.memo<EventCardProps>(({
     }, [responses, user?.id])
 
     const toggleExpanded = () => {
-        setIsExpanded(!isExpanded)
+        setIsDetailsExpanded(!isDetailsExpanded)
     }
 
     // Handler pour confirmer le nom visitor
-    const handleVisitorNameConfirm = (name: string, email?: string) => {
-        const wasFirstTime = !visitorName // Vérifier si c'était la première fois
-        setVisitorName(name)
-        try {
-            sessionStorage.setItem('fomo-visit-name', name)
-            if (email) {
-                sessionStorage.setItem('fomo-visit-email', email)
-            }
-        } catch {
-            // Ignore si sessionStorage indisponible
-        }
+    // Suppression du flux visitor: un userId doit exister en amont
 
-        // Exécuter la réponse en attente en utilisant addEventResponse du context
-        if (pendingResponse) {
-            const current = getEventResponse(event.id)
-            const newResponse = current === pendingResponse ? 'cleared' : pendingResponse
-            // Utiliser le même système que les users : addEventResponse du context (optimiste + batch)
-            addEventResponse(event.id, newResponse)
-        }
-        setPendingResponse(null)
-
-        // Si c'était la première fois (formulaire complété), notifier le parent
-        if (wasFirstTime && onVisitorFormCompleted) {
-            onVisitorFormCompleted(event.organizerName || 'L\'organisateur')
-        }
+    // Helper: récupérer la réponse courante (local si défini, sinon dernière du contexte)
+    const getLocalResponse = (): UserResponseValue => {
+        if (localFinalResponseRef.current !== null && localFinalResponseRef.current !== undefined) return localFinalResponseRef.current
+        const uid = user?.id
+        if (!uid) return null
+        const latest = responses
+            .filter(r => r.userId === uid && r.eventId === event.id)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+        return latest ? latest.finalResponse : null
     }
 
     const handleOpen = () => {
         try {
-            const current = getEventResponse(event.id)
+            const current = getLocalResponse()
             // Capturer systématiquement l'état initial
-            initialResponseRef.current = current
-        } catch (e) { }
+            // Normaliser : convertir undefined en null pour cohérence (pas d'entrée = null)
+            initialResponseRef.current = current ?? null
+            // Initialiser le final local à l'état initial
+            const initialForLocal: UserResponseValue = initialResponseRef.current ?? null
+            // Le local final n'accepte pas 'seen' ou 'invited' → normaliser à null
+            const normalizedLocal = initialForLocal === 'seen' || initialForLocal === 'invited' ? null : initialForLocal
+            localFinalResponseRef.current = (normalizedLocal as any)
+        } catch (e) {
+            // En cas d'erreur, initialiser à null (pas d'entrée dans l'historique)
+            initialResponseRef.current = null
+            localFinalResponseRef.current = null
+        }
     }
 
     const handleClose = () => {
         try {
-            // Lire directement depuis le ref (toujours à jour, pas de closure stale)
-            const latestResponses = responsesRef.current
-            const latestUserId = userIdRef.current
+            // NOUVEAU SYSTÈME : Comparer initial (à l'ouverture) avec current (à la fermeture)
+            // pour déterminer si on doit envoyer 'seen'
+            // Prendre d'abord le final local, sinon relire depuis le contexte
+            const current = getLocalResponse()
 
-            const match = latestUserId
-                ? latestResponses.find(r => r.userId === latestUserId && r.eventId === event.id)
-                : null
-            const current = match ? match.finalResponse : null
-            const initial = initialResponseRef.current
+            // Normaliser initial : convertir undefined en null (pas d'entrée = null)
+            // initial peut être undefined si handleOpen n'a pas été appelé ou a échoué
+            const initial = initialResponseRef.current ?? null
 
-            // Cas 1: null → null → envoie 'seen'
-            if ((initial == null || initial === undefined) && (current == null || current === undefined)) {
+
+            // LOGIQUE : Envoyer 'seen' uniquement si l'utilisateur n'a pas interagi (initial === current)
+            // et que l'état est null (pas d'entrée dans l'historique) ou 'invited' (pas d'interaction visible)
+
+            // Cas 1: pas d'entrée → pas d'entrée → envoie 'seen' (pas d'interaction)
+            // initial et current sont tous les deux null (aucune entrée dans l'historique)
+            if (initial === null && current === null) {
                 addEventResponse(event.id, 'seen')
                 return
             }
 
-            // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen'
+            // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen' (a vu l'invitation mais n'a pas répondu)
             if (initial === 'invited' && current === 'invited') {
                 addEventResponse(event.id, 'seen')
                 return
             }
 
-            // Cas 3: 'invited' → autre chose (going/interested/not_interested/cleared)
-            // Ne rien faire, la réponse a déjà été envoyée par toggleResponse
-            // (pas de 'seen' car l'utilisateur a interagi)
+            // Cas 3: initial !== current → l'utilisateur a interagi → envoyer la réponse finale maintenant
+            if (current !== initial) {
+                // Envoyer la réponse finale
+                addEventResponse(event.id, current)
+                return
+            }
         } catch (e) {
             // Ne pas bloquer la fermeture en cas d'erreur
         }
     }
 
     // Appeler handleOpen au montage, handleClose au démontage
-    // Note: sur ProfilePage, on ne track pas "seen" car ce sont les événements de l'utilisateur
     useEffect(() => {
         handleOpen()
-        // Cleanup: appeler handleClose quand le composant se démonte
         return () => {
-            // Nettoyer un éventuel timeout en attente
-            if (pendingRemovalTimeoutRef.current) {
-                clearTimeout(pendingRemovalTimeoutRef.current)
-                pendingRemovalTimeoutRef.current = null
-            }
-            // Ne pas tracker "seen" sur ProfilePage (événements créés par l'utilisateur)
-            if (!isProfilePage) {
-                handleClose()
-            }
+            handleClose()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isProfilePage])
+    }, [])
 
 
-    // Combiner isFading (prop) et shouldFade (état local pour not_interested)
-    const isFadingActive = isFading || shouldFade
+
 
     // Sur la page profil, afficher le bouton d'édition si l'utilisateur est l'organisateur
     const shouldShowEdit = isProfilePage && user?.id && (event.organizerId === user.id || event.organizerId === `amb_${user.id}`)
@@ -191,7 +164,7 @@ export const EventCard = React.memo<EventCardProps>(({
     // Gestion du toggle Online/Offline (mise à jour optimiste comme addEventResponse)
     const handleToggleOnline = () => {
         // Ne pas appeler updateEvent en mode visitor (n'est pas disponible)
-        if (isVisitorMode || !updateEvent) return
+        if (!updateEvent) return
 
         // Lire l'état actuel directement depuis l'événement (comme getEventResponse pour les réponses)
         const currentIsOnline = event.isOnline !== false // true si undefined ou true, false si explicitement false
@@ -234,7 +207,7 @@ export const EventCard = React.memo<EventCardProps>(({
         <div
             className={[
                 'event-card',
-                isFadingActive && 'fade-out-2s',
+
                 event.isOnline === false && 'event-card--offline'
             ].filter(Boolean).join(' ')}
             data-profile-page={isProfilePage ? 'true' : undefined}
@@ -269,12 +242,12 @@ export const EventCard = React.memo<EventCardProps>(({
 
                 {/* Bouton d'expansion à côté du titre */}
                 <button
-                    className={`circular-button circular-button--xs ${!isExpanded ? 'expand-rotated' : ''}`}
+                    className={`circular-button circular-button--xs ${!isDetailsExpanded ? 'expand-rotated' : ''}`}
                     onClick={(e) => {
                         e.stopPropagation()
                         toggleExpanded()
                     }}
-                    aria-label={isExpanded ? 'Réduire les détails' : 'Voir plus de détails'}
+                    aria-label={isDetailsExpanded ? 'Réduire les détails' : 'Voir plus de détails'}
                 >
                     <div className="icon-container">
                         <div className="plus-bar plus-bar-horizontal arrow-bar-left"></div>
@@ -303,7 +276,7 @@ export const EventCard = React.memo<EventCardProps>(({
             </div>
 
             {/* Zone scrollable - contenu expandable */}
-            {isExpanded && (
+            {isDetailsExpanded && (
                 <div
                     className="event-details-section"
                     style={{
@@ -349,92 +322,30 @@ export const EventCard = React.memo<EventCardProps>(({
             )}
 
             {/* Zone fixe 4 - boutons de réponses toujours visibles */}
-            {showToggleResponse && !event.isPast && (
-                <div className="event-response-buttons-container">
-                    {RESPONSE_OPTIONS.map(({ type, label }) => {
-                        const current = getEventResponse(event.id)
-                        const variant = current === type ? 'primary' : 'secondary'
+            {showToggleResponse && !event.isPast && (() => {
+                const current = getLocalResponse()
+                const groupValue: 'going' | 'interested' | 'not_interested' | null =
+                    current === 'going' || current === 'interested' || current === 'not_interested'
+                        ? current
+                        : null
 
-                        const onClick = () => {
-                            // Capturer la réponse précédente avant le changement
-                            const previousResponse = current
+                return (
+                    <ButtonGroup
+                        items={RESPONSE_OPTIONS.map(({ type, label }) => ({ value: type, label }))}
+                        defaultValue={groupValue}
+                        onChange={(next) => {
+                            const nextFinal: 'going' | 'interested' | 'not_interested' | 'cleared' =
+                                next === null ? 'cleared' : next
+                            localFinalResponseRef.current = nextFinal
+                            setUserResponseFeatureState(event.id, nextFinal)
 
-                            // Mode visitor : vérifier si nom saisi
-                            if (isVisitorMode) {
-                                if (!visitorName) {
-                                    // Pas de nom, ouvrir modal et stocker réponse en attente
-                                    setPendingResponse(type)
-                                    setIsVisitorNameModalOpen(true)
-                                    return
-                                }
-                                // Nom présent, procéder avec la réponse visitor
-                                const newResponse = current === type ? 'cleared' : type
-
-                                // Utiliser le même système que les users : addEventResponse du context (optimiste + batch)
-                                // LastActivities lit directement initialResponse/finalResponse depuis le contexte
-                                addEventResponse(event.id, newResponse)
-                                return
-                            }
-
-                            // Déterminer la nouvelle réponse
-                            const newResponse = current === type ? 'cleared' : type
-
-                            // LastActivities lit directement initialResponse/finalResponse depuis le contexte
-
-                            // Cas 1: bouton "Pas intéressé" → toujours animé + différé 2s (sauf en mode visitor)
-                            if (type === 'not_interested') {
-                                if (!shouldFade) setShouldFade(true)
-                                if (pendingRemovalTimeoutRef.current) {
-                                    clearTimeout(pendingRemovalTimeoutRef.current)
-                                    pendingRemovalTimeoutRef.current = null
-                                }
-                                pendingRemovalTimeoutRef.current = window.setTimeout(() => {
-                                    toggleResponse(event.id, 'not_interested')
-                                    pendingRemovalTimeoutRef.current = null
-                                    // Fermer l'EventCard après l'animation et la mise à jour de la réponse
-                                    onClose?.()
-                                }, 2000)
-                                return
-                            }
-
-                            // Cas 2: sur Calendar (isMyEventsPage) si on reclique sur la même réponse (toggle -> cleared),
-                            // on applique le même pattern de fade + délai 2s pour permettre l'effondrement visuel
-                            if (isMyEventsPage && current === type) {
-                                if (!shouldFade) setShouldFade(true)
-                                if (pendingRemovalTimeoutRef.current) {
-                                    clearTimeout(pendingRemovalTimeoutRef.current)
-                                    pendingRemovalTimeoutRef.current = null
-                                }
-                                pendingRemovalTimeoutRef.current = window.setTimeout(() => {
-                                    // Appeler toggle avec le même type provoquera "cleared" via le hook
-                                    toggleResponse(event.id, type)
-                                    pendingRemovalTimeoutRef.current = null
-                                }, 2000)
-                                return
-                            }
-
-                            // Cas 3: autres interactions immédiates
-                            if (pendingRemovalTimeoutRef.current) {
-                                clearTimeout(pendingRemovalTimeoutRef.current)
-                                pendingRemovalTimeoutRef.current = null
-                            }
-                            if (shouldFade) setShouldFade(false)
-                            toggleResponse(event.id, type)
-                        }
-
-                        return (
-                            <Button
-                                key={type}
-                                variant={variant}
-                                onClick={onClick}
-                                className="response-button"
-                            >
-                                {label}
-                            </Button>
-                        )
-                    })}
-                </div>
-            )}
+                        }}
+                        className="event-response-buttons-container"
+                        buttonClassName="response-button"
+                        ariaLabel="Choix de réponse"
+                    />
+                )
+            })()}
 
             {/* Zone fixe 5 - bouton d'édition et toggle Online/Offline pour l'organisateur (sur page profil uniquement) */}
             {shouldShowEdit && (
@@ -505,15 +416,7 @@ export const EventCard = React.memo<EventCardProps>(({
     return (
         <>
             {cardContent}
-            <VisitorNameModal
-                isOpen={isVisitorNameModalOpen}
-                onClose={() => {
-                    setIsVisitorNameModalOpen(false)
-                    setPendingResponse(null)
-                }}
-                onConfirm={handleVisitorNameConfirm}
-                organizerName={event.organizerName}
-            />
+
         </>
     )
 })

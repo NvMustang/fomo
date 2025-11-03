@@ -43,7 +43,6 @@ export interface MapViewCoordinate {
 export interface MapViewProps {
   // Données
   events: Event[]
-  userResponses?: Record<string, string | null> // eventId -> response (peut être null)
 
   // Callbacks
   onEventClick?: (event: Event | null) => void

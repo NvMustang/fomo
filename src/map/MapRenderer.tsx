@@ -14,6 +14,7 @@ import Map, { MapRef, Source, Layer } from 'react-map-gl/maplibre'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { MapViewProps } from './types'
+import { attachFeatureStateController, detachFeatureStateController } from '@/map/featureStateController'
 import type { Event } from '@/types/fomoTypes'
 import { usePrivacy } from '@/contexts/PrivacyContext'
 
@@ -66,7 +67,9 @@ const MAP_CONFIG = {
     sources: {
       "maptiler-winter": {
         type: "raster" as const,
-        tiles: ["https://api.maptiler.com/maps/pastel/{z}/{x}/{y}.png?key=7hH5q5vBnOpJahLoSkxE"],
+        tiles: [
+          `https://api.maptiler.com/maps/pastel/{z}/{x}/{y}.png?key=${import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN}`
+        ],
         tileSize: 256,
         attribution: "© MapTiler © OpenStreetMap contributors",
       },
@@ -81,7 +84,7 @@ const MAP_CONFIG = {
         },
       },
     ],
-    glyphs: "https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=7hH5q5vBnOpJahLoSkxE",
+    glyphs: `https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=${import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN}`,
   },
 
   defaultRegion: {
@@ -265,17 +268,21 @@ const getEventLayers = (
           [
             "any",
             ["==", ["feature-state", "userResponse"], "seen"],
-            ["==", ["feature-state", "userResponse"], "cleared"]
+            ["==", ["feature-state", "userResponse"], "cleared"],
+            ["==", ["feature-state", "userResponse"], "not_interested"]
           ],
           getCSSVariable('--pin-color-seen', '#64748b'),
           getPrivacyColor(isPublicMode)
         ],
         "icon-opacity": [
           "case",
-          ["==", ["feature-state", "userResponse"], "interested"], 0.6,
           ["==", ["feature-state", "userResponse"], "going"], 0.8,
-          ["==", ["feature-state", "userResponse"], "seen"], 0.5,
-          ["==", ["feature-state", "userResponse"], "cleared"], 0.5,
+          ["==", ["feature-state", "userResponse"], "interested"], 0.6,
+          ["any",
+            ["==", ["feature-state", "userResponse"], "seen"],
+            ["==", ["feature-state", "userResponse"], "cleared"]
+          ], 0.8,
+          ["==", ["feature-state", "userResponse"], "not_interested"], 0.2,
           1.0
         ],
 
@@ -291,7 +298,6 @@ const getEventLayers = (
 const MapRendererComponent: React.FC<MapViewProps> = (
   {
     events,
-    userResponses = {},
     onEventClick,
     onClusterClick,
     onMapReady,
@@ -300,6 +306,9 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     onEventCentered,
   }
 ) => {
+  // Ne pas monter la carte si la clé MapTiler est manquante pour éviter des 403
+  const mapTilerKey = import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN
+  const isKeyMissing = !mapTilerKey || mapTilerKey.trim().length === 0
   // Récupérer isPublicMode du contexte PrivacyContext
   const { isPublicMode } = usePrivacy()
 
@@ -444,52 +453,40 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
 
 
-  // Synchroniser userResponses -> feature-state pour la couleur, l'opacité et le halo
-  // Utilise useRef pour garder une référence de l'état précédent et ne mettre à jour que ce qui a changé
-  const prevUserResponsesRef = useRef<Record<string, string>>({})
+  // (plus de cache userResponses local)
 
-  useEffect(() => {
-    const map = mapRef.current?.getMap()
-    if (!map || !mapLoaded || !map.isStyleLoaded()) return
+  // ===== FeatureState Controller (local à MapRenderer) =====
+  const featureStateControllerRef = useRef<{ setUserResponse: (eventId: string, response: string | null) => void }>()
 
-    const src = map.getSource('events') as any
-    if (!src) return
+  if (!featureStateControllerRef.current) {
+    featureStateControllerRef.current = {
+      setUserResponse: (eventId: string, response: string | null) => {
+        const map = mapRef.current?.getMap()
+        if (!map || !mapLoaded || !map.isStyleLoaded()) return
+        const src = map.getSource('events') as any
+        if (!src) return
 
-    const prevUserResponses = prevUserResponsesRef.current
+        // Normalisation: null ou 'invited' -> supprimer la feature-state (ne rien faire visuellement)
+        const normalized: string | null = !response || response === 'invited' ? null : response
 
-    // Mettre à jour tous les événements (le mapper garantit maintenant que tous sont présents)
-    events.forEach(event => {
-      const eventId = event.id
-      // Le mapper garantit que userResponses[eventId] existe toujours ('' si pas de réponse)
-      const rawResponse = userResponses[eventId] || ''
-      // Traiter "invited" comme "null" (chaîne vide) pour le style des pins
-      const currentResponse = rawResponse === 'invited' ? '' : rawResponse
-      const previousResponse = prevUserResponses[eventId] || ''
-
-      // Ne mettre à jour que si la réponse a changé
-      if (currentResponse !== previousResponse) {
         try {
-          // Toujours passer une chaîne (jamais null/undefined) - MapLibre exige des valeurs précises
-          map.setFeatureState({ source: 'events', id: eventId }, {
-            userResponse: currentResponse
-          })
+          if (normalized === null) {
+            map.removeFeatureState({ source: 'events', id: eventId }, 'userResponse')
+          } else {
+            map.setFeatureState({ source: 'events', id: eventId }, { userResponse: normalized })
+          }
         } catch (e) {
-          // Ignorer les erreurs pour les features qui n'existent pas encore
-          console.debug('[MapRenderer] setFeatureState skipped (feature missing)', { eventId })
+          console.debug('[MapRenderer] controller feature-state update skipped (feature missing)', { eventId })
         }
       }
-    })
+    }
+  }
 
-    // Mettre à jour la référence pour la prochaine comparaison
-    // Convertir les valeurs null en chaînes vides et traiter "invited" comme '' pour correspondre au feature-state
-    prevUserResponsesRef.current = Object.fromEntries(
-      Object.entries(userResponses).map(([key, value]) => {
-        const normalized = value || ''
-        // Traiter "invited" comme "null" (chaîne vide) pour le style des pins
-        return [key, normalized === 'invited' ? '' : normalized]
-      })
-    )
-  }, [userResponses, mapLoaded, events])
+  // Attacher/détacher le contrôleur global
+  useEffect(() => {
+    attachFeatureStateController(() => mapRef.current?.getMap())
+    return () => detachFeatureStateController()
+  }, [])
 
 
 
@@ -502,48 +499,62 @@ const MapRendererComponent: React.FC<MapViewProps> = (
       className="map-container"
       style={style}
     >
-      <Map
-        ref={mapRef}
-        mapLib={maplibregl}
-        initialViewState={defaultViewState}
-        mapStyle={MAP_CONFIG.defaultStyle}
-        interactiveLayerIds={['events-unclustered', 'events-cluster', 'events-cluster-count']}
-        onClick={handleClick}
-        onLoad={handleMapLoad}
-        attributionControl={false}
-      >
-        {eventsSource && eventsSource.data && eventsSource.data.features && eventsSource.data.features.length > 0 && (() => {
-          // Nettoyer le tempLayer avant de créer les autres layers
-          const map = mapRef.current?.getMap()
-          if (map && mapLoaded && map.isStyleLoaded()) {
-            try {
-              if (map.getLayer('tempLayer')) {
-                map.removeLayer('tempLayer')
+      {isKeyMissing ? (
+        <div style={{ padding: 12 }}>
+          <span style={{ fontSize: 14 }}>
+            Carte désactivée: clé MapTiler manquante (VITE_MAPLIBRE_ACCESS_TOKEN).
+          </span>
+        </div>
+      ) : (
+        <Map
+          ref={mapRef}
+          mapLib={maplibregl}
+          initialViewState={defaultViewState}
+          mapStyle={MAP_CONFIG.defaultStyle}
+          /* Limiter la navigation pour réduire les appels de tuiles */
+          minZoom={6}
+          maxZoom={18}
+          maxBounds={[[2.2, 49.2], [6.7, 51.7]]}
+          /* Désactiver le préchargement de tuiles hors écran */
+          prefetchZoomDelta={0}
+          interactiveLayerIds={['events-unclustered', 'events-cluster', 'events-cluster-count']}
+          onClick={handleClick}
+          onLoad={handleMapLoad}
+          attributionControl={false}
+        >
+          {eventsSource && eventsSource.data && eventsSource.data.features && eventsSource.data.features.length > 0 && (() => {
+            // Nettoyer le tempLayer avant de créer les autres layers
+            const map = mapRef.current?.getMap()
+            if (map && mapLoaded && map.isStyleLoaded()) {
+              try {
+                if (map.getLayer('tempLayer')) {
+                  map.removeLayer('tempLayer')
+                }
+              } catch (e) {
+                // Ignorer les erreurs
               }
-            } catch (e) {
-              // Ignorer les erreurs
             }
-          }
 
-          return (
-            <Source id="events" {...eventsSource}>
-              {getEventLayers(isPublicMode).map(layer => {
-                return (
-                  <Layer
-                    key={layer.id}
-                    id={layer.id}
-                    type={layer.type as any}
-                    source={layer.source}
-                    filter={layer.filter as any}
-                    paint={layer.paint}
-                    layout={layer.layout}
-                  />
-                )
-              })}
-            </Source>
-          )
-        })()}
-      </Map>
+            return (
+              <Source id="events" {...eventsSource}>
+                {getEventLayers(isPublicMode).map(layer => {
+                  return (
+                    <Layer
+                      key={layer.id}
+                      id={layer.id}
+                      type={layer.type as any}
+                      source={layer.source}
+                      filter={layer.filter as any}
+                      paint={layer.paint}
+                      layout={layer.layout}
+                    />
+                  )
+                })}
+              </Source>
+            )
+          })()}
+        </Map>
+      )}
 
     </div>
   )

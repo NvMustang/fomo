@@ -4,20 +4,74 @@
  */
 
 import type { UserResponse, UserResponseValue } from '@/types/fomoTypes'
+import { setUserResponseFeatureState } from '@/map/featureStateController'
 import { format } from 'date-fns'
 
 /**
- * Helper local : Obtient la dernière réponse d'un utilisateur pour un événement
+ * HELPERS PARTAGÉS POUR RÉPONSES
+ * Fonctions pures utilisées par UserDataContext et VisitorDataContext
  */
-function getLatestResponseLocal(
+
+/**
+ * Obtient la dernière réponse d'un utilisateur pour un événement
+ */
+export function getLatestResponse(
     responses: UserResponse[],
     userId: string,
     eventId: string
 ): UserResponse | null {
     const userEventResponses = responses
-        .filter(r => r.userId === userId && r.eventId === eventId && !r.deletedAt)
+        .filter(r => r.userId === userId && r.eventId === eventId)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return userEventResponses.length > 0 ? userEventResponses[0] : null
+}
+
+/**
+ * Obtient la réponse actuelle (finalResponse) d'un utilisateur pour un événement
+ */
+export function getCurrentResponse(
+    responses: UserResponse[],
+    userId: string,
+    eventId: string
+): UserResponseValue {
+    const latest = getLatestResponse(responses, userId, eventId)
+    return latest ? latest.finalResponse : null
+}
+
+/**
+ * Obtient un Map des dernières réponses par événement pour un utilisateur
+ */
+export function getLatestResponsesByEvent(
+    responses: UserResponse[],
+    userId: string
+): Map<string, UserResponse> {
+    const userResponses = responses.filter(r => r.userId === userId)
+    const latestMap = new Map<string, UserResponse>()
+    userResponses.forEach(r => {
+        const existing = latestMap.get(r.eventId)
+        if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+            latestMap.set(r.eventId, r)
+        }
+    })
+    return latestMap
+}
+
+/**
+ * Obtient un Map des dernières réponses par utilisateur pour un événement
+ */
+export function getLatestResponsesByUser(
+    responses: UserResponse[],
+    eventId: string
+): Map<string, UserResponse> {
+    const eventResponses = responses.filter(r => r.eventId === eventId)
+    const latestMap = new Map<string, UserResponse>()
+    eventResponses.forEach(r => {
+        const existing = latestMap.get(r.userId)
+        if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+            latestMap.set(r.userId, r)
+        }
+    })
+    return latestMap
 }
 
 // Type pour FomoDataManager (éviter import circulaire)
@@ -120,7 +174,7 @@ export function addEventResponseShared(config: AddEventResponseConfig): void {
 
     // Déterminer initialResponse : dernière réponse actuelle pour ce user+event
     setResponses(prev => {
-        const latest = getLatestResponseLocal(prev, userId, eventId)
+        const latest = getLatestResponse(prev, userId, eventId)
         const initialResponse = latest ? latest.finalResponse : null
 
         console.log(`🔄 [${contextName}] addEventResponse:`, eventId, `${initialResponse} -> ${finalResponse}`, 'userId:', userId, invitedByUserIdValue !== 'none' ? `invitedByUserId: ${invitedByUserIdValue}` : '')
@@ -141,6 +195,13 @@ export function addEventResponseShared(config: AddEventResponseConfig): void {
         } catch (error) {
             console.error(`❌ [${contextName}] Erreur lors de l'ajout de la réponse:`, error)
             // Le rollback sera géré par le catch ci-dessous
+        }
+
+        // Mettre à jour la carte impérativement via le controller (sans props/event bus)
+        try {
+            setUserResponseFeatureState(eventId, finalResponse)
+        } catch {
+            // ignorer si la carte n'est pas prête
         }
 
         return updated
