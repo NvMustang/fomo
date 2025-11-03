@@ -14,6 +14,7 @@ import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import type { Tag } from '@/types/fomoTypes'
 import { useToast } from '@/hooks'
 import { useAuth } from '@/contexts/AuthContext'
+import { getUser } from '@/utils/filterTools'
 import { StockImagePicker } from '@/components/ui/StockImagePicker'
 import { FomoDatePicker } from '@/components/ui/DatePicker'
 import { format, addHours } from 'date-fns'
@@ -30,7 +31,7 @@ interface CreateEventModalProps {
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, editMode = false, initialEvent }) => {
   const { isPublicMode } = usePrivacy()
   const { user, isPublicUser } = useAuth()
-  const { createEvent, updateEvent, getTags, addEventResponse } = useFomoDataContext()
+  const { createEvent, updateEvent, getTags, addEventResponse, users } = useFomoDataContext()
   const { showToast } = useToast()
 
   // Fonctions pour gérer les toasts avec le système unifié
@@ -175,7 +176,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         address: initialEvent.venue.address || '',
       })
       if (user?.isAmbassador) {
-        setExternalOrganizerName(initialEvent.organizerName || '')
+        // Récupérer le nom depuis users, sinon fallback sur organizerName (pour compatibilité avec anciens événements)
+        const organizer = initialEvent.organizerId ? getUser(users || [], initialEvent.organizerId) : undefined
+        setExternalOrganizerName(organizer?.name || initialEvent.organizerName || '')
       }
     } else if (isOpen && !editMode) {
       // Réinitialiser pour mode création

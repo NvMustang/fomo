@@ -9,7 +9,8 @@ import { fr } from 'date-fns/locale'
 
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { useAuth } from '@/contexts/AuthContext'
-import { setUserResponseFeatureState } from '@/map/featureStateController'
+import { setUserResponseFeatureState } from '@/map/stylingPinsController'
+import { getUser } from '@/utils/filterTools'
 
 // notifyResponseChange supprimé : LastActivities lit directement initialResponse/finalResponse depuis le contexte
 
@@ -293,7 +294,10 @@ export const EventCard = React.memo<EventCardProps>(({
 
                     {/* Organisateur - affiché seulement lors de l'expansion, après la description */}
                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                        👤 {event.organizerName || 'Organisateur inconnu'}
+                        👤 {(() => {
+                            const organizer = getUser(users || [], event.organizerId)
+                            return organizer?.name || event.organizerId || 'Organisateur inconnu'
+                        })()}
                     </div>
 
                     <div className="event-info-grid">

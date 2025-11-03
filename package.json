@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fomo:start": "bash ./fomo-scripts/start.sh",
+    "fomo:stop": "bash ./fomo-scripts/stop.sh",
+    "fomo:restart": "bash ./fomo-scripts/restart.sh",
+    "fomo:status": "bash ./fomo-scripts/status.sh"
   },
   "dependencies": {
     "@types/react-datepicker": "^6.2.0",

@@ -6,9 +6,9 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef } from 'react'
 import { useFomoData } from '@/utils/dataManager'
-import type { Event, UserResponse } from '@/types/fomoTypes'
+import type { Event, UserResponse, UserResponseValue } from '@/types/fomoTypes'
 import type { FomoDataContextType } from './UserDataContext'
-import { addEventResponseShared } from '@/utils/eventResponseUtils'
+import { addEventResponseShared, getLatestResponse, getCurrentResponse as getCurrentResponseShared, getLatestResponsesByEvent as getLatestResponsesByEventShared, getLatestResponsesByUser as getLatestResponsesByUserShared } from '@/utils/eventResponseUtils'
 import { useAuth } from './AuthContext'
 
 // ===== TYPES =====
@@ -22,7 +22,8 @@ export type VisitorDataContextType =
     Pick<FomoDataContextType,
         'events' | 'responses' |
         'addEventResponse' | 'invalidateCache' |
-        'isLoading' | 'hasError' | 'dataReady'
+        'isLoading' | 'hasError' | 'dataReady' |
+        'getLatestResponse' | 'getCurrentResponse' | 'getLatestResponsesByEvent' | 'getLatestResponsesByUser'
     > &
     // Propriétés optionnelles (stubs pour compatibilité avec useFomoDataContext)
     Partial<Pick<FomoDataContextType,
@@ -175,13 +176,13 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         }
 
         // Lancer la création en arrière-plan (non bloquant, mais une seule fois grâce à visitorCreatePromiseRef)
-        visitorCreatePromiseRef.current?.catch(() => {})
+        visitorCreatePromiseRef.current?.catch(() => { })
 
         // 2. Utiliser la fonction partagée (optimiste + batch) - exactement comme UserDataContext
         addEventResponseShared({
             userId: visitorUserIdRef.current,
             eventId,
-            response,
+            finalResponse: response,
             invitedByUserId: options?.invitedByUserId,
             setResponses,
             fomoData,
@@ -194,7 +195,22 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         throw new Error('Cette fonctionnalité n\'est pas disponible en mode visiteur')
     }
 
+    // Helpers pour réponses (partagés avec UserDataContext)
+    const getLatestResponseHelper = useCallback((userId: string, eventId: string): UserResponse | null => {
+        return getLatestResponse(responses, userId, eventId)
+    }, [responses])
 
+    const getCurrentResponseHelper = useCallback((userId: string, eventId: string): UserResponseValue => {
+        return getCurrentResponseShared(responses, userId, eventId)
+    }, [responses])
+
+    const getLatestResponsesByEventHelper = useCallback((userId: string): Map<string, UserResponse> => {
+        return getLatestResponsesByEventShared(responses, userId)
+    }, [responses])
+
+    const getLatestResponsesByUserHelper = useCallback((eventId: string): Map<string, UserResponse> => {
+        return getLatestResponsesByUserShared(responses, eventId)
+    }, [responses])
 
     const value = useMemo((): VisitorDataContextType => ({
         // Données (requises)
@@ -204,6 +220,12 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         // Actions (requises)
         addEventResponse,
         invalidateCache: fomoData.invalidateCache,
+
+        // Helpers pour réponses (requis - partagés avec UserDataContext)
+        getLatestResponse: getLatestResponseHelper,
+        getCurrentResponse: getCurrentResponseHelper,
+        getLatestResponsesByEvent: getLatestResponsesByEventHelper,
+        getLatestResponsesByUser: getLatestResponsesByUserHelper,
 
         // États globaux (requis - valeurs constantes pour Visitor)
         isLoading: false,
@@ -241,7 +263,11 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         visitorEvent,
         addEventResponse,
         fomoData.invalidateCache,
-        authLogin
+        authLogin,
+        getLatestResponseHelper,
+        getCurrentResponseHelper,
+        getLatestResponsesByEventHelper,
+        getLatestResponsesByUserHelper
     ])
 
     return (

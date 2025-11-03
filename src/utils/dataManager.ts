@@ -769,7 +769,7 @@ const fomoDataApi = {
     getResponses: () => fomoDataManager.getResponses(),
 
     // Batch
-    addEventResponse: (userId: string, eventId: string, response: UserResponseValue, invitedByUserId: string) => fomoDataManager.addEventResponse(userId, eventId, response, invitedByUserId),
+    addEventResponse: (userId: string, eventId: string, initialResponse: UserResponseValue, finalResponse: UserResponseValue, invitedByUserId: string) => fomoDataManager.addEventResponse(userId, eventId, initialResponse, finalResponse, invitedByUserId),
     addFriendshipAction: (userId: string, type: 'accept' | 'block' | 'remove', friendshipId: string, toUserId: string) => fomoDataManager.addFriendshipAction(userId, type, friendshipId, toUserId),
 
     // Cache

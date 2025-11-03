@@ -40,7 +40,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   onEventCentered
 }) => {
   // ===== HOOKS CONTEXTUELS =====
-  const { getLocalDiscoverEvents } = useFilters()
+  const { getDiscoverEvents } = useFilters()
   const { isAuthenticated } = useAuth()
   const { isPublicMode } = usePrivacy()
 
@@ -73,7 +73,8 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   }, [isVisitorMode])
 
   // ===== CONSTANTES ET CALCULS SIMPLES =====
-  const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getLocalDiscoverEvents().events
+  // Source stable pour la carte: utiliser getDiscoverEvents (pas de filtrage local)
+  const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getDiscoverEvents().events
 
   // ===== FONCTIONS UTILITAIRES =====
   const generateRandomPointsInRadius = useCallback((centerLat: number, centerLng: number, radiusKm: number, count: number): Array<{ lat: number; lng: number }> => {

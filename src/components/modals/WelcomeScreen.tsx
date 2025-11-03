@@ -59,7 +59,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     </>
                 )}
             </motion.div>
-            {!isAuthenticated && (
+            {!isAuthenticated && !showSpinner && (
                 <div className="welcome-auth-overlay">
                     <AuthModal />
                 </div>

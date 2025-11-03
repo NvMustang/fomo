@@ -14,7 +14,7 @@
  * 7) Utilitaires pour les invitations (groupUsersByResponses)
  */
 
-import type { Event, UserResponseValue, Periods, CalendarPeriod, UserResponse, Friendship } from '@/types/fomoTypes'
+import type { Event, UserResponseValue, Periods, CalendarPeriod, UserResponse, Friendship, User } from '@/types/fomoTypes'
 import {
     isWeekend,
     isSameWeek,
@@ -27,8 +27,8 @@ import {
     endOfMonth,
     addWeeks,
     addMonths,
+    isPast,
 
-    isPast
 } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 
@@ -37,9 +37,8 @@ import { toZonedTime } from 'date-fns-tz'
 
 // Périodes communes pour filtres et calendrier
 export const TIME_PERIODS = [
-    { key: 'all', label: 'Tous' },
-    // Ordre d'affichage dans le calendrier : passé → présent → futur
 
+    // Ordre d'affichage dans le calendrier : passé → présent → futur
     { key: 'past', label: 'Passés' },
     { key: 'today', label: 'Aujourd\'hui' },
     { key: 'tomorrow', label: 'Demain' },
@@ -80,6 +79,7 @@ export interface FilterConfig {
 }
 
 // Utilitaire: type de réponse minimal (compatibilité ancien système)
+// Note: userResponsesMapper utilise maintenant UserResponse directement
 type MinimalResponse = { eventId: string; userId?: string; response: UserResponseValue }
 
 
@@ -223,7 +223,7 @@ export function matchOrganizer(event: Event, organizerId?: string): boolean {
  */
 export function matchPeriod(event: Event, period?: Periods): boolean {
     if (!period || period === 'all') return true
-    const eventPeriod = getCalendarPeriod(event)
+    const eventPeriod = getPeriod(event)
     return eventPeriod.key === period
 }
 
@@ -233,13 +233,13 @@ export function matchPeriod(event: Event, period?: Periods): boolean {
  * pour l'utilisateur courant, limité à la liste d'événements fournie.
  * 
  * @param events - Liste d'événements pour filtrer les réponses pertinentes
- * @param userResponses - Liste de réponses utilisateur (format MinimalResponse)
+ * @param userResponses - Liste de réponses utilisateur (UserResponse[] ou MinimalResponse[])
  * @param currentUserId - ID de l'utilisateur courant (optionnel)
  * @returns Dictionnaire eventId -> response normalisé (chaîne vide pour valeurs falsy)
  */
 export function userResponsesMapper(
     events: Event[],
-    userResponses: MinimalResponse[],
+    userResponses: UserResponse[] | MinimalResponse[],
     currentUserId?: string
 ): Record<string, string> {
     // Initialiser TOUS les événements avec une chaîne vide par défaut
@@ -257,12 +257,35 @@ export function userResponsesMapper(
 
     // NOUVEAU SYSTÈME : Utiliser la dernière réponse par event (finalResponse)
     // Grouper par eventId et garder la plus récente
-    const latestByEvent = new Map<string, UserResponse>()
+    // Support à la fois UserResponse (avec createdAt/finalResponse) et MinimalResponse (avec response)
+    const latestByEvent = new Map<string, { finalResponse: UserResponseValue; createdAt?: string }>()
+
     userResponses.forEach(r => {
-        if (r.userId === currentUserId && eventIds.has(r.eventId)) {
-            const existing = latestByEvent.get(r.eventId)
-            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
-                latestByEvent.set(r.eventId, r)
+        // Détecter le format : UserResponse ou MinimalResponse
+        const isUserResponse = 'finalResponse' in r && 'createdAt' in r
+        const response = isUserResponse ? (r as UserResponse).finalResponse : (r as MinimalResponse).response
+        const createdAt = isUserResponse ? (r as UserResponse).createdAt : undefined
+        const userId = r.userId
+        const eventId = r.eventId
+
+        if (userId === currentUserId && eventIds.has(eventId)) {
+            const existing = latestByEvent.get(eventId)
+
+            if (!existing) {
+                latestByEvent.set(eventId, { finalResponse: response, createdAt })
+            } else if (createdAt && existing.createdAt) {
+                // Si les deux ont createdAt, prendre la plus récente
+                if (new Date(createdAt) > new Date(existing.createdAt)) {
+                    latestByEvent.set(eventId, { finalResponse: response, createdAt })
+                }
+            } else if (!existing.createdAt && createdAt) {
+                // Si seulement le nouveau a createdAt, le prendre
+                latestByEvent.set(eventId, { finalResponse: response, createdAt })
+            } else if (!existing.finalResponse || existing.finalResponse === 'cleared') {
+                // Si pas de createdAt, prendre le premier ou remplacer si cleared
+                if (response && response !== 'cleared') {
+                    latestByEvent.set(eventId, { finalResponse: response, createdAt })
+                }
             }
         }
     })
@@ -395,7 +418,7 @@ export function findResponseOption(
 
 // ===== 6) CALENDRIER =====
 /** Ordre de filtrage: past, today, tomorrow, thisWeekend, thisWeek, nextWeek, thisMonth, nextMonth */
-function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string; startDate: Date; endDate: Date } {
+function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: string; startDate: Date; endDate: Date } {
     const now = new Date()
 
     // Variables centralisées pour toutes les périodes
@@ -406,39 +429,39 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
 
 
     // 1. Past
-    if (isPast(eventDate)) {
+    if (isPast(endDate)) {
         return {
             key: 'past',
             label: 'Passés',
             startDate: new Date(0),
-            endDate: eventDate
+            endDate: endDate
         }
     }
 
     // 2. Today
-    if (isToday(eventDate)) {
+    if (isToday(startDate)) {
         return {
             key: 'today',
             label: 'Aujourd\'hui',
-            startDate: eventDate,
-            endDate: new Date(eventDate.getTime() + 24 * 60 * 60 * 1000)
+            startDate: startDate,
+            endDate: new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
         }
     }
 
     // 3. Tomorrow
-    if (isTomorrow(eventDate)) {
+    if (isTomorrow(startDate)) {
         return {
             key: 'tomorrow',
             label: 'Demain',
-            startDate: eventDate,
-            endDate: new Date(eventDate.getTime() + 24 * 60 * 60 * 1000)
+            startDate: startDate,
+            endDate: new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
         }
     }
 
     // 4. ThisWeekend (samedi ou dimanche de cette semaine)
-    if (isWeekend(eventDate) && isSameWeek(eventDate, now, { weekStartsOn: 1 })) {
-        const weekendStart = startOfWeek(eventDate, { weekStartsOn: 6 })
-        const weekendEnd = endOfWeek(eventDate, { weekStartsOn: 6 })
+    if (isWeekend(startDate) && isSameWeek(startDate, now, { weekStartsOn: 1 })) {
+        const weekendStart = startOfWeek(startDate, { weekStartsOn: 6 })
+        const weekendEnd = endOfWeek(startDate, { weekStartsOn: 6 })
         return {
             key: 'thisWeekend',
             label: 'Ce week-end',
@@ -448,7 +471,7 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
     }
 
     // 5. ThisWeek (lundi à dimanche, ISO 8601)
-    if (isSameWeek(eventDate, now, { weekStartsOn: 1 })) {
+    if (isSameWeek(startDate, now, { weekStartsOn: 1 })) {
         const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 })
         const thisWeekEnd = endOfWeek(now, { weekStartsOn: 1 })
         return {
@@ -460,7 +483,7 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
     }
 
     // 6. NextWeek
-    if (isSameWeek(eventDate, nextWeek, { weekStartsOn: 1 })) {
+    if (isSameWeek(startDate, nextWeek, { weekStartsOn: 1 })) {
         const nextWeekStart = startOfWeek(nextWeek, { weekStartsOn: 1 })
         const nextWeekEnd = endOfWeek(nextWeek, { weekStartsOn: 1 })
         return {
@@ -472,7 +495,7 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
     }
 
     // 7. ThisMonth
-    if (isSameMonth(eventDate, now)) {
+    if (isSameMonth(startDate, now)) {
         const thisMonthStart = startOfMonth(now)
         const thisMonthEnd = endOfMonth(now)
         return {
@@ -484,7 +507,7 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
     }
 
     // 8. NextMonth
-    if (isSameMonth(eventDate, nextMonth)) {
+    if (isSameMonth(startDate, nextMonth)) {
         const nextMonthStart = startOfMonth(nextMonth)
         const nextMonthEnd = endOfMonth(nextMonth)
         return {
@@ -499,8 +522,8 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
     return {
         key: 'other',
         label: 'Autres',
-        startDate: eventDate,
-        endDate: eventDate
+        startDate: startDate,
+        endDate: endDate,
     }
 }
 
@@ -508,7 +531,7 @@ function getCalendarPeriodByDate(eventDate: Date): { key: string; label: string;
  * Détermine la période calendaire d'un évènement en tenant compte des deux dates (start/end)
  * et du fuseau horaire utilisateur. Priorité: "Passés" si l'événement est terminé.
  */
-export function getCalendarPeriod(event: Event): { key: string; label: string; startDate: Date; endDate: Date } {
+export function getPeriod(event: Event): { key: string; label: string; startDate: Date; endDate: Date } {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const nowTz = toZonedTime(new Date(), userTimezone)
 
@@ -516,29 +539,20 @@ export function getCalendarPeriod(event: Event): { key: string; label: string; s
     const startTz = toZonedTime(event.startsAt, userTimezone)
     const endTz = toZonedTime(event.endsAt, userTimezone)
 
-    // 1) Passés si déjà terminé
-    if (endTz.getTime() < nowTz.getTime()) {
-        return {
-            key: 'past',
-            label: 'Passés',
-            startDate: new Date(0),
-            endDate: nowTz
-        }
-    }
 
     // 2) Futur/présent: déléguer à la logique existante avec la date de début locale
-    return getCalendarPeriodByDate(startTz)
+    return getPeriodByDate(startTz, endTz)
 }
 
 /**
  * Groupe les événements par période calendaire
  */
-export function groupEventsByCalendarPeriod(events: Event[]): { periods: CalendarPeriod[]; totalEvents: number } {
+export function groupEventsByPeriods(events: Event[]): { periods: CalendarPeriod[]; totalEvents: number } {
     const periodMap = new Map<string, CalendarPeriod>()
 
     events.forEach(event => {
         // Utiliser une logique basée sur start+end avec fuseau et priorité aux passés
-        const period = getCalendarPeriod(event)
+        const period = getPeriod(event)
 
         // Exclure les événements non classés ('other') du calendrier
         if (period.key === 'other') {
@@ -733,5 +747,69 @@ export function groupUsersByFriendships<User extends { friendship: Friendship; i
         sentRequests,
         blockedUsers
     }
+}
+
+// ===== UTILITAIRES USERS =====
+
+/**
+ * Récupère un utilisateur par son ID depuis une liste d'utilisateurs.
+ * 
+ * @param users - Liste d'utilisateurs
+ * @param userId - ID de l'utilisateur à rechercher
+ * @returns L'utilisateur trouvé ou undefined si non trouvé
+ */
+export function getUser(users: User[], userId: string): User | undefined {
+    if (!users || users.length === 0 || !userId) return undefined
+    return users.find(u => u.id === userId)
+}
+
+/**
+ * Crée une Map des utilisateurs par ID pour des recherches rapides.
+ * 
+ * @param users - Liste d'utilisateurs
+ * @returns Map<userId, User>
+ */
+export function createUsersMap(users: User[]): Map<string, User> {
+    const usersMap = new Map<string, User>()
+    if (users && users.length > 0) {
+        for (const u of users) {
+            if (u.id) {
+                usersMap.set(u.id, u)
+            }
+        }
+    }
+    return usersMap
+}
+
+/**
+ * Filtre une liste d'utilisateurs sur base d'une liste d'IDs.
+ * 
+ * @param users - Liste complète d'utilisateurs
+ * @param userIds - Liste d'IDs d'utilisateurs à récupérer
+ * @returns Liste des utilisateurs correspondants aux IDs fournis (dans l'ordre des IDs)
+ */
+export function getUsersByIds(users: User[], userIds: string[]): User[] {
+    if (!users || users.length === 0 || !userIds || userIds.length === 0) {
+        return []
+    }
+
+    // Créer un Set pour des recherches rapides
+    const userIdsSet = new Set(userIds)
+
+    // Filtrer les users présents dans le Set
+    return users.filter(u => u.id && userIdsSet.has(u.id))
+}
+
+/**
+ * Filtre une liste d'utilisateurs sur base d'une liste d'IDs et retourne une Map.
+ * Plus performant si on a besoin de faire plusieurs recherches par ID.
+ * 
+ * @param users - Liste complète d'utilisateurs
+ * @param userIds - Liste d'IDs d'utilisateurs à récupérer
+ * @returns Map<userId, User> contenant uniquement les utilisateurs correspondants
+ */
+export function getUsersMapByIds(users: User[], userIds: string[]): Map<string, User> {
+    const filteredUsers = getUsersByIds(users, userIds)
+    return createUsersMap(filteredUsers)
 }
 

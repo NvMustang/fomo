@@ -151,6 +151,8 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
               <div className="form-section">
                 <input
                   type="email"
+                  name="logEmail"
+                  id="auth-logEmail"
                   className="form-input"
                   placeholder="Ex: marie@exemple.com"
                   value={email}
@@ -236,6 +238,8 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
               <label className="form-label">Email (confirmé)</label>
               <input
                 type="email"
+                name="signEmail"
+                id="auth-signEmail"
                 className="form-input"
                 value={email}
                 disabled

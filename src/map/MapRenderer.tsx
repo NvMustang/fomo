@@ -14,9 +14,13 @@ import Map, { MapRef, Source, Layer } from 'react-map-gl/maplibre'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { MapViewProps } from './types'
-import { attachFeatureStateController, detachFeatureStateController } from '@/map/featureStateController'
+import { attachStylingPinsController, detachStylingPinsController } from '@/map/stylingPinsController'
 import type { Event } from '@/types/fomoTypes'
 import { usePrivacy } from '@/contexts/PrivacyContext'
+import { useFilters } from '@/contexts/FiltersContext'
+import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useAuth } from '@/contexts/AuthContext'
+import { userResponsesMapper } from '@/utils/filterTools'
 
 
 // ===== UTILITAIRES DE COULEURS =====
@@ -96,9 +100,16 @@ const MAP_CONFIG = {
 }
 
 // ===== CRÉATION DE SOURCE EN GEOJSON===== 
-const createEventsSource = (eventsToShow: Event[]) => {
+/**
+ * Crée une source GeoJSON avec les événements et leurs réponses utilisateur initiales.
+ * Les réponses sont incluses dans properties.userResponse pour le styling initial des pins.
+ */
+const createEventsSource = (eventsToShow: Event[], userResponsesMap: Record<string, string> = {}) => {
 
   const features = eventsToShow.map((e) => {
+    // Récupérer la réponse initiale depuis le mapping (ou '' si aucune)
+    const initialResponse = userResponsesMap[e.id] || ''
+
     const feature = {
       type: "Feature" as const,
       id: e.id, // nécessaire pour setFeatureState
@@ -106,6 +117,8 @@ const createEventsSource = (eventsToShow: Event[]) => {
         id: e.id,
         score: (e.stats?.going || 0) + (e.stats?.interested || 0),
         isPublic: e.isPublic || 'false',
+        // Réponse initiale pour le styling au montage (priorité inférieure à feature-state)
+        userResponse: initialResponse,
       },
       geometry: {
         type: "Point" as const,
@@ -263,26 +276,27 @@ const getEventLayers = (
         "icon-ignore-placement": true
       },
       paint: {
+        // Utilise coalesce: priorité à feature-state (instantané), sinon properties.userResponse (initial)
         "icon-color": [
           "case",
           [
             "any",
-            ["==", ["feature-state", "userResponse"], "seen"],
-            ["==", ["feature-state", "userResponse"], "cleared"],
-            ["==", ["feature-state", "userResponse"], "not_interested"]
+            ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
+            ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"],
+            ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"]
           ],
           getCSSVariable('--pin-color-seen', '#64748b'),
           getPrivacyColor(isPublicMode)
         ],
         "icon-opacity": [
           "case",
-          ["==", ["feature-state", "userResponse"], "going"], 0.8,
-          ["==", ["feature-state", "userResponse"], "interested"], 0.6,
+          ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "going"], 0.8,
+          ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "interested"], 0.6,
           ["any",
-            ["==", ["feature-state", "userResponse"], "seen"],
-            ["==", ["feature-state", "userResponse"], "cleared"]
+            ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
+            ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"]
           ], 0.8,
-          ["==", ["feature-state", "userResponse"], "not_interested"], 0.2,
+          ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"], 0.2,
           1.0
         ],
 
@@ -311,9 +325,21 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   const isKeyMissing = !mapTilerKey || mapTilerKey.trim().length === 0
   // Récupérer isPublicMode du contexte PrivacyContext
   const { isPublicMode } = usePrivacy()
+  const { getMapFilterIds } = useFilters()
+
+  // Récupérer les réponses utilisateur pour mapper les réponses initiales dans les properties
+  const { responses } = useFomoDataContext()
+  const { user } = useAuth()
+
+  // Mapper les réponses utilisateur pour avoir les réponses initiales par eventId
+  const userResponsesMap = userResponsesMapper(events || [], responses, user?.id)
 
   const mapRef = useRef<MapRef>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
+
+  // Source stable : créer une fois avec tous les événements et leurs réponses initiales
+  // On mettra à jour les données filtrées via setData (plus performant que recréer la source)
+  const eventsSource = events && events.length > 0 ? createEventsSource(events, userResponsesMap) : null
 
   // Fonction helper pour centrer sur un événement (réutilise la logique existante)
   const centerOnEvent = useCallback((event: Event) => {
@@ -376,8 +402,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
 
 
-  // Création de la source des événements
-  const eventsSource = events && events.length > 0 ? createEventsSource(events) : null
 
 
 
@@ -451,42 +475,71 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     }
   }, [onMapReady])
 
-
-
-  // (plus de cache userResponses local)
-
-  // ===== FeatureState Controller (local à MapRenderer) =====
-  const featureStateControllerRef = useRef<{ setUserResponse: (eventId: string, response: string | null) => void }>()
-
-  if (!featureStateControllerRef.current) {
-    featureStateControllerRef.current = {
-      setUserResponse: (eventId: string, response: string | null) => {
-        const map = mapRef.current?.getMap()
-        if (!map || !mapLoaded || !map.isStyleLoaded()) return
-        const src = map.getSource('events') as any
-        if (!src) return
-
-        // Normalisation: null ou 'invited' -> supprimer la feature-state (ne rien faire visuellement)
-        const normalized: string | null = !response || response === 'invited' ? null : response
-
-        try {
-          if (normalized === null) {
-            map.removeFeatureState({ source: 'events', id: eventId }, 'userResponse')
-          } else {
-            map.setFeatureState({ source: 'events', id: eventId }, { userResponse: normalized })
-          }
-        } catch (e) {
-          console.debug('[MapRenderer] controller feature-state update skipped (feature missing)', { eventId })
-        }
-      }
-    }
-  }
-
-  // Attacher/détacher le contrôleur global
+  // Mettre à jour les données de la source avec les événements filtrés
+  // Utilise setData au lieu de recréer la source (plus performant)
+  // MapLibre recalcule automatiquement les clusters sur les nouvelles données
   useEffect(() => {
-    attachFeatureStateController(() => mapRef.current?.getMap())
-    return () => detachFeatureStateController()
+    if (!mapLoaded || !events || events.length === 0) return
+
+    const map = mapRef.current?.getMap()
+    if (!map || !map.isStyleLoaded()) return
+
+    const source = map.getSource('events') as any
+    if (!source || source.setData === undefined) return
+
+    // Filtrer les événements selon les filtres actifs
+    const filteredIds = new Set(getMapFilterIds())
+    const filteredEvents = events.filter(e => filteredIds.has(e.id))
+
+    // Mapper les réponses utilisateur pour les événements filtrés (mise à jour si responses changent)
+    const filteredUserResponsesMap = userResponsesMapper(filteredEvents, responses, user?.id)
+
+    // Créer le GeoJSON filtré avec les réponses initiales
+    const filteredGeoJson = {
+      type: "FeatureCollection" as const,
+      features: filteredEvents.map((e) => {
+        const initialResponse = filteredUserResponsesMap[e.id] || ''
+        return {
+          type: "Feature" as const,
+          id: e.id,
+          properties: {
+            id: e.id,
+            score: (e.stats?.going || 0) + (e.stats?.interested || 0),
+            isPublic: e.isPublic || 'false',
+            // Réponse initiale pour le styling (priorité inférieure à feature-state)
+            userResponse: initialResponse,
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: [e.venue?.lng || 0, e.venue?.lat || 0]
+          },
+        }
+      })
+    }
+
+    try {
+      // Mettre à jour les données de la source (recalcule les clusters automatiquement)
+      source.setData(filteredGeoJson)
+    } catch (error) {
+      // Ignorer les erreurs si la source n'est pas encore prête
+      console.debug('[MapRenderer] setData error:', error)
+    }
+  }, [mapLoaded, events, getMapFilterIds, responses, user?.id])
+
+
+
+  // Note: Le styling des pins est maintenant géré par stylingPinsController
+  // Les réponses initiales sont incluses dans properties.userResponse au montage
+  // Les mises à jour instantanées utilisent feature-state via setUserResponseFeatureState()
+
+  // Attacher/détacher le contrôleur de styling des pins
+  useEffect(() => {
+    attachStylingPinsController(() => mapRef.current?.getMap())
+    return () => detachStylingPinsController()
   }, [])
+
+  // Note: Plus besoin de détacher/appliquer les filtres via setFilter
+  // car on filtre maintenant directement la source GeoJSON via filteredEventsForMap
 
 
 
@@ -515,8 +568,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           minZoom={6}
           maxZoom={18}
           maxBounds={[[2.2, 49.2], [6.7, 51.7]]}
-          /* Désactiver le préchargement de tuiles hors écran */
-          prefetchZoomDelta={0}
+          /* Désactiver le préchargement de tuiles hors écran (prop non supportée par react-map-gl vBêta) */
           interactiveLayerIds={['events-unclustered', 'events-cluster', 'events-cluster-count']}
           onClick={handleClick}
           onLoad={handleMapLoad}

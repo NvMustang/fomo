@@ -3,10 +3,9 @@ import Select from 'react-select'
 import type { StylesConfig } from 'react-select'
 import AsyncSelect from 'react-select/async'
 import { useFilters } from '@/contexts/FiltersContext'
-import { TIME_PERIODS, mapResponseValuesToSelectOptions, findResponseOption } from '@/utils/filterTools'
 import type { Periods, UserResponseValue } from '@/types/fomoTypes'
 type PeriodKey = Exclude<Periods, 'all'>
-type Option = { value: string; label: string; color?: string }
+type Option = { value: string; label: string; color?: string; count?: number }
 type TagOption = { value: string; label: string; count?: number }
 
 export function FilterBar() {
@@ -19,23 +18,31 @@ export function FilterBar() {
         getLocalResponses
     } = useFilters()
 
-    // Format options pour les périodes
+    // Format options pour les périodes (avec count)
     const periodOptions = useMemo(() => {
         const localPeriods = getLocalPeriods()
-        const periodMap = new Map(TIME_PERIODS.map(p => [p.key, { value: p.key, label: p.label }]))
-        return localPeriods
-            .map(period => periodMap.get(period))
-            .filter((opt): opt is { value: string; label: string } => opt !== undefined)
+        return localPeriods.map(p => ({
+            value: p.value,
+            label: p.label,
+            count: p.count
+        }))
     }, [getLocalPeriods])
 
     const selectedPeriodOption = useMemo(() => {
         if (!filters.period || filters.period === 'all') return null
-        const period = TIME_PERIODS.find(p => p.key === filters.period)
-        return period ? { value: period.key, label: period.label } : null
-    }, [filters.period])
+        const localPeriods = getLocalPeriods()
+        const period = localPeriods.find(p => p.value === filters.period)
+        return period ? { value: period.value, label: period.label, count: period.count } : null
+    }, [filters.period, getLocalPeriods])
 
-    // Format options pour les organisateurs
-    const allOrganizers = getLocalOrganizers()
+    // Format options pour les organisateurs (avec count)
+    const allOrganizers = useMemo(() => {
+        return getLocalOrganizers().map(o => ({
+            value: o.value,
+            label: o.label,
+            count: o.count
+        }))
+    }, [getLocalOrganizers])
 
     const selectedOrganizerOption = useMemo(() => {
         if (!filters.organizerId) return null
@@ -53,15 +60,51 @@ export function FilterBar() {
         )
     }
 
-    // Format options pour les réponses avec ordre spécifique
+    // Format options pour les réponses avec count
     const responseOptions = useMemo(() => {
         const localResponses = getLocalResponses()
-        return mapResponseValuesToSelectOptions(localResponses)
+        // Mapper les réponses avec leurs labels et counts
+        return localResponses.map(r => {
+            let label = r.label
+            // Pour "Non répondu", on doit gérer cleared/seen
+            if (r.value === 'cleared') {
+                label = 'Non répondu'
+            }
+            return {
+                value: r.value === null ? 'null' : (r.value === 'cleared' ? 'non_repondu' : r.value),
+                label: label,
+                count: r.count,
+                sortOrder: r.value === null ? 1 :
+                    r.value === 'going' ? 2 :
+                        r.value === 'interested' ? 3 :
+                            r.value === 'cleared' ? 4 : 5
+            }
+        }).sort((a, b) => a.sortOrder - b.sortOrder)
     }, [getLocalResponses])
 
     const selectedResponseOption = useMemo(() => {
-        return findResponseOption(filters.response, responseOptions)
+        if (filters.response === undefined) return null
+        const responseValue = filters.response === null ? 'null' : (filters.response === 'cleared' ? 'non_repondu' : filters.response)
+        return responseOptions.find(opt => opt.value === responseValue) || null
     }, [filters.response, responseOptions])
+
+    // Vérifier si les filtres doivent être désactivés (pas d'options ou tous les counts à 0)
+    const isResponseDisabled = useMemo(() => {
+        return responseOptions.length === 0 || responseOptions.every(opt => (opt.count || 0) === 0)
+    }, [responseOptions])
+
+    const isPeriodDisabled = useMemo(() => {
+        return periodOptions.length === 0 || periodOptions.every(opt => (opt.count || 0) === 0)
+    }, [periodOptions])
+
+    const isTagsDisabled = useMemo(() => {
+        const tags = getLocalTags()
+        return tags.length === 0 || tags.every(tag => (tag.count || 0) === 0)
+    }, [getLocalTags])
+
+    const isOrganizerDisabled = useMemo(() => {
+        return allOrganizers.length === 0 || allOrganizers.every(org => (org.count || 0) === 0)
+    }, [allOrganizers])
 
     const [q, setQ] = useState(filters.searchQuery || '')
 
@@ -80,25 +123,32 @@ export function FilterBar() {
     // Ensure dropdown menus render above any clipping container
     const menuPortalTarget = typeof document !== 'undefined' ? document.body : null
 
-    // Styles communs pour tous les Select (basés sur CreateEventModal)
-    // Les paramètres base et state sont typés implicitement par react-select
-    const commonSelectStyles = {
+    // Styles pour les Select secondaires (hors query) : plus petits et fond plus sombre
+    // Mais blanc quand une valeur est sélectionnée (actif)
+    const secondarySelectStyles = {
         control: (base: unknown, state: unknown) => {
-            const s = state as { isFocused?: boolean }
+            const s = state as { isFocused?: boolean; hasValue?: boolean; value?: unknown }
             const b = base as Record<string, unknown>
+            // Si une valeur est sélectionnée, fond blanc comme le query
+            // hasValue existe dans react-select, mais on peut aussi vérifier value directement
+            const isActive = s.hasValue || (s.value !== null && s.value !== undefined)
+            const backgroundColor = isActive ? '#fff' : '#f3f4f6'
+            const hoverBackgroundColor = isActive ? '#fff' : '#e5e7eb'
             return {
                 ...b,
                 borderRadius: 'var(--radius)',
-                minHeight: 38,
+                minHeight: 32, // Plus petit que le query (38px)
                 borderWidth: 1,
                 borderStyle: 'solid',
                 borderColor: s.isFocused ? 'var(--current-color)' : 'var(--border)',
+                backgroundColor: backgroundColor,
                 boxShadow: s.isFocused
                     ? '0 0 0 3px var(--current-color-10)'
                     : 'none',
                 outline: 'none',
                 '&:hover': {
-                    borderColor: s.isFocused ? 'var(--current-color)' : 'var(--border)'
+                    borderColor: s.isFocused ? 'var(--current-color)' : 'var(--border)',
+                    backgroundColor: hoverBackgroundColor
                 }
             }
         },
@@ -138,12 +188,12 @@ export function FilterBar() {
         }
     }
 
-    const menuPortalStylesSingle: StylesConfig<Option, false> = {
-        ...commonSelectStyles,
+    const secondaryMenuPortalStylesSingle: StylesConfig<Option, false> = {
+        ...secondarySelectStyles,
         menuPortal: (base) => ({ ...base, zIndex: 9999 })
     } as StylesConfig<Option, false>
-    const menuPortalStylesMulti: StylesConfig<Option, true> = {
-        ...commonSelectStyles,
+    const secondaryMenuPortalStylesMulti: StylesConfig<Option, true> = {
+        ...secondarySelectStyles,
         menuPortal: (base) => ({ ...base, zIndex: 9999 })
     } as StylesConfig<Option, true>
 
@@ -208,6 +258,8 @@ export function FilterBar() {
             <div className="filterbar__query">
                 <input
                     type="search"
+                    name="search"
+                    id="filterbar-search"
                     placeholder="Rechercher un événement..."
                     value={q}
                     onFocus={() => setIsExpanded(true)}
@@ -276,12 +328,23 @@ export function FilterBar() {
                             setFilters(prev => ({ ...prev, response: undefined }))
                         }
                     }}
+                    formatOptionLabel={({ label, count }: Option) => (
+                        <div className="filterbar-tag-option">
+                            <span>{label}</span>
+                            {count !== undefined && (
+                                <span className="filterbar-tag-count">
+                                    {count}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     placeholder="Réponse"
                     isSearchable={false}
                     isClearable
+                    isDisabled={isResponseDisabled}
                     menuPortalTarget={menuPortalTarget}
                     menuPosition="fixed"
-                    styles={menuPortalStylesSingle}
+                    styles={secondaryMenuPortalStylesSingle}
                 />
 
                 {/* Période - Priorité 2 */}
@@ -298,12 +361,23 @@ export function FilterBar() {
                             setFilters(prev => ({ ...prev, period: 'all' }))
                         }
                     }}
+                    formatOptionLabel={({ label, count }: Option) => (
+                        <div className="filterbar-tag-option">
+                            <span>{label}</span>
+                            {count !== undefined && (
+                                <span className="filterbar-tag-count">
+                                    {count}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     placeholder="Période"
                     isSearchable={false}
                     isClearable
+                    isDisabled={isPeriodDisabled}
                     menuPortalTarget={menuPortalTarget}
                     menuPosition="fixed"
-                    styles={menuPortalStylesSingle}
+                    styles={secondaryMenuPortalStylesSingle}
                 />
 
                 {/* Tags - Priorité 3 */}
@@ -327,9 +401,10 @@ export function FilterBar() {
                     )}
                     closeMenuOnSelect={false}
                     placeholder="Tags"
+                    isDisabled={isTagsDisabled}
                     menuPortalTarget={menuPortalTarget}
                     menuPosition="fixed"
-                    styles={menuPortalStylesMulti}
+                    styles={secondaryMenuPortalStylesMulti}
                 />
 
                 {/* Organisateur - Priorité 4 */}
@@ -347,11 +422,22 @@ export function FilterBar() {
                             setFilters(prev => ({ ...prev, organizerId: undefined }))
                         }
                     }}
+                    formatOptionLabel={({ label, count }: Option) => (
+                        <div className="filterbar-tag-option">
+                            <span>{label}</span>
+                            {count !== undefined && (
+                                <span className="filterbar-tag-count">
+                                    {count}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     placeholder="Organisateur"
                     isClearable
+                    isDisabled={isOrganizerDisabled}
                     menuPortalTarget={menuPortalTarget}
                     menuPosition="fixed"
-                    styles={menuPortalStylesSingle}
+                    styles={secondaryMenuPortalStylesSingle}
                 />
             </div>
 

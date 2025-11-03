@@ -13,9 +13,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFomoData } from '@/utils/dataManager'
-import type { Event, User, UserResponse, Friend, Tag, AddressSuggestion } from '@/types/fomoTypes'
-import { addEventResponseShared } from '@/utils/eventResponseUtils'
+import type { Event, User, UserResponse, UserResponseValue, Friend, Tag, AddressSuggestion } from '@/types/fomoTypes'
+import { addEventResponseShared, getLatestResponse as getLatestResponseShared, getCurrentResponse as getCurrentResponseShared, getLatestResponsesByEvent as getLatestResponsesByEventShared, getLatestResponsesByUser as getLatestResponsesByUserShared } from '@/utils/eventResponseUtils'
 import { format } from 'date-fns'
+import { getUser } from '@/utils/filterTools'
 
 // ===== TYPES =====
 
@@ -364,41 +365,22 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
     }, [fomoData, events])
 
     // ===== HELPERS POUR RÉPONSES (NOUVEAU SYSTÈME) =====
+    // Utiliser les fonctions partagées depuis eventResponseUtils
 
     const getLatestResponse = useCallback((userId: string, eventId: string): UserResponse | null => {
-        const userEventResponses = responses
-            .filter(r => r.userId === userId && r.eventId === eventId && !r.deletedAt)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        return userEventResponses.length > 0 ? userEventResponses[0] : null
+        return getLatestResponseShared(responses, userId, eventId)
     }, [responses])
 
     const getCurrentResponse = useCallback((userId: string, eventId: string): UserResponseValue => {
-        const latest = getLatestResponse(userId, eventId)
-        return latest ? latest.finalResponse : null
-    }, [getLatestResponse])
+        return getCurrentResponseShared(responses, userId, eventId)
+    }, [responses])
 
     const getLatestResponsesByEvent = useCallback((userId: string): Map<string, UserResponse> => {
-        const userResponses = responses.filter(r => r.userId === userId && !r.deletedAt)
-        const latestMap = new Map<string, UserResponse>()
-        userResponses.forEach(r => {
-            const existing = latestMap.get(r.eventId)
-            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
-                latestMap.set(r.eventId, r)
-            }
-        })
-        return latestMap
+        return getLatestResponsesByEventShared(responses, userId)
     }, [responses])
 
     const getLatestResponsesByUser = useCallback((eventId: string): Map<string, UserResponse> => {
-        const eventResponses = responses.filter(r => r.eventId === eventId && !r.deletedAt)
-        const latestMap = new Map<string, UserResponse>()
-        eventResponses.forEach(r => {
-            const existing = latestMap.get(r.userId)
-            if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
-                latestMap.set(r.userId, r)
-            }
-        })
-        return latestMap
+        return getLatestResponsesByUserShared(responses, eventId)
     }, [responses])
 
     /**
@@ -526,7 +508,9 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
             for (const evt of events) {
                 const eventTime = evt.startsAt || ''
                 const eventCreatedAt = evt.createdAt || eventTime
-                const eventOrganizerName = evt.organizerName || ''
+                // Récupérer le nom de l'organisateur depuis users, sinon fallback sur organizerName (compatibilité)
+                const organizer = evt.organizerId ? getUser(users || [], evt.organizerId) : undefined
+                const eventOrganizerName = organizer?.name || evt.organizerName || ''
 
                 for (const raw of (evt.tags || [])) {
                     const t = typeof raw === 'string' ? normalize(raw) : ''
@@ -567,7 +551,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
             console.error('Erreur lors de la reconstruction des tags:', error)
             return []
         }
-    }, [events])
+    }, [events, users])
 
     // Auth
     const checkUserByEmail = useCallback(async (email: string) => {

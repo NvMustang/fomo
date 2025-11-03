@@ -13,7 +13,8 @@ import { usePrivacy } from './PrivacyContext'
 // ===== TYPES =====
 import type { Event, Periods, UserResponseValue, CalendarPeriod, Friend, UserResponse } from '@/types/fomoTypes'
 import {
-    groupEventsByCalendarPeriod,
+    TIME_PERIODS,
+    groupEventsByPeriods,
     groupEventsByUserResponse,
     groupUsersByResponses,
     groupUsersByFriendships,
@@ -23,7 +24,8 @@ import {
     matchQuery,
     matchTags,
     matchOrganizer,
-    userResponsesMapper
+    userResponsesMapper,
+    getUsersMapByIds
 } from '@/utils/filterTools'
 
 interface Filters {
@@ -57,7 +59,6 @@ interface FiltersContextType {
     // Branches
     getCalendarEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
     getDiscoverEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
-    getLocalDiscoverEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
     getMyEvents: () => Event[]
     getProfileEventsGroupedByPeriods: () => { periods: CalendarPeriod[]; totalEvents: number }
 
@@ -69,10 +70,13 @@ interface FiltersContextType {
     filterByResponse: (events: Event[], response: UserResponseValue) => Set<string>
 
     // Suggestions pour FilterBar
-    getLocalPeriods: () => Periods[]
-    getLocalResponses: () => UserResponseValue[]
-    getLocalOrganizers: () => { value: string; label: string }[]
-    getLocalTags: () => { value: string; label: string }[]
+    getLocalPeriods: () => Array<{ value: Periods; label: string; count: number }>
+    getLocalResponses: () => Array<{ value: UserResponseValue; label: string; count: number }>
+    getLocalOrganizers: () => Array<{ value: string; label: string; count: number }>
+    getLocalTags: () => Array<{ value: string; label: string; count: number }>
+
+    // IDs filtrés pour MapLibre (pilotage des pins via setFilter)
+    getMapFilterIds: () => string[]
 
     // Fonctions pour les invitations
     getFriends: (userId: string) => Friend[]
@@ -134,7 +138,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     })
 
     // Importer les contextes nécessaires pour le filtrage
-    const { events, eventsError, dataReady, responses, userRelations, getLatestResponsesByEvent, getLatestResponsesByUser } = useFomoDataContext()
+    const { events, eventsError, dataReady, responses, userRelations, users, getLatestResponsesByUser } = useFomoDataContext()
     const { user } = useAuth()
     const { isPublicMode } = usePrivacy()
 
@@ -194,7 +198,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
      */
     const getOnlineEventsGroupedByPeriods = useCallback(() => {
         const onlineEvents = getOnlineEvents()
-        return groupEventsByCalendarPeriod(onlineEvents)
+        return groupEventsByPeriods(onlineEvents)
     }, [getOnlineEvents])
 
     /**
@@ -259,10 +263,10 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         const calendarResponseEvents = [...goingEvents, ...interestedEvents]
 
         // Grouper par période
-        const calendarGrouped = groupEventsByCalendarPeriod(calendarResponseEvents)
+        const calendarGrouped = groupEventsByPeriods(calendarResponseEvents)
 
         // Aplatir pour retourner la liste d'événements
-        const calendarEvents = calendarGrouped.periods.flatMap(p => p.events)
+        const calendarEvents = calendarResponseEvents
 
         return {
             events: calendarEvents,
@@ -274,9 +278,8 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     }, [dataReady, eventsError, getOnlineEventsGroupedByResponses])
 
     /**
-     * Discover : Retourne les événements online via intersection de :
-     * - Périodes : onlineEventsGroupedByPeriods (all sauf past)
-     * - Réponses : onlineEventsGroupedByResponses (exclut not_interested, et null si isPublicMode=false)
+     * Discover : Retourne TOUS les événements online (inclut past, present et future).
+     * Inclut toutes les réponses utilisateur (y compris not_interested).
      * 
      * @returns Événements pour la page Discover (avant filtrage local)
      */
@@ -301,55 +304,19 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             }
         }
 
-        // Récupérer les périodes (exclure 'past')
-        const periodGroups = getOnlineEventsGroupedByPeriods()
-        const periodsWithoutPast = periodGroups.periods.filter(p => p.key !== 'past')
-        const periodEventIds = new Set(
-            periodsWithoutPast.flatMap(p => p.events.map(e => e.id))
-        )
 
-        // Récupérer les réponses (exclure not_interested, et null si isPublicMode=false)
-        const responseGroups = getOnlineEventsGroupedByResponses()
-        const allowedResponseGroups: Event[] = [
-            ...responseGroups.going,
-            ...responseGroups.interested,
-            ...responseGroups.seen,
-            ...responseGroups.cleared,
-            ...responseGroups.invited
-        ]
 
-        // Inclure null seulement si isPublicMode = true
-        if (isPublicMode) {
-            allowedResponseGroups.push(...responseGroups.null)
-        }
-
-        const responseEventIds = new Set(allowedResponseGroups.map(e => e.id))
-
-        // Intersection entre périodes (all sauf past) et réponses (exclut not_interested, et null si isPublicMode=false)
-        const intersectionIds = intersectEventIds(periodEventIds, responseEventIds)
-
-        if (intersectionIds.length === 0) {
-            return {
-                events: [],
-                totalCount: periodGroups.totalEvents,
-                filteredCount: 0,
-                isLoading: false,
-                hasError: false
-            }
-        }
-
-        // Récupérer les événements correspondants
-        const intersectionIdSet = new Set(intersectionIds)
-        const discoverEvents = allowedResponseGroups.filter(e => intersectionIdSet.has(e.id))
+        // Inclure TOUS les événements de toutes les périodes (passés, présents et futurs, toutes les réponses)
+        const discoverEvents = getOnlineEvents()
 
         return {
             events: discoverEvents,
-            totalCount: periodGroups.totalEvents,
+            totalCount: discoverEvents.length,
             filteredCount: discoverEvents.length,
             isLoading: false,
             hasError: false
         }
-    }, [dataReady, eventsError, getOnlineEventsGroupedByPeriods, getOnlineEventsGroupedByResponses, isPublicMode])
+    }, [dataReady, eventsError, getOnlineEvents])
 
     /**
      * Filtre les événements où l'utilisateur est organisateur.
@@ -370,7 +337,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
      */
     const getProfileEventsGroupedByPeriods = useCallback(() => {
         const myEvents = getMyEvents()
-        return groupEventsByCalendarPeriod(myEvents)
+        return groupEventsByPeriods(myEvents)
     }, [getMyEvents])
 
 
@@ -479,45 +446,45 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     }, [getOnlineEventsGroupedByResponses])
 
     /**
-     * Applique tous les filtres de FilterBar sur une liste d'événements.
-     * Utilise intersectEventIds pour combiner les résultats de tous les filtres.
-     * 
-     * @param events - Liste d'événements à filtrer (généralement depuis getDiscoverEvents)
-     * @returns Événements filtrés selon tous les critères de FilterBar
+     * Retourne la liste des IDs d'événements correspondant à l'état courant des filtres.
+     * Spécifique au pilotage de la carte: applique tous les filtres de FilterBar et retourne les IDs
+     * (string[]) pour être utilisés dans MapLibre setFilter.
      */
-    const getLocalCombinedFilters = useCallback((events: Event[]): Event[] => {
-        if (!events || events.length === 0) return []
+    const getMapFilterIds = useCallback((): string[] => {
+        const base = getDiscoverEvents()
+        if (base.isLoading || base.hasError || !base.events || base.events.length === 0) {
+            return []
+        }
 
-        // Appliquer chaque filtre et récupérer les Sets d'IDs
+        const events = base.events
+
+        // 1) Appliquer chaque filtre et récupérer les Sets d'IDs (mêmes helpers que FilterBar)
         const queryEventIds = filterByQuery(events, filters.searchQuery)
         const organizerEventIds = filters.organizerId
             ? filterByOrganizer(events, filters.organizerId)
             : undefined
-        const tagsEventIds = filters.tags && filters.tags.length > 0 && !filters.tags.includes('all')
+        const tagsEventIds = (filters.tags && filters.tags.length > 0 && !filters.tags.includes('all'))
             ? filterByTags(events, filters.tags)
             : undefined
-        const periodEventIds = filters.period && filters.period !== 'all'
+        const periodEventIds = (filters.period && filters.period !== 'all')
             ? filterByPeriod(events, filters.period)
             : undefined
 
-        // Gérer le filtrage par réponse
-        // filterByResponse gère déjà null → inclut null + invited
-        // Si 'cleared' est sélectionné (UI: "Non répondu"), inclure aussi 'seen'
+        // 2) Gérer le filtrage par réponse
+        //    - 'cleared' = regrouper cleared ET seen (équivalent UI "Non répondu")
+        //    - null = nouveaux (null) + invités (invited)
         let responseEventIds: Set<string> | undefined = undefined
         if (filters.response !== undefined) {
             if (filters.response === 'cleared') {
-                // "Non répondu" : inclure cleared ET seen
                 const clearedIds = filterByResponse(events, 'cleared')
                 const seenIds = filterByResponse(events, 'seen')
-                // Union des deux Sets
                 responseEventIds = new Set([...clearedIds, ...seenIds])
             } else {
-                // Pour null, filterByResponse inclut déjà null + invited
                 responseEventIds = filterByResponse(events, filters.response)
             }
         }
 
-        // Intersection de tous les filtres actifs
+        // 3) Intersection des filtres actifs → liste finale d'IDs
         const intersectionIds = intersectEventIds(
             queryEventIds,
             organizerEventIds,
@@ -526,114 +493,92 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             responseEventIds
         )
 
-        if (intersectionIds.length === 0) return []
-
-        // Retourner les événements correspondants
-        const idSet = new Set(intersectionIds)
-        return events.filter(e => idSet.has(e.id))
-    }, [filters, filterByQuery, filterByOrganizer, filterByTags, filterByPeriod, filterByResponse])
-
-    /**
-     * Discover avec filtres locaux : Applique getLocalCombinedFilters sur le résultat de getDiscoverEvents.
-     * Filtre également les événements privés selon les invitations.
-     * 
-     * @returns Événements Discover filtrés selon FilterBar et invitations
-     */
-    const getLocalDiscoverEvents = useCallback(() => {
-        const base = getDiscoverEvents()
-
-        if (base.isLoading || base.hasError) {
-            return base
-        }
-
-        // Appliquer les filtres de FilterBar
-        let localDiscoverEvents = getLocalCombinedFilters(base.events)
-
-        // Filtrer les événements privés : inclure uniquement si l'utilisateur a une réponse valide
-        if (user?.id) {
-            // NOUVEAU SYSTÈME : Utiliser les helpers du contexte pour obtenir les dernières réponses
-            const latestResponsesMap = getLatestResponsesByEvent(user.id)
-            const userResponseMap = new Map<string, UserResponseValue>()
-            latestResponsesMap.forEach((r, eventId) => {
-                userResponseMap.set(eventId, r.finalResponse)
-            })
-
-            localDiscoverEvents = localDiscoverEvents.filter(e => {
-                const userResponse = userResponseMap.get(e.id)
-                // TODO: Corriger la logique de filtrage des événements privés
-                // Si l'événement est public ou offline, toujours accessible
-                if (e.isPublic === true || e.isOnline === false) {
-                    return true
-                }
-
-                // Si l'événement est privé (isPublic === false) et online (isOnline === true)
-                if (e.isPublic === false && e.isOnline === true) {
-                    // Si l'utilisateur est l'organisateur, accessible
-                    if (e.organizerId === user.id || e.organizerId === `amb_${user.id}`) {
-                        return true
-                    }
-
-                    // Si l'utilisateur a une réponse valide, accessible
-                    const validPrivateResponses: UserResponseValue[] = ['invited', 'going', 'interested', 'seen', 'cleared']
-                    if (userResponse && validPrivateResponses.includes(userResponse)) {
-                        return true
-                    }
-
-                    // Sinon, pas accessible
-                    return false
-                }
-
-                // Par défaut, inclure (événements sans isPublic défini)
-                return true
-            })
-        }
-
-        return {
-            events: localDiscoverEvents,
-            totalCount: base.totalCount,
-            filteredCount: localDiscoverEvents.length,
-            isLoading: false,
-            hasError: false
-        }
-    }, [getDiscoverEvents, getLocalCombinedFilters, user?.id, responses])
+        return intersectionIds
+    }, [getDiscoverEvents, filters, filterByQuery, filterByOrganizer, filterByTags, filterByPeriod, filterByResponse])
 
     // ===== SUGGESTIONS POUR FILTERBAR =====
 
     /**
-     * Retourne les périodes disponibles dans localDiscoverEvents.
+     * Retourne les périodes disponibles parmi les événements visibles sur la carte.
+     * Utilise getMapFilterIds() pour refléter uniquement les événements filtrés et affichés.
      * 
-     * @returns Liste des périodes Periods présentes dans les événements locaux
+     * @returns Liste des périodes avec value, label et count (nombre d'événements par période)
      */
-    const getLocalPeriods = useCallback((): Periods[] => {
-        const { events } = getLocalDiscoverEvents()
-        const grouped = groupEventsByCalendarPeriod(events)
+    const getLocalPeriods = useCallback((): Array<{ value: Periods; label: string; count: number }> => {
+        // Source de base: événements Discover
+        const base = getDiscoverEvents()
+        if (base.isLoading || base.hasError || !base.events || base.events.length === 0) {
+            return []
+        }
+
+        // Filtrer selon les IDs visibles sur la carte (via MapLibre)
+        const filteredIds = new Set(getMapFilterIds())
+        const visibleEvents = base.events.filter((e: Event) => filteredIds.has(e.id))
+
+        // Calculer les périodes disponibles parmi les événements visibles uniquement
+        const grouped = groupEventsByPeriods(visibleEvents)
+        const periodMap = new Map(TIME_PERIODS.map(p => [p.key, p.label]))
+
         return grouped.periods
             .filter(p => p.events.length > 0)
-            .map(p => p.key) as Periods[]
-    }, [getLocalDiscoverEvents])
+            .map(p => ({
+                value: p.key as Periods,
+                label: periodMap.get(p.key) || p.label,
+                count: p.events.length
+            }))
+    }, [getDiscoverEvents, getMapFilterIds])
 
     /**
-     * Retourne les réponses disponibles dans localDiscoverEvents.
+     * Retourne les réponses disponibles parmi les événements visibles sur la carte.
+     * Utilise getMapFilterIds() pour refléter uniquement les événements filtrés et affichés.
      * 
-     * @returns Liste des types de réponses présents dans les événements locaux
+     * @returns Liste des types de réponses avec value, label et count (nombre d'événements par réponse)
      */
-    const getLocalResponses = useCallback((): UserResponseValue[] => {
-        const { events } = getLocalDiscoverEvents()
+    const getLocalResponses = useCallback((): Array<{ value: UserResponseValue; label: string; count: number }> => {
+        // Source de base: événements Discover
+        const base = getDiscoverEvents()
+        if (base.isLoading || base.hasError || !base.events || base.events.length === 0) {
+            return []
+        }
+
+        // Filtrer selon les IDs visibles sur la carte (via MapLibre)
+        const filteredIds = new Set(getMapFilterIds())
+        const visibleEvents = base.events.filter((e: Event) => filteredIds.has(e.id))
+
+        // Obtenir les groupes de réponses (tous les événements online)
         const responseGroups = getOnlineEventsGroupedByResponses()
 
-        // Trouver quelles réponses sont présentes dans localDiscoverEvents
-        const localEventIds = new Set(events.map(e => e.id))
-        const availableResponses: UserResponseValue[] = []
+        // Trouver quelles réponses sont présentes parmi les événements visibles et compter
+        const visibleEventIds = new Set(visibleEvents.map((e: Event) => e.id))
+        const availableResponses: Array<{ value: UserResponseValue; label: string; count: number }> = []
 
-        if (responseGroups.going.some(e => localEventIds.has(e.id))) availableResponses.push('going')
-        if (responseGroups.interested.some(e => localEventIds.has(e.id))) availableResponses.push('interested')
-        if (responseGroups.not_interested.some(e => localEventIds.has(e.id))) availableResponses.push('not_interested')
-        if (responseGroups.seen.some(e => localEventIds.has(e.id))) availableResponses.push('seen')
-        if (responseGroups.cleared.some(e => localEventIds.has(e.id))) availableResponses.push('cleared')
-        // Note: "invited" n'est plus ajouté car il est intégré dans "Nouveaux" (null)
+        // Compter les événements going visibles
+        const goingCount = responseGroups.going.filter(e => visibleEventIds.has(e.id)).length
+        if (goingCount > 0) {
+            availableResponses.push({ value: 'going', label: 'J\'y vais', count: goingCount })
+        }
 
-        // null pour les événements sans réponse ET les événements invités
-        // Les événements "invited" sont traités comme "Nouveaux" (null) pour le filtrage
+        // Compter les événements interested visibles
+        const interestedCount = responseGroups.interested.filter(e => visibleEventIds.has(e.id)).length
+        if (interestedCount > 0) {
+            availableResponses.push({ value: 'interested', label: 'Intéressé', count: interestedCount })
+        }
+
+        // Compter les événements not_interested visibles
+        const notInterestedCount = responseGroups.not_interested.filter(e => visibleEventIds.has(e.id)).length
+        if (notInterestedCount > 0) {
+            availableResponses.push({ value: 'not_interested', label: 'Pas intéressé', count: notInterestedCount })
+        }
+
+        // Compter les événements seen + cleared visibles (regroupés en "Non répondu")
+        const seenCount = responseGroups.seen.filter(e => visibleEventIds.has(e.id)).length
+        const clearedCount = responseGroups.cleared.filter(e => visibleEventIds.has(e.id)).length
+        const nonReponduCount = seenCount + clearedCount
+        if (nonReponduCount > 0) {
+            availableResponses.push({ value: 'cleared', label: 'Non répondu', count: nonReponduCount })
+        }
+
+        // null pour les événements sans réponse ET les événements invités (regroupés en "Nouveaux")
         const eventsWithResponses = new Set(
             [
                 ...responseGroups.going,
@@ -641,48 +586,90 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
                 ...responseGroups.not_interested,
                 ...responseGroups.seen,
                 ...responseGroups.cleared
-                // Note: responseGroups.invited est intentionnellement exclu ici
-                // car les événements "invited" doivent compter pour l'option "Nouveaux"
             ].map(e => e.id)
         )
-        // Inclure null si :
-        // 1. Il y a des événements sans réponse (null), OU
-        // 2. Il y a des événements invités (invited)
-        const hasNullEvents = events.some(e => !eventsWithResponses.has(e.id))
-        const hasInvitedEvents = responseGroups.invited.some(e => localEventIds.has(e.id))
-        if (hasNullEvents || hasInvitedEvents) availableResponses.push(null)
+        const nullEvents = visibleEvents.filter(e => !eventsWithResponses.has(e.id))
+        const invitedCount = responseGroups.invited.filter(e => visibleEventIds.has(e.id)).length
+        const nouveauxCount = nullEvents.length + invitedCount
+        if (nouveauxCount > 0) {
+            availableResponses.push({ value: null, label: 'Nouveaux', count: nouveauxCount })
+        }
 
         return availableResponses
-    }, [getLocalDiscoverEvents, getOnlineEventsGroupedByResponses])
+    }, [getDiscoverEvents, getMapFilterIds, getOnlineEventsGroupedByResponses])
 
     /**
-     * Retourne les organisateurs disponibles dans localDiscoverEvents.
+     * Retourne les organisateurs disponibles parmi les événements visibles sur la carte.
+     * Utilise getMapFilterIds() pour refléter uniquement les événements filtrés et affichés.
+     * Récupère le nom de l'organisateur depuis la feuille Users via organizerId.
      * 
-     * @returns Liste des organisateurs avec value et label
+     * @returns Liste des organisateurs avec value, label et count (nombre d'événements par organisateur)
      */
-    const getLocalOrganizers = useCallback(() => {
-        const { events } = getLocalDiscoverEvents()
-        const unique = new Map<string, string>()
-        for (const e of events) {
-            const id = e.organizerId
-            const label = e.organizerName || e.organizerId
-            if (!id || !label) continue
-            if (!unique.has(id)) unique.set(id, label)
+    const getLocalOrganizers = useCallback((): Array<{ value: string; label: string; count: number }> => {
+        // Source de base: événements Discover
+        const base = getDiscoverEvents()
+        if (base.isLoading || base.hasError || !base.events || base.events.length === 0) {
+            return []
         }
-        return Array.from(unique.entries())
-            .map(([value, label]) => ({ value, label }))
+
+        // Filtrer selon les IDs visibles sur la carte (via MapLibre)
+        const filteredIds = new Set(getMapFilterIds())
+        const visibleEvents = base.events.filter((e: Event) => filteredIds.has(e.id))
+
+        // Récupérer tous les organizerId uniques des événements visibles
+        const organizerIds = Array.from(new Set(
+            visibleEvents
+                .map(e => e.organizerId)
+                .filter((id): id is string => !!id)
+        ))
+
+        // Récupérer uniquement les users correspondants aux organizerIds
+        const organizersMap = getUsersMapByIds(users || [], organizerIds)
+
+        // Compter les événements par organisateur parmi les événements visibles
+        // Utiliser une Map pour éviter les doublons par organizerId
+        const organizerCounts = new Map<string, { label: string; count: number }>()
+        for (const e of visibleEvents) {
+            const id = e.organizerId
+            if (!id) continue
+
+            // Récupérer le nom depuis la Map des users, sinon utiliser l'ID comme fallback
+            const organizer = organizersMap.get(id)
+            const organizerName = organizer?.name || id
+            const current = organizerCounts.get(id)
+
+            // Garder le premier label rencontré pour éviter les changements de label pour le même ID
+            organizerCounts.set(id, {
+                label: current?.label || organizerName, // Conserver le label existant ou utiliser le nouveau
+                count: (current?.count || 0) + 1
+            })
+        }
+        return Array.from(organizerCounts.entries())
+            .map(([value, data]) => ({ value, label: data.label, count: data.count }))
+            .sort((a, b) => b.count - a.count)
             .slice(0, 50)
-    }, [getLocalDiscoverEvents])
+    }, [getDiscoverEvents, getMapFilterIds, users])
 
     /**
-     * Retourne les tags disponibles dans localDiscoverEvents.
+     * Retourne les tags disponibles parmi les événements visibles sur la carte.
+     * Utilise getMapFilterIds() pour refléter uniquement les événements filtrés et affichés.
      * 
-     * @returns Liste des tags avec value, label et count (nombre d'occurrences), triés par fréquence
+     * @returns Liste des tags avec value, label et count (nombre d'occurrences), triés par fréquence (limités aux événements visibles)
      */
     const getLocalTags = useCallback(() => {
-        const { events } = getLocalDiscoverEvents()
+        // Source de base: événements Discover
+        const base = getDiscoverEvents()
+        if (base.isLoading || base.hasError || !base.events || base.events.length === 0) {
+            return []
+        }
+
+        // Filtrer selon les IDs visibles sur la carte (via MapLibre)
+        const filteredIds = new Set(getMapFilterIds())
+        const visibleEvents = base.events.filter((e: Event) => filteredIds.has(e.id))
+
+        // Compter la fréquence des tags parmi les événements visibles
         const freq = new Map<string, number>()
-        for (const e of events) {
+        for (const e of visibleEvents) {
             for (const t of (e.tags || [])) {
                 const tag = (t || '').trim()
                 if (!tag) continue
@@ -693,7 +680,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             .sort((a, b) => b[1] - a[1])
             .map(([tag, count]) => ({ value: tag, label: tag, count }))
             .slice(0, 4)
-    }, [getLocalDiscoverEvents])
+    }, [getDiscoverEvents, getMapFilterIds])
 
     // ===== FONCTIONS POUR LES INVITATIONS =====
 
@@ -745,7 +732,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
 
         // Retourner les UserResponse correspondants
         return eventResponses.filter(r => intersectionIds.includes(r.userId))
-    }, [user?.id, responses, getFriends])
+    }, [user?.id, responses, getFriends, getLatestResponsesByUser])
 
     /**
      * Retourne les amis groupés par statut d'amitié (actifs, en attente reçus, en attente envoyés).
@@ -799,7 +786,6 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         // Branches
         getCalendarEvents,
         getDiscoverEvents,
-        getLocalDiscoverEvents,
         getMyEvents,
         getProfileEventsGroupedByPeriods,
         // Fonctions de filtrage
@@ -813,6 +799,8 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         getLocalResponses,
         getLocalOrganizers,
         getLocalTags,
+        // MapLibre
+        getMapFilterIds,
         // Invitations
         getFriends,
         getFriendsGroupedByFrienship,
@@ -827,7 +815,6 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         getOnlineEventsGroupedByResponses,
         getCalendarEvents,
         getDiscoverEvents,
-        getLocalDiscoverEvents,
         getMyEvents,
         getProfileEventsGroupedByPeriods,
         filterByQuery,
@@ -839,6 +826,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         getLocalResponses,
         getLocalOrganizers,
         getLocalTags,
+        getMapFilterIds,
         getFriends,
         getFriendsGroupedByFrienship,
         getGuests,

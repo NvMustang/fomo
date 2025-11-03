@@ -6,6 +6,9 @@
 const DataServiceV2 = require('../utils/dataService')
 
 class EventsController {
+    // Range Google Sheets pour la feuille Events
+    static EVENTS_RANGE = 'Events!A2:Q'
+
     /**
      * Récupérer tous les événements actifs
      */
@@ -18,7 +21,7 @@ class EventsController {
             console.log(`📋 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
             const events = await DataServiceV2.getAllActiveData(
-                'Events!A2:R',
+                EventsController.EVENTS_RANGE,
                 DataServiceV2.mappers.event
             )
 
@@ -50,7 +53,7 @@ class EventsController {
             console.log(`📋 Récupération événement: ${eventId}`)
 
             const event = await DataServiceV2.getByKey(
-                'Events!A2:R',
+                EventsController.EVENTS_RANGE,
                 DataServiceV2.mappers.event,
                 0, // key column (ID)
                 eventId
@@ -113,15 +116,14 @@ class EventsController {
                 eventData.coverUrl || '',                   // K: Cover URL
                 imagePositionStr,                           // L: Image Position (format: "50;50")
                 eventData.organizerId || 'admin-fomo',      // M: Organizer ID
-                eventData.organizerName || 'Équipe FOMO',   // N: Organizer Name
-                eventData.isPublic || 'false',              // O: Is Public
-                eventData.isOnline || 'false',              // P: Is Online
-                new Date().toISOString(),                   // Q: ModifiedAt
-                ''                                          // R: DeletedAt
+                eventData.isPublic || 'false',              // N: Is Public
+                eventData.isOnline || 'false',              // O: Is Online
+                new Date().toISOString(),                   // P: ModifiedAt
+                ''                                          // Q: DeletedAt
             ]
 
             const result = await DataServiceV2.upsertData(
-                'Events!A2:R',
+                EventsController.EVENTS_RANGE,
                 rowData,
                 0, // key column (ID)
                 eventId
@@ -158,7 +160,7 @@ class EventsController {
             console.log(`🗑️ Suppression événement: ${eventId}`)
 
             const result = await DataServiceV2.softDelete(
-                'Events!A2:R',
+                EventsController.EVENTS_RANGE,
                 0, // key column (ID)
                 eventId
             )

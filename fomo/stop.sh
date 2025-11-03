@@ -4,6 +4,7 @@
 # Arrête proprement tous les services
 
 echo "🛑 Arrêt de FOMO MVP..."
+echo ""
 
 # Fonction pour tuer les processus sur un port
 kill_port() {
@@ -27,6 +28,7 @@ kill_node() {
 
 # Arrêt des services
 echo "🧹 Arrêt des services..."
+echo ""
 kill_port 3000  # Frontend
 kill_port 3001  # Backend
 kill_node
@@ -35,3 +37,4 @@ kill_node
 sleep 2
 
 echo "✅ FOMO MVP arrêté avec succès !"
+echo ""

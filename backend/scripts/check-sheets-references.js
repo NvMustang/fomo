@@ -9,8 +9,8 @@ const path = require('path')
 // Schéma attendu pour chaque feuille (déduit des mappers)
 const EXPECTED_SCHEMAS = {
     'Events': {
-        range: 'Events!A2:R',
-        expectedColumns: 18, // A à R = 18 colonnes (0-17)
+        range: 'Events!A2:Q',
+        expectedColumns: 17, // A à Q = 17 colonnes (0-16)
         mapper: 'event',
         columns: [
             'A: ID',
@@ -26,11 +26,10 @@ const EXPECTED_SCHEMAS = {
             'K: Cover URL',
             'L: Image Position',
             'M: Organizer ID',
-            'N: Organizer Name',
-            'O: Is Public',
-            'P: Is Online',
-            'Q: ModifiedAt',
-            'R: DeletedAt'
+            'N: Is Public',
+            'O: Is Online',
+            'P: ModifiedAt',
+            'Q: DeletedAt'
         ]
     },
     'Users': {
@@ -124,7 +123,7 @@ function letterToIndex(letter) {
 function parseRange(rangeStr) {
     const match = rangeStr.match(/([A-Za-z]+)!(A\d+):([A-Z]+)/)
     if (!match) return null
-    
+
     return {
         sheet: match[1],
         startCol: match[2].replace(/\d+/, ''), // "A2" -> "A"
@@ -138,18 +137,18 @@ function parseRange(rangeStr) {
 // Fonction pour lire tous les fichiers JS dans un répertoire
 function getAllJsFiles(dir, fileList = []) {
     const files = fs.readdirSync(dir)
-    
+
     files.forEach(file => {
         const filePath = path.join(dir, file)
         const stat = fs.statSync(filePath)
-        
+
         if (stat.isDirectory() && !file.startsWith('.') && file !== 'node_modules') {
             getAllJsFiles(filePath, fileList)
         } else if (file.endsWith('.js')) {
             fileList.push(filePath)
         }
     })
-    
+
     return fileList
 }
 
@@ -157,7 +156,7 @@ function getAllJsFiles(dir, fileList = []) {
 function extractRanges(filePath) {
     const content = fs.readFileSync(filePath, 'utf8')
     const ranges = []
-    
+
     // Ignorer les commentaires (// et /* */)
     const lines = content.split('\n')
     const activeContent = lines.map((line, idx) => {
@@ -174,23 +173,23 @@ function extractRanges(filePath) {
         }
         return line
     }).filter(line => line !== null).join('\n')
-    
+
     // Pattern pour trouver les ranges: "SheetName!A2:Z" ou "SheetName!A2:Z123"
     // Exclure les exemples dans les commentaires JSDoc
     const rangePattern = /(['"])([A-Za-z]+)!(A\d+):([A-Z]+)\d*\1/g
     let match
-    
+
     while ((match = rangePattern.exec(activeContent)) !== null) {
         // Vérifier que ce n'est pas dans un commentaire multi-lignes /* */
         const beforeMatch = activeContent.substring(0, match.index)
         const openComments = (beforeMatch.match(/\/\*/g) || []).length
         const closeComments = (beforeMatch.match(/\*\//g) || []).length
-        
+
         // Si nombre impair de commentaires ouverts, on est dans un commentaire
         if (openComments > closeComments) {
             continue
         }
-        
+
         const rangeStr = match[2] + '!' + match[3] + ':' + match[4]
         const parsed = parseRange(rangeStr)
         if (parsed) {
@@ -206,23 +205,23 @@ function extractRanges(filePath) {
             }
         }
     }
-    
+
     return ranges
 }
 
 // Fonction principale
 function checkReferences() {
     console.log('🔍 Vérification des références Google Sheets...\n')
-    
+
     const backendDir = path.join(__dirname, '..')
     const files = getAllJsFiles(backendDir)
-    
+
     const allRanges = []
     files.forEach(file => {
         const ranges = extractRanges(file)
         allRanges.push(...ranges.map(r => ({ ...r, file: path.relative(backendDir, file) })))
     })
-    
+
     // Grouper par feuille
     const rangesBySheet = {}
     allRanges.forEach(range => {
@@ -232,16 +231,16 @@ function checkReferences() {
         }
         rangesBySheet[sheet].push(range)
     })
-    
+
     // Vérifier chaque feuille
     let hasErrors = false
-    
+
     console.log('📊 RAPPORT DE VÉRIFICATION\n')
-    console.log('=' .repeat(80))
-    
+    console.log('='.repeat(80))
+
     for (const [sheetName, ranges] of Object.entries(rangesBySheet)) {
         const schema = EXPECTED_SCHEMAS[sheetName]
-        
+
         if (!schema) {
             console.log(`\n⚠️  FEUILLE NON DÉFINIE: ${sheetName}`)
             console.log(`   Trouvée dans:`)
@@ -251,14 +250,14 @@ function checkReferences() {
             hasErrors = true
             continue
         }
-        
+
         console.log(`\n📋 ${sheetName}`)
         console.log(`   Schéma attendu: ${schema.range} (${schema.expectedColumns} colonnes)`)
         console.log(`   Utilisations trouvées: ${ranges.length}`)
-        
+
         // Vérifier la cohérence des ranges
         const inconsistentRanges = ranges.filter(r => r.parsed.columnCount !== schema.expectedColumns)
-        
+
         if (inconsistentRanges.length > 0) {
             console.log(`   ❌ INCOHÉRENCES DÉTECTÉES:`)
             inconsistentRanges.forEach(r => {
@@ -269,13 +268,13 @@ function checkReferences() {
         } else {
             console.log(`   ✅ Tous les ranges sont cohérents`)
         }
-        
+
         // Afficher les fichiers utilisant cette feuille
         const uniqueFiles = [...new Set(ranges.map(r => r.file))]
         if (uniqueFiles.length > 0) {
             console.log(`   Fichiers: ${uniqueFiles.join(', ')}`)
         }
-        
+
         // Afficher le schéma des colonnes
         if (schema.columns && schema.columns.length > 0) {
             console.log(`   Colonnes:`)
@@ -284,7 +283,7 @@ function checkReferences() {
             })
         }
     }
-    
+
     // Vérifier les feuilles définies mais non utilisées
     console.log(`\n📋 FEUILLES DÉFINIES MAIS NON UTILISÉES`)
     let unusedCount = 0
@@ -297,9 +296,9 @@ function checkReferences() {
     if (unusedCount === 0) {
         console.log(`   ✅ Toutes les feuilles définies sont utilisées`)
     }
-    
+
     console.log('\n' + '='.repeat(80))
-    
+
     if (hasErrors) {
         console.log('\n❌ Des incohérences ont été détectées. Veuillez les corriger.')
         process.exit(1)

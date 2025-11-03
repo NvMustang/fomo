@@ -24,7 +24,7 @@ interface ShareContentProps {
 export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) => {
     const { showToast } = useToast()
     const { user } = useAuth()
-    const { responses, addEventResponse, users } = useFomoDataContext()
+    const { responses, addEventResponse, users, getLatestResponsesByUser } = useFomoDataContext()
     const { getFriends, getGuestsGroupedByResponse } = useFilters()
     const [eventUrl, setEventUrl] = useState('')
     const [shareMessage, setShareMessage] = useState('')
@@ -88,7 +88,6 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
         if (!event || !user?.id || !responses) return
 
         // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses
-        const { getLatestResponsesByUser } = useFomoDataContext()
         const latestResponsesMap = getLatestResponsesByUser(event.id)
         const existingInvitations = Array.from(latestResponsesMap.values()).filter(r =>
             r.finalResponse === 'invited' &&
@@ -97,7 +96,7 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
 
         const invitedIds = new Set(existingInvitations.map(r => r.userId))
         setInvitedFriendIds(invitedIds)
-    }, [event, user?.id, responses])
+    }, [event, user?.id, responses, getLatestResponsesByUser])
 
     // Trouver les amis non participants
     const notParticipatingFriends = useMemo(() => {

@@ -21,7 +21,7 @@ const toBool = (v) => {
 class DataServiceV2 {
     /**
      * Récupérer toutes les données actives d'une table
-     * @param {string} range - Range Google Sheets (ex: 'Events!A2:R')
+     * @param {string} range - Range Google Sheets (ex: 'Events!A2:Q')
      * @param {function} mapper - Fonction pour mapper une ligne vers un objet
      * @returns {Array} Données mappées (uniquement les données actives)
      */
@@ -370,11 +370,10 @@ class DataServiceV2 {
                 return parts.length === 2 ? { x: parseFloat(parts[0]) || 50, y: parseFloat(parts[1]) || 50 } : undefined
             })(),
             organizerId: row[12] || 'user-1',
-            organizerName: row[13] || '',
-            isPublic: toBool(row[14]),
-            isOnline: toBool(row[15]),
-            modifiedAt: row[16] || new Date().toISOString(),
-            deletedAt: row[17] || null
+            isPublic: toBool(row[13]),
+            isOnline: toBool(row[14]),
+            modifiedAt: row[15] || new Date().toISOString(),
+            deletedAt: row[16] || null
         }),
 
         user: (row) => ({

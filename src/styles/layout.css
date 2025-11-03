@@ -80,8 +80,25 @@
    align-items: center;
    justify-content: center;
    gap: var(--xs);
+   background: linear-gradient(135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
+   border: var(--border-width) solid rgba(255, 255, 255, 0.2) !important;
+   box-shadow: var(--shadow-lg), 0 0 0 2px rgba(255, 255, 255, 0.1);
+   transition: all var(--transition-medium);
+   transform: translateY(0);
+}
+
+.map-teaser-cta.button.primary:hover {
    background: linear-gradient(135deg, var(--color-public) 0%, var(--color-private) 100%) !important;
-   border: none !important;
+   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(255, 255, 255, 0.3);
+   transform: translateY(-2px);
+   border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.map-teaser-cta.button.primary:active {
+   background: linear-gradient(135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
+   transform: translateY(0);
+   box-shadow: var(--shadow), 0 0 0 3px rgba(255, 255, 255, 0.25);
+   border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 .map-teaser-text {

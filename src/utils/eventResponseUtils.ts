@@ -4,7 +4,7 @@
  */
 
 import type { UserResponse, UserResponseValue } from '@/types/fomoTypes'
-import { setUserResponseFeatureState } from '@/map/featureStateController'
+import { setUserResponseFeatureState } from '@/map/stylingPinsController'
 import { format } from 'date-fns'
 
 /**

@@ -152,11 +152,21 @@ else
 
 fi
 echo "📋 Logs disponibles dans le dossier logs/"
-echo "🛑 Pour arrêter: .fomo/stop.sh"
+echo "🛑 Pour arrêter: ./fomo/stop.sh"
 echo ""
 
+# Mode surveillance optionnel
+if [ "$1" = "--watch" ] || [ "$FOMO_WATCH" = "1" ]; then
+    echo "👀 Mode watch activé: surveillance des processus..."
+else
+    echo "ℹ️  Mode par défaut: pas de surveillance; services en arrière-plan."
+    echo "   - Pour arrêter: ./fomo/stop.sh"
+    echo "   - Pour voir l'état: ./fomo/status.sh"
+    exit 0
+fi
+
 # Garder le script en vie pour voir les logs
-echo "📊 Surveillance des processus (Ctrl+C pour arrêter)..."
+echo "📊 Surveillance des processus (appuyez sur Ctrl+C pour arrêter via ce terminal)..."
 echo ""
 
 # Fonction de nettoyage à l'arrêt

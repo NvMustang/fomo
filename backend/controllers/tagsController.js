@@ -128,7 +128,7 @@ class TagsController {
     static async _computeTagsFromEvents() {
         // Récupérer tous les événements avec leurs tags
         const events = await DataServiceV2.getAllActiveData(
-            'Events!A2:R',
+            'Events!A2:Q',
             DataServiceV2.mappers.event
         )
 
@@ -151,7 +151,7 @@ class TagsController {
         for (const evt of events) {
             const eventTime = evt.startsAt || ''
             const eventCreatedAt = evt.createdAt || eventTime
-            const eventOrganizerName = evt.organizerName || ''
+            const eventOrganizerId = evt.organizerId || ''
 
             for (const raw of (evt.tags || [])) {
                 const t = typeof raw === 'string' ? normalize(raw) : ''
@@ -159,12 +159,12 @@ class TagsController {
 
                 const existing = tagMap.get(t)
                 if (!existing) {
-                    // Première occurrence : utiliser createdAt et organizerName de l'event
+                    // Première occurrence : utiliser createdAt et organizerId de l'event
                     tagMap.set(t, {
                         usage_count: 1,
                         last_used: eventTime,
                         created_at: eventCreatedAt,
-                        created_by: eventOrganizerName
+                        created_by: eventOrganizerId
                     })
                 } else {
                     const newer = !existing.last_used || (eventTime && eventTime > existing.last_used)

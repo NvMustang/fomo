@@ -23,6 +23,7 @@ interface ActivityItem {
     previousResponse?: UserResponseValue
     timeAgo: string
     createdAt: Date
+    responseId: string // ID unique de la réponse pour la clé React
 }
 
 const getResponseLabel = (response: UserResponseValue): string => {
@@ -81,7 +82,8 @@ export const LastActivities: React.FC = () => {
                 response: response.finalResponse as 'going' | 'interested' | 'cleared' | 'not_interested',
                 previousResponse: hasChange ? response.initialResponse : undefined,
                 timeAgo,
-                createdAt
+                createdAt,
+                responseId: response.id // ID unique de la réponse
             }
         }).filter(Boolean) as ActivityItem[]
     }, [responses, events, user?.id, dataReady])
@@ -108,12 +110,12 @@ export const LastActivities: React.FC = () => {
         <div className="profile-section recent-activity-section">
             <h3 className="recent-activity-title">Activité récente</h3>
             <div className="recent-activity-list">
-                {recentActivity.map(({ event, response, previousResponse, timeAgo }) => {
+                {recentActivity.map(({ event, response, previousResponse, timeAgo, responseId }) => {
                     const hasChange = previousResponse !== undefined && previousResponse !== null
 
                     return (
                         <div
-                            key={event.id}
+                            key={responseId}
                             className="recent-activity-item"
                             onClick={() => handleActivityClick(event)}
                             role="button"
