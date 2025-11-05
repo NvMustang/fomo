@@ -10,6 +10,8 @@
  * @author FOMO MVP Team
  */
 
+import { isProd } from '@/config/env'
+
 export type ApiProvider = 'maptiler' | 'mapbox' | 'googlesheets' | 'backend'
 
 export interface ApiRequest {
@@ -44,20 +46,46 @@ export interface AnalyticsData {
     maptilerReferences: MapTilerReference[]
 }
 
-const STORAGE_KEY = 'fomo_analytics'
+// Différencier les clés de storage selon l'environnement (test vs prod)
+// pour éviter de mélanger les analytics entre environnements
 const MAX_HISTORY = 1000 // Limiter l'historique pour éviter de surcharger localStorage
 const MAX_STATS_REQUESTS = 100 // Limiter les requêtes dans les stats détaillées
 
 class AnalyticsTracker {
     private data: AnalyticsData
 
+    /**
+     * Obtenir la clé de storage selon l'environnement (évaluée dynamiquement)
+     * Détection: import.meta.env.PROD OU vércel.com dans l'URL
+     */
+    private getStorageKey(): string {
+        // Vérifier si on est en production
+        // 1. Via Vite (import.meta.env.PROD)
+        // 2. Via l'URL (vercel.app ou vercel.com)
+        const isVercelProd = typeof window !== 'undefined' &&
+            (window.location.hostname.includes('vercel.app') ||
+                window.location.hostname.includes('vercel.com'))
+        const prod = isProd() || isVercelProd
+        const key = prod ? 'fomo_analytics_prod' : 'fomo_analytics_test'
+        // Log pour debug (seulement la première fois)
+        if (!this._storageKeyLogged) {
+            const envSource = isVercelProd ? 'URL (Vercel)' : (isProd() ? 'Vite PROD' : 'DEV')
+            console.log(`📊 [Analytics] Environnement: ${prod ? 'PRODUCTION' : 'TEST'} - Source: ${envSource} - Clé storage: ${key}`)
+            this._storageKeyLogged = true
+        }
+        return key
+    }
+
+    private _storageKeyLogged = false
+
     constructor() {
         this.data = this.loadFromStorage()
     }
 
     private loadFromStorage(): AnalyticsData {
+        const storageKey = this.getStorageKey()
         try {
-            const stored = localStorage.getItem(STORAGE_KEY)
+            const stored = localStorage.getItem(storageKey)
             if (stored) {
                 const parsed = JSON.parse(stored)
                 // Vérifier que la structure est valide
@@ -82,7 +110,7 @@ class AnalyticsTracker {
                             firstRef.note = 'Valeur initiale relevée sur le dashboard MapTiler'
                             // Sauvegarder la mise à jour
                             try {
-                                localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+                                localStorage.setItem(storageKey, JSON.stringify(parsed))
                             } catch (error) {
                                 console.warn('⚠️ [Analytics] Erreur sauvegarde mise à jour valeur initiale:', error)
                             }
@@ -145,7 +173,8 @@ class AnalyticsTracker {
                 }
             })
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data))
+            const storageKey = this.getStorageKey()
+            localStorage.setItem(storageKey, JSON.stringify(this.data))
         } catch (error) {
             console.warn('⚠️ [Analytics] Erreur sauvegarde localStorage:', error)
         }
