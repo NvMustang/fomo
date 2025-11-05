@@ -261,41 +261,36 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [vmEnabled])
 
-  // Fade-in des pins réels lors de la transition VM → normal
-  const [shouldFadeInRealEvents, setShouldFadeInRealEvents] = useState(false)
-  const prevVmEnabledRef = useRef(vmEnabled)
-  useEffect(() => {
-    // Détecter la transition VM désactivé → normal (user connecté)
-    if (prevVmEnabledRef.current && !vmEnabled) {
-      // Délai de 200ms pour laisser le fade-out des fake pins se terminer
-      const t = setTimeout(() => setShouldFadeInRealEvents(true), 200)
-      const t2 = setTimeout(() => setShouldFadeInRealEvents(false), 1000)
-      return () => { clearTimeout(t); clearTimeout(t2) }
-    }
-    prevVmEnabledRef.current = vmEnabled
-  }, [vmEnabled])
 
-  // Pop FilterBar lors de la transition VM → normal
+
+  // Pop FilterBar lors de la transition VM → normal ou à l'ouverture de l'app
   const [shouldPopFilterBar, setShouldPopFilterBar] = useState(false)
+  const hasTriggeredPopRef = useRef(false)
+
   useEffect(() => {
+    if (vmEnabled) return // Ne pas jouer en mode visitor
+
     try {
       const shouldPop = sessionStorage.getItem('fomo-pop-filterbar') === 'true'
-      if (shouldPop && !vmEnabled) {
+      if (shouldPop && !hasTriggeredPopRef.current) {
+        hasTriggeredPopRef.current = true
+        // Nettoyer immédiatement le flag pour éviter les re-déclenchements
+        sessionStorage.removeItem('fomo-pop-filterbar')
         setShouldPopFilterBar(true)
-        // Nettoyer après animation
+        // Nettoyer l'état après animation (3s)
         setTimeout(() => {
-          sessionStorage.removeItem('fomo-pop-filterbar')
           setShouldPopFilterBar(false)
-        }, 600)
+          hasTriggeredPopRef.current = false // Reset pour permettre de rejouer si nécessaire
+        }, 3000)
       }
     } catch {
       // Ignorer si sessionStorage indisponible
     }
-  }, [vmEnabled])
+  }, [vmEnabled]) // Se déclenche au montage (vmEnabled initial) et lors des changements
 
   return (
     <>
-      <div className={`map-container${shouldFadeInRealEvents ? ' map-container--fade-in-real-events' : ''}`}>
+      <div className="map-container">
         <MapRenderer
           events={allEventsToDisplay}
           onPinClick={handleEventClick}

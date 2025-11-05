@@ -128,44 +128,10 @@
 }
 
 /* ========================
-   ETOILES SCINTILLANTES (effet wouaw)
+   CONTAINER STARS (canvas-confetti)
 ======================== */
 
-@keyframes starTwinkle {
-    0% {
-        opacity: 0;
-        transform: scale(0) rotate(0deg);
-    }
-
-    50% {
-        opacity: 1;
-        transform: scale(1.2) rotate(180deg);
-    }
-
-    100% {
-        opacity: 0;
-        transform: scale(0) rotate(360deg);
-    }
-}
-
-@keyframes starFloat {
-    0% {
-        transform: translateY(0) translateX(0) scale(0);
-        opacity: 1;
-    }
-
-    20% {
-        transform: translateY(calc(var(--star-y, -100px) * 0.2)) translateX(calc(var(--star-x, 0px) * 0.2)) scale(1.5);
-        opacity: 1;
-    }
-
-    100% {
-        transform: translateY(var(--star-y, -100px)) translateX(var(--star-x, 0px)) scale(0.5);
-        opacity: 0;
-    }
-}
-
-/* Container pour les étoiles */
+/* Container pour les étoiles (utilisé par canvas-confetti) */
 .stars-container {
     position: fixed;
     top: 50%;
@@ -182,82 +148,46 @@
     /* Très léger pour permettre le blur */
 }
 
-.star {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background: radial-gradient(circle, #ffd700 0%, #ffed4e 50%, transparent 70%);
-    border-radius: 50%;
-    animation: starTwinkle 0.8s ease-out forwards, starFloat 2s ease-out forwards;
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.9), 0 0 30px rgba(255, 215, 0, 0.6), 0 0 50px rgba(255, 215, 0, 0.3);
-    filter: brightness(1.2);
-}
-
-/* Variantes de couleurs pour les étoiles */
-.star--variant-1 {
-    background: radial-gradient(circle, #ffd700 0%, #ffed4e 50%, transparent 70%);
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.9), 0 0 30px rgba(255, 215, 0, 0.6), 0 0 50px rgba(255, 215, 0, 0.3);
-}
-
-.star--variant-2 {
-    background: radial-gradient(circle, #ffed4e 0%, #fff9c4 50%, transparent 70%);
-    box-shadow: 0 0 15px rgba(255, 237, 78, 0.9), 0 0 30px rgba(255, 237, 78, 0.6), 0 0 50px rgba(255, 237, 78, 0.3);
-}
-
-.star--variant-3 {
-    background: radial-gradient(circle, #ffb347 0%, #ffd700 50%, transparent 70%);
-    box-shadow: 0 0 15px rgba(255, 179, 71, 0.9), 0 0 30px rgba(255, 179, 71, 0.6), 0 0 50px rgba(255, 179, 71, 0.3);
-}
-
 /* Animation pour le container lui-même (fade out après l'animation) */
 .stars-container--fade-out {
     animation: fadeOut 0.3s ease-out 1.7s forwards;
 }
 
-/* ========================
-   TOAST ANIMATION DOUCE
-======================== */
-
-@keyframes toastIntroSlideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.95);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.toast-intro-animation {
-    animation: toastIntroSlideUp 0.4s ease-out;
-}
 
 /* ========================
    HALO PULSE (pour toggle privacy)
 ======================== */
 
+/* Animation pour le halo (scale + opacity) */
 @keyframes haloPulse {
     0% {
-        box-shadow:
-            0 0 0 0 rgba(59, 130, 246, 0.8),
-            0 0 0 0 rgba(147, 197, 253, 0.6);
-        transform: scale(1);
+        opacity: 0.8;
+        transform: translateZ(0) scale(1);
     }
 
     50% {
-        box-shadow:
-            0 0 0 15px rgba(59, 130, 246, 0),
-            0 0 0 25px rgba(147, 197, 253, 0);
-        transform: scale(1.1);
+        opacity: 0;
+        transform: translateZ(0) scale(1.5);
     }
 
     100% {
-        box-shadow:
-            0 0 0 0 rgba(59, 130, 246, 0),
-            0 0 0 0 rgba(147, 197, 253, 0);
-        transform: scale(1);
+        opacity: 0;
+        transform: translateZ(0) scale(1);
+    }
+}
+
+/* Animation pour le toggle lui-même (scale léger) */
+@keyframes togglePulse {
+    0% {
+        transform: translateZ(0) scale(1);
+    }
+
+    50% {
+        transform: translateZ(0) scale(1.05);
+    }
+
+    100% {
+        transform: translateZ(0) scale(1);
     }
 }
 
@@ -265,7 +195,38 @@
     position: relative;
     /* S'assurer que le halo n'est pas coupé */
     overflow: visible;
-    /* Animation directement sur le toggle - répétition infinie jusqu'au clic */
+    /* Animation sur le toggle lui-même */
+    animation: togglePulse 1s ease-out infinite;
+    /* Optimisation pour mobile */
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    /* Forcer l'accélération matérielle sur mobile */
+    transform: translateZ(0);
+}
+
+/* Pseudo-élément ovale qui pulse pour correspondre à la forme du toggle-track */
+.privacy-toggle-halo::after {
+    content: '';
+    position: absolute;
+    /* Positionner au centre du toggle-switch (qui contient toggle-track) */
+    top: 50%;
+    left: 50%;
+    width: var(--toggle-width);
+    height: var(--toggle-height);
+    margin-top: calc(var(--toggle-height) / -2);
+    margin-left: calc(var(--toggle-width) / -2);
+    border-radius: var(--toggle-radius);
+    background: rgba(59, 130, 246, 0.3);
+    border: 2px solid rgba(59, 130, 246, 0.6);
     animation: haloPulse 1s ease-out infinite;
-    border-radius: var(--radius-full);
+    pointer-events: none;
+    /* z-index pour rester derrière le toggle-track mais visible */
+    z-index: 0;
+    /* Optimisation pour mobile */
+    will-change: transform, opacity;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    /* Forcer l'accélération matérielle sur mobile */
+    transform: translateZ(0);
 }

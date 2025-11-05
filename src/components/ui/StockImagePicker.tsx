@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 interface StockImage {
   id: string
@@ -118,7 +119,7 @@ export const StockImagePicker: React.FC<StockImagePickerProps> = ({
     return null
   }
 
-  return (
+  const modalContent = (
     <div className="modal_overlay" onClick={(e) => { e.stopPropagation(); onClose() }}>
       <div className="modal_container">
         <div
@@ -184,6 +185,13 @@ export const StockImagePicker: React.FC<StockImagePickerProps> = ({
       </div>
     </div>
   )
+
+  // Utiliser un portail pour rendre le modal directement dans document.body
+  // afin qu'il soit hors du stacking context du CreateEventModal
+  const portalTarget = typeof document !== 'undefined' ? document.body : null
+  if (!portalTarget) return null
+
+  return createPortal(modalContent, portalTarget)
 }
 
 export default StockImagePicker

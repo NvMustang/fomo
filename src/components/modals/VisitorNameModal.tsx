@@ -11,7 +11,7 @@ import { Button } from '@/components'
 interface VisitorNameModalProps {
     isOpen: boolean
     onClose: () => void
-    onConfirm: (name: string, email?: string) => void
+    onConfirm: (name: string, email?: string, city?: string) => void
     organizerName?: string
     responseType?: 'going' | 'participe' | 'maybe' | 'interested' | 'not_interested' | 'not_there' // Type de réponse pour déterminer la variante
 }
@@ -68,27 +68,6 @@ const VARIANT_CONFIG = {
     }
 }
 
-/**
- * Normalise le type de réponse pour l'animation des étoiles
- */
-const normalizeResponseTypeForAnimation = (
-    responseType?: 'going' | 'participe' | 'maybe' | 'interested' | 'not_interested' | 'not_there'
-): 'participe' | 'maybe' | 'not_there' | undefined => {
-    switch (responseType) {
-        case 'going':
-        case 'participe':
-            return 'participe'
-        case 'interested':
-        case 'maybe':
-            return 'maybe'
-        case 'not_interested':
-        case 'not_there':
-            return 'not_there'
-        default:
-            return undefined
-    }
-}
-
 export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
     isOpen,
     onClose,
@@ -98,16 +77,74 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
 }) => {
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
+    const [city, setCity] = useState('')
+    const [emailError, setEmailError] = useState('')
+
+    const isValidEmail = (emailValue: string): boolean => {
+        // Email optionnel, donc vide = valide
+        if (!emailValue.trim()) return true
+        
+        // Validation : vérifier la structure de l'email
+        const atIndex = emailValue.indexOf('@')
+        const dotIndex = emailValue.lastIndexOf('.')
+        
+        // Vérifier qu'il y a un @ et un point après le @
+        if (atIndex === -1 || dotIndex === -1 || dotIndex <= atIndex) {
+            return false
+        }
+        
+        // Vérifier qu'il y a des caractères avant le @
+        if (atIndex === 0) {
+            return false
+        }
+        
+        // Vérifier qu'il y a des caractères entre le @ et le point
+        if (dotIndex - atIndex <= 1) {
+            return false
+        }
+        
+        // Vérifier qu'il y a des caractères après le point
+        if (dotIndex === emailValue.length - 1) {
+            return false
+        }
+        
+        // Vérifier que le TLD (domaine principal) est valide
+        const tld = emailValue.substring(dotIndex + 1).toLowerCase()
+        const validTlds = [
+            // Top TLD génériques
+            'com', 'net', 'org', 'info', 'io', 'app', 'dev', 'online', 'club',
+            // TLD nationaux principaux
+            'fr', 'be', 'ch', 'uk', 'de', 'nl', 'es', 'it', 'pt', 'at', 'dk', 'se', 'no', 'fi',
+            'pl', 'cz', 'ro', 'hu', 'gr', 'ie', 'bg', 'sk', 'lt', 'lv', 'ee',
+            'ca', 'us', 'mx', 'br', 'ar', 'cl', 'co', 'pe', 'uy',
+            'au', 'nz', 'sg', 'hk', 'my', 'id', 'th', 'vn', 'tw', 'jp', 'kr', 'cn', 'in',
+            'za', 'ru', 'tr', 'il'
+        ]
+        
+        if (!validTlds.includes(tld)) {
+            return false
+        }
+        
+        return true
+    }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         if (name.trim()) {
+            // Valider l'email s'il est renseigné
+            const emailTrimmed = email.trim()
+            if (emailTrimmed && !isValidEmail(emailTrimmed)) {
+                setEmailError('Veuillez saisir une adresse email valide')
+                return
+            }
+            setEmailError('')
             // L'animation des étoiles est jouée AVANT l'ouverture du modal (sur les boutons de réponse)
             // Ici on confirme simplement
-                onConfirm(name.trim(), email.trim() || undefined)
-                setName('')
-                setEmail('')
-                onClose()
+            onConfirm(name.trim(), emailTrimmed || undefined, city.trim() || undefined)
+            setName('')
+            setEmail('')
+            setCity('')
+            onClose()
         }
     }
 
@@ -179,11 +216,37 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
                                 className="form-input"
                                 placeholder="votre@email.com"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => {
+                                    setEmail(e.target.value)
+                                    if (emailError) setEmailError('')
+                                }}
                                 aria-label="Votre adresse e-mail"
                             />
+                            {emailError && (
+                                <div className="error-message">
+                                    {emailError}
+                                </div>
+                            )}
                             <p className="form-help">
                                 Laissez-nous votre email. FOMO vous préviendra des derniers détails transmis par votre hôte !
+                            </p>
+                        </div>
+
+                        <div className="form-section">
+                            <label htmlFor="visit-city" className="form-label">
+                                Ville
+                            </label>
+                            <input
+                                id="visit-city"
+                                type="text"
+                                className="form-input"
+                                placeholder="Ex: Bruxelles, Liège, Paris..."
+                                value={city}
+                                onChange={(e) => setCity(e.target.value)}
+                                aria-label="Votre ville"
+                            />
+                            <p className="form-help">
+                                Dans quelle ville habitez-vous ? Cela nous aide à vous proposer des événements près de chez vous.
                             </p>
                         </div>
 

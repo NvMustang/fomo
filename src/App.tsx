@@ -3,7 +3,7 @@
  * Version stable avec écran de chargement séparé et AuthModal
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     NavBar,
     Header,
@@ -105,7 +105,7 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     const [currentPage, setCurrentPage] = useState<string>(getInitialPage())
     const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState<boolean>(false)
     const [shouldSlideInNavBar, setShouldSlideInNavBar] = useState(false)
-    
+
     // Callback pour réinitialiser la sélection d'événement depuis le profil
     const handleEventCentered = useCallback(() => {
         // La sélection est gérée par DiscoverPage via window.setSelectedEventFromProfile
@@ -127,11 +127,37 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
         return () => window.removeEventListener('popstate', handlePopState)
     }, [])
 
-    // Détecter si l'utilisateur vient de s'authentifier (après signup)
+    const { dataReady } = useFomoDataContext()
+    const { isAuthenticated } = useAuth()
+    const hasTriggeredAnimationsRef = useRef(false)
+
+    // Détecter quand l'app est prête (dataReady) et déclencher les animations d'entrée
+    useEffect(() => {
+        // Ne déclencher que si l'utilisateur est authentifié, les données sont prêtes, et qu'on est sur la page map
+        if (isAuthenticated && dataReady && currentPage === 'map' && !hasTriggeredAnimationsRef.current) {
+            hasTriggeredAnimationsRef.current = true
+
+            // Séquence d'animations
+            // 1. Slide-up NavBar (1s) - démarre immédiatement
+            try {
+                sessionStorage.setItem('fomo-just-signed-up', 'true')
+                setShouldSlideInNavBar(true)
+            } catch { }
+
+            // 2. Pop FilterBar (0.4s) - démarre après navbar (1000ms = durée navbar)
+            setTimeout(() => {
+                try {
+                    sessionStorage.setItem('fomo-pop-filterbar', 'true')
+                } catch { }
+            }, 1000)
+        }
+    }, [isAuthenticated, dataReady, currentPage])
+
+    // Détecter si l'utilisateur vient de s'authentifier (après signup depuis visitor mode)
     useEffect(() => {
         // Vérifier si on vient du mode visitor (signup récent)
         const hasJustSignedUp = sessionStorage.getItem('fomo-just-signed-up') === 'true'
-        if (hasJustSignedUp) {
+        if (hasJustSignedUp && !hasTriggeredAnimationsRef.current) {
             setShouldSlideInNavBar(true)
             // Nettoyer le flag après animation
             setTimeout(() => {
@@ -253,14 +279,14 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     const handleNavClick = (page: string) => {
         console.info('🔄 [App] Navigation change', { from: currentPage, to: page })
         setCurrentPage(page)
-        
+
         // Mettre à jour l'URL sans recharger la page
         if (page === 'dashboard') {
             window.history.pushState({}, '', '/dashboard')
         } else if (page === 'map') {
             window.history.pushState({}, '', '/')
         }
-        
+
         // Réinitialiser l'événement sélectionné lors d'un changement de page manuel
         if (page !== 'map' && (window as any).setSelectedEventFromProfile) {
             // La sélection est gérée par DiscoverPage via window.setSelectedEventFromProfile

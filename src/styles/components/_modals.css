@@ -45,7 +45,7 @@
     width: 360px;
     max-height: 70vh;
     /* Glassmorphism effect inspiré de la navbar */
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.769);
     backdrop-filter: blur(var(--glass-blur-strong));
     -webkit-backdrop-filter: blur(var(--glass-blur-strong));
 

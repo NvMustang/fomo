@@ -286,10 +286,6 @@ const createClusterLayers = (
         "circle-blur": CLUSTER_CONFIG.layers.blur,
       },
       layout: {},
-      ...(layerPrefix === "events" && {
-        "icon-opacity-transition": { duration: 5000, delay: 0 },
-        "circle-opacity-transition": { duration: 5000, delay: 0 },
-      }),
     },
     // TEXTE DES CLUSTERS
     {
@@ -301,6 +297,7 @@ const createClusterLayers = (
         "text-color": "#FFFFFF",
         "text-halo-color": "rgba(0, 0, 0, 0.5)",
         "text-halo-width": 1,
+        "text-opacity": 1,
       },
       layout: {
         "text-field": "{point_count}",
@@ -996,6 +993,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     attachStylingPinsController(() => mapRef.current?.getMap())
     return () => detachStylingPinsController()
   }, [])
+
 
   // Note: Les filtres sont appliqués via setData() (mise à jour des données) ET setFilter() (filtrage des layers)
   // pour maintenir le filtrage même après re-render ou fermeture d'EventCard

@@ -42,11 +42,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     const animationDelay = shouldShowSpinner ? 0 : 0.3
     const animationDuration = shouldShowSpinner ? 0.6 : 1.5
 
-    // Si authentifié, rendre le fond transparent pour voir les animations
-    const isTransparent = isAuthenticated && shouldShowSpinner
-
     return (
-        <div className={`loading-screen ${isFadingOut ? 'fading-out' : ''} ${partialHeight ? 'loading-screen-partial' : ''} ${isTransparent ? 'loading-screen-transparent' : ''}`}>
+        <div className={`loading-screen ${isFadingOut ? 'fading-out' : ''} ${partialHeight ? 'loading-screen-partial' : ''}`}>
             <motion.div
                 className="loading-content"
                 initial={{ opacity: 0, scale: 0.9 }}

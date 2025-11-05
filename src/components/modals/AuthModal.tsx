@@ -28,8 +28,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
   const [isCityValid, setIsCityValid] = useState(true)
 
   const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
+    // Validation : vérifier la structure de l'email
+    const atIndex = email.indexOf('@')
+    const dotIndex = email.lastIndexOf('.')
+    
+    // Vérifier qu'il y a un @ et un point après le @
+    if (atIndex === -1 || dotIndex === -1 || dotIndex <= atIndex) {
+      return false
+    }
+    
+    // Vérifier qu'il y a des caractères avant le @
+    if (atIndex === 0) {
+      return false
+    }
+    
+    // Vérifier qu'il y a des caractères entre le @ et le point
+    if (dotIndex - atIndex <= 1) {
+      return false
+    }
+    
+    // Vérifier qu'il y a des caractères après le point
+    if (dotIndex === email.length - 1) {
+      return false
+    }
+    
+    // Vérifier que le TLD (domaine principal) est valide
+    const tld = email.substring(dotIndex + 1).toLowerCase()
+    const validTlds = [
+      // Top TLD génériques
+      'com', 'net', 'org', 'info', 'io', 'app', 'dev', 'online', 'club',
+      // TLD nationaux principaux
+      'fr', 'be', 'ch', 'uk', 'de', 'nl', 'es', 'it', 'pt', 'at', 'dk', 'se', 'no', 'fi',
+      'pl', 'cz', 'ro', 'hu', 'gr', 'ie', 'bg', 'sk', 'lt', 'lv', 'ee',
+      'ca', 'us', 'mx', 'br', 'ar', 'cl', 'co', 'pe', 'uy',
+      'au', 'nz', 'sg', 'hk', 'my', 'id', 'th', 'vn', 'tw', 'jp', 'kr', 'cn', 'in',
+      'za', 'ru', 'tr', 'il'
+    ]
+    
+    if (!validTlds.includes(tld)) {
+      return false
+    }
+    
+    return true
   }
 
   // Fonction pour vérifier l'email lors de la connexion
@@ -98,12 +138,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
     }
   }, [matchByEmail, login, checkUserByEmail])
 
-  // Charger l'email et le nom du visitor depuis sessionStorage si disponible
+  // Charger l'email, le nom et la ville du visitor depuis sessionStorage si disponible
   useEffect(() => {
     if (!isAuthenticated) {
       try {
         const visitorEmail = sessionStorage.getItem('fomo-visit-email')
         const visitorName = sessionStorage.getItem('fomo-visit-name')
+        const visitorCity = sessionStorage.getItem('fomo-visit-city')
 
         if (visitorEmail && visitorEmail.trim()) {
           setEmail(visitorEmail.trim())
@@ -118,13 +159,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
         } else {
           setName('')
         }
+
+        if (visitorCity && visitorCity.trim()) {
+          setCity(visitorCity.trim())
+          console.log('✅ [AuthModal] Ville du visitor pré-remplie:', visitorCity.trim())
+        } else {
+          setCity('')
+        }
       } catch {
         setEmail('')
         setName('')
+        setCity('')
       }
 
       setCurrentStep('email')
-      setCity('')
       setError('')
       setIsCityValid(true)
     }
@@ -169,10 +217,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
 
   const renderEmailStep = () => {
     const isInWelcomeScreen = !isAuthenticated
-    const modalClass = useVisitorStyle 
-      ? 'modal visitor-modal-dynamic' 
-      : isInWelcomeScreen 
-        ? 'modal modal-welcome' 
+    const modalClass = useVisitorStyle
+      ? 'modal visitor-modal-dynamic'
+      : isInWelcomeScreen
+        ? 'modal modal-welcome'
         : 'modal'
     return (
       <div className={`modal_container ${isInWelcomeScreen ? 'modal-no-backdrop' : ''}`}>
@@ -228,81 +276,81 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
       <div className="modal_container modal-no-backdrop">
         <div className={modalClass} onClick={e => e.stopPropagation()}>
           <div className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
-            <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Créer votre profil</h2>
-            <button
-              className="back-button"
-              onClick={() => setCurrentStep('email')}
-              disabled={isLoading}
-              type="button"
-              aria-label="Retour"
-            >
-              ←
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
+              <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Créer votre profil</h2>
+              <button
+                className="back-button"
+                onClick={() => setCurrentStep('email')}
+                disabled={isLoading}
+                type="button"
+                aria-label="Retour"
+              >
+                ←
+              </button>
+            </div>
+            <p className="auth-subtitle">Complétez votre profil</p>
+            <form onSubmit={handleNewUserSubmit} className="modal-form">
+              <div className="form-section">
+                <label className="form-label">Votre nom *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Ex: Marie Dupont"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={isLoading}
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-section">
+                <label className="form-label">Votre ville *</label>
+                <AddressAutocomplete
+                  value={city}
+                  onChange={setCity}
+                  onAddressSelect={() => {
+                    // Optionnel : on pourrait stocker les coordonnées pour plus tard
+                  }}
+                  onValidationChange={setIsCityValid}
+                  placeholder="Ex: Bruxelles, New York, Paris..."
+                  className="form-input"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="form-section">
+                <label className="form-label">Email (confirmé)</label>
+                <input
+                  type="email"
+                  name="signEmail"
+                  id="auth-signEmail"
+                  className="form-input"
+                  value={email}
+                  disabled
+                />
+              </div>
+
+              {error && (
+                <div className="error-message">
+                  {error}
+                </div>
+              )}
+
+              <div className="form-section">
+                <div className="form-actions">
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !name.trim() || !city.trim() || !isCityValid}
+                    variant="primary"
+                  >
+                    {isLoading ? 'Création...' : 'Créer mon profil'}
+                  </Button>
+                </div>
+              </div>
+            </form>
           </div>
-          <p className="auth-subtitle">Complétez votre profil</p>
-          <form onSubmit={handleNewUserSubmit} className="modal-form">
-            <div className="form-section">
-              <label className="form-label">Votre nom *</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Ex: Marie Dupont"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
-                autoFocus
-              />
-            </div>
-
-            <div className="form-section">
-              <label className="form-label">Votre ville *</label>
-              <AddressAutocomplete
-                value={city}
-                onChange={setCity}
-                onAddressSelect={() => {
-                  // Optionnel : on pourrait stocker les coordonnées pour plus tard
-                }}
-                onValidationChange={setIsCityValid}
-                placeholder="Ex: Bruxelles, New York, Paris..."
-                className="form-input"
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="form-section">
-              <label className="form-label">Email (confirmé)</label>
-              <input
-                type="email"
-                name="signEmail"
-                id="auth-signEmail"
-                className="form-input"
-                value={email}
-                disabled
-              />
-            </div>
-
-            {error && (
-              <div className="error-message">
-                {error}
-              </div>
-            )}
-
-            <div className="form-section">
-              <div className="form-actions">
-                <Button
-                  type="submit"
-                  disabled={isLoading || !name.trim() || !city.trim() || !isCityValid}
-                  variant="primary"
-                >
-                  {isLoading ? 'Création...' : 'Créer mon profil'}
-                </Button>
-              </div>
-            </div>
-          </form>
         </div>
       </div>
-    </div>
     )
   }
 

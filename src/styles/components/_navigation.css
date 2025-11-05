@@ -37,6 +37,8 @@
 }
 
 .toggle-track {
+    position: relative;
+    z-index: 1;
     width: var(--toggle-width);
     height: var(--toggle-height);
     border-radius: var(--toggle-radius);
@@ -50,13 +52,13 @@
 .toggle-switch::before {
     content: '';
     position: absolute;
+    z-index: 2;
     width: var(--toggle-circle-size);
     height: var(--toggle-circle-size);
     background: white;
     border-radius: 50%;
     transform: translate(var(--current-toggle-position));
     transition: transform var(--transition-fast);
-    /* z-index hérité de navbar-container */
     box-shadow: var(--shadow-lg);
     cursor: pointer;
     touch-action: manipulation;
@@ -91,7 +93,9 @@
     /* padding-bottom: var(--safe-bottom); */
     z-index: 2000;
     /* Au-dessus de tous les autres éléments (modals, event cards, etc.) */
-    transform: translateZ(0);
+    /* État initial : cachée en bas avec accélération matérielle */
+    transform: translate3d(0, 100%, 0);
+    opacity: 0;
     backface-visibility: hidden;
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -103,17 +107,17 @@
 
 /* Animation slide-in depuis le bas (après signup) */
 .navbar-container.slide-in-from-bottom {
-    animation: slideInFromBottom 0.6s ease-out forwards;
+    animation: slideInFromBottom 1s ease-out forwards;
 }
 
 @keyframes slideInFromBottom {
     from {
-        transform: translateY(100%);
+        transform: translate3d(0, 100%, 0);
         opacity: 0;
     }
 
     to {
-        transform: translateY(0);
+        transform: translate3d(0, 0, 0);
         opacity: 1;
     }
 }

@@ -23,19 +23,6 @@
    pointer-events: auto;
 }
 
-/* Fade-in des pins réels lors de la transition VM → normal */
-.map-container--fade-in-real-events {
-   animation: fade-in-real-events 700ms ease-out both;
-}
-
-@keyframes fade-in-real-events {
-   0% {
-      opacity: 0.3;
-   }
-   100% {
-      opacity: 1;
-   }
-}
 
 /* Désactiver les interactions de la carte quand un modal est ouvert */
 .map-container.map-disabled {

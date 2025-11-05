@@ -130,10 +130,12 @@ export const VisitorModeApp: React.FC<{
     isLoadingVisitorEvent: boolean
     visitorEventError: string | null
 }> = ({ visitorEvent, isLoadingVisitorEvent, visitorEventError }) => {
+    const { isAuthenticated } = useAuth()
     const hasError = !!visitorEventError
     const hasNoEvent = !visitorEvent && !isLoadingVisitorEvent
 
-    const shouldShowWelcomeScreen = isLoadingVisitorEvent || hasError || hasNoEvent
+    // Ne pas afficher WelcomeScreen si l'utilisateur est authentifié (pour éviter le démontage de la carte)
+    const shouldShowWelcomeScreen = !isAuthenticated && (isLoadingVisitorEvent || hasError || hasNoEvent)
 
     return (
         <DeviceProvider>
@@ -142,7 +144,6 @@ export const VisitorModeApp: React.FC<{
                     <VisitorModeContent
                         visitorEvent={visitorEvent}
                         visitorEventError={visitorEventError}
-                        onEventCardMount={() => {/* signal uniquement pour timing flyTo */ }}
                     />
                     {shouldShowWelcomeScreen && (
                         <WelcomeScreen
@@ -174,7 +175,7 @@ export const VisitorModeApp: React.FC<{
 /**
  * Hook pour gérer les fake pins en mode visitor
  */
-export function useFakePins(_visitorEvent: Event | null, isPublicMode: boolean) {
+export function useFakePins(isPublicMode: boolean) {
     const [showTeaserPins, setShowTeaserPins] = useState(false)
     const [selectedFakeEvent, setSelectedFakeEvent] = useState<Event | null>(null)
     const [isPublicModeSequence, setIsPublicModeSequence] = useState(false)
@@ -361,7 +362,6 @@ export type FakePinsLogic = ReturnType<typeof useFakePins> & { fakeEventVariantI
  * Gère le toast initial, le modal visitor et les handlers associés
  */
 export function useVisitorIntegrationFlow(
-    _visitorEvent: Event | null,
     selectedEvent: Event | null,
     onVisitorFormCompleted: (organizerName: string) => void,
     onEventCardClose?: () => void
@@ -374,9 +374,7 @@ export function useVisitorIntegrationFlow(
     const [selectedResponseType, setSelectedResponseType] = useState<'participe' | 'maybe' | 'not_there' | null>(null)
 
     // Animation des étoiles pour les réponses visitor
-    const { setShowStars, StarsAnimation } = useStarsAnimation({
-        responseType: selectedResponseType || undefined
-    })
+    const { triggerStars, StarsAnimation } = useStarsAnimation()
 
     // Handler pour les réponses en mode visitor
     // En mode privé, seules les réponses suivantes sont valides : participe, maybe, not_there, cleared, seen
@@ -414,26 +412,30 @@ export function useVisitorIntegrationFlow(
         }
 
         // Sinon, sauvegarder la réponse et jouer l'animation des étoiles AVANT d'ouvrir le modal
-        setSelectedResponseType(responseType as 'participe' | 'maybe' | 'not_there')
+        const normalizedResponseType = responseType as 'participe' | 'maybe' | 'not_there'
+        setSelectedResponseType(normalizedResponseType)
 
-        // Jouer l'animation des étoiles
-        setShowStars(true)
+        // Jouer l'animation des étoiles avec le bon responseType
+        triggerStars(normalizedResponseType)
 
         // Ouvrir le modal après un court délai pour laisser l'animation se jouer
         setTimeout(() => {
             setShowVisitorModal(true)
         }, 500) // Délai pour laisser l'animation démarrer
-    }, [selectedEvent, setShowStars])
+    }, [selectedEvent, triggerStars])
 
     // Handler pour la confirmation du modal visitor
     // Ne fait QUE sauvegarder le nom/email, ne PAS envoyer la réponse
     // La réponse sera envoyée par EventCard.handleClose quand il se ferme
-    const handleVisitorModalConfirm = useCallback((name: string, email?: string) => {
-        // Sauvegarder le nom en sessionStorage
+    const handleVisitorModalConfirm = useCallback((name: string, email?: string, city?: string) => {
+        // Sauvegarder le nom, email et ville en sessionStorage
         try {
             sessionStorage.setItem('fomo-visit-name', name)
             if (email) {
                 sessionStorage.setItem('fomo-visit-email', email)
+            }
+            if (city) {
+                sessionStorage.setItem('fomo-visit-city', city)
             }
             // Sauvegarder aussi la réponse sélectionnée pour qu'EventCard puisse l'utiliser
             if (selectedResponseType) {
@@ -466,9 +468,9 @@ export function useVisitorIntegrationFlow(
         setSelectedResponseType(null)
     }, [])
 
-    // Handler pour l'événement centré (pas de logique spéciale, juste appeler le callback)
+    // Handler pour l'événement centré (vide pour l'instant)
     const handleEventCentered = useCallback(() => {
-        // Pas de logique spéciale pour le moment
+        // NOP - placeholder pour future logic
     }, [])
 
     return {
@@ -737,31 +739,19 @@ export function useStarsAnimation(options?: {
 }
 
 /**
- * Hook pour gérer l'animation des étoiles dans le modal visitor
- */
-export function useVisitorModalStars(
-    _buttonId: string = 'visitor-modal-submit-button',
-    responseType?: 'participe' | 'maybe' | 'not_there'
-) {
-    // Déclenche toujours au centre de l'écran (pas associé au bouton) avec moins de particules mais plus grandes
-    return useStarsAnimation({ starCount: 36, duration: 2500, responseType })
-}
-
-/**
  * Contenu du mode visitor
  */
 const VisitorModeContent: React.FC<{
     visitorEvent: Event | null
     visitorEventError: string | null
-    onEventCardMount: () => void
-}> = ({ visitorEvent, visitorEventError, onEventCardMount: _onEventCardMount }) => {
+}> = ({ visitorEvent, visitorEventError }) => {
     const { isPublicMode, setToggleDisabled } = usePrivacy()
     const { showToast } = useToast()
     const { isAuthenticated } = useAuth()
     const { users } = useFomoDataContext()
 
     // Gérer les fake pins
-    const fakePinsLogic = useFakePins(visitorEvent, isPublicMode)
+    const fakePinsLogic = useFakePins(isPublicMode)
 
     // Référence locale pour conditionner le modal visitor (plus de contrôle direct sur DiscoverPage)
     const selectedEventRef = useRef<Event | null>(null)
@@ -840,7 +830,7 @@ const VisitorModeContent: React.FC<{
                     sessionStorage.setItem('fomo-just-signed-up', 'true')
                 } catch { }
 
-                // 4. Attendre 200ms puis pop FilterBar
+                // 4. Attendre la fin de l'animation NavBar (1s) puis pop FilterBar
                 setTimeout(() => {
                     // Déclencher l'animation pop FilterBar
                     try {
@@ -855,8 +845,8 @@ const VisitorModeContent: React.FC<{
                             type: 'success',
                             duration: 5000,
                         })
-                    }, 200)
-                }, 200) // Délai pour pop FilterBar
+                    }, 3200) // Après l'animation FilterBar (3s) + 200ms
+                }, 1000) // Délai pour pop FilterBar (après fin animation NavBar)
             }, 200) // Délai pour slide-up NavBar
         }
     }, [isAuthenticated, fakePinsLogic, showToast])
@@ -885,20 +875,16 @@ const VisitorModeContent: React.FC<{
         setTimeout(() => {
             const toggleElement = document.querySelector('.toggle-switch')
             if (toggleElement) {
-                console.log('[Visitor] Ajout de la classe privacy-toggle-halo au toggle')
                 toggleElement.classList.add('privacy-toggle-halo')
 
                 // Retirer la classe quand l'utilisateur clique sur le toggle
                 const handleToggleClick = () => {
                     toggleElement.classList.remove('privacy-toggle-halo')
                     toggleElement.removeEventListener('click', handleToggleClick)
-                    console.log('[Visitor] Retrait de la classe privacy-toggle-halo après clic')
                 }
 
                 // Ajouter l'event listener pour retirer la classe au clic
                 toggleElement.addEventListener('click', handleToggleClick, { once: true })
-            } else {
-                console.warn('[Visitor] Toggle element non trouvé')
             }
         }, 100) // Délai pour laisser le DOM se mettre à jour après setToggleDisabled
     }, [setToggleDisabled])
@@ -922,7 +908,6 @@ const VisitorModeContent: React.FC<{
 
         // Si le formulaire a été complété, activer le toggle et ajouter l'animation
         if (hasCompletedForm) {
-            console.log('[Visitor] handleEventCardClose: Formulaire complété, activation du toggle')
             // Activer le toggle privacy
             setToggleDisabled(false)
 
@@ -930,30 +915,34 @@ const VisitorModeContent: React.FC<{
             setTimeout(() => {
                 const toggleElement = document.querySelector('.toggle-switch')
                 if (toggleElement) {
-                    console.log('[Visitor] Ajout de la classe privacy-toggle-halo au toggle')
                     toggleElement.classList.add('privacy-toggle-halo')
 
                     // Retirer la classe quand l'utilisateur clique sur le toggle
                     const handleToggleClick = () => {
                         toggleElement.classList.remove('privacy-toggle-halo')
                         toggleElement.removeEventListener('click', handleToggleClick)
-                        console.log('[Visitor] Retrait de la classe privacy-toggle-halo après clic')
                     }
 
                     // Ajouter l'event listener pour retirer la classe au clic
                     toggleElement.addEventListener('click', handleToggleClick, { once: true })
-                } else {
-                    console.warn('[Visitor] Toggle element non trouvé dans handleEventCardClose')
                 }
             }, 100)
 
-            // Le toast a été supprimé car le teaser sur la FakeEventCard remplit ce rôle
+            // Afficher le toast "Pssst!" après 2 secondes
+            setTimeout(() => {
+                showToast({
+                    title: 'Pssst! 👀',
+                    message: 'Active le mode public sur le bouton là en haut à droite pour découvrir d\'autres événements près de chez toi !',
+                    type: 'info',
+                    duration: 5000,
+                    className: 'toast-visitor'
+                })
+            }, 2000)
         }
     }, [showToast, setToggleDisabled])
 
     // Gérer le flux d'intégration visitor
     const integrationFlow = useVisitorIntegrationFlow(
-        visitorEvent,
         selectedEventRef.current,
         handleVisitorFormCompleted,
         handleEventCardClose
