@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Select from 'react-select'
 import type { StylesConfig } from 'react-select'
 import AsyncSelect from 'react-select/async'
