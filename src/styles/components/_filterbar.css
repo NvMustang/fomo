@@ -10,6 +10,27 @@
    z-index: var(--z-index-modal);
 }
 
+/* Animation pop pour FilterBar lors de la transition VM → normal */
+@keyframes filterbarPop {
+   0% {
+      transform: translateX(-50%) scale(0.8);
+      opacity: 0;
+   }
+
+   50% {
+      transform: translateX(-50%) scale(1.05);
+   }
+
+   100% {
+      transform: translateX(-50%) scale(1);
+      opacity: 1;
+   }
+}
+
+.filterbar-pop {
+   animation: filterbarPop 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
 .filterbar {
    align-items: center;
    margin-top: 10px;

@@ -11,6 +11,7 @@ export interface User {
     isPublicProfile: boolean
     isAmbassador: boolean
     allowRequests?: boolean
+    isVisitor?: boolean // true pour les visiteurs, false pour les utilisateurs authentifiés
 }
 
 export interface Venue {
@@ -116,7 +117,7 @@ export interface Tag {
 }
 
 // ===== USER RESPONSES =====
-export type UserResponseValue = 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null
+export type UserResponseValue = 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null
 
 export interface UserFriendshipResponse {
     userId: string

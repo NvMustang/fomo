@@ -13,6 +13,7 @@ const geocodingRoutes = require('./geocoding')
 const batchRoutes = require('./batch')
 const tagsRoutes = require('./tags')
 const betaRoutes = require('./beta')
+const analyticsRoutes = require('./analytics')
 
 // Montage des routes
 router.use('/events', eventsRoutes)
@@ -22,5 +23,6 @@ router.use('/geocode', geocodingRoutes)
 router.use('/batch', batchRoutes)
 router.use('/tags', tagsRoutes)
 router.use('/beta', betaRoutes)
+router.use('/analytics', analyticsRoutes)
 
 module.exports = router

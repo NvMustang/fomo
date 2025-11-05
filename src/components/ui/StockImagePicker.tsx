@@ -37,13 +37,16 @@ export const StockImagePicker: React.FC<StockImagePickerProps> = ({
 
   // Clé API Pexels (gratuite, 200 requêtes/heure)
   // Utilise VITE_PEXELS_API_KEY depuis les variables d'environnement
-  // Fallback pour le développement local (à supprimer en production)
-  const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY || 'h1mxKSN4dnwZaR4XTLfAZTAcjlzzJkNgnAkWjeQmBQrknFdg5NVr21sX'
+  const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY
 
   // Rechercher des images
   const searchImages = useCallback(async (query: string) => {
     if (!query.trim()) return
 
+    if (!PEXELS_API_KEY) {
+      setError('Clé API Pexels non configurée. Veuillez définir VITE_PEXELS_API_KEY dans les variables d\'environnement.')
+      return
+    }
 
     setError(null)
 

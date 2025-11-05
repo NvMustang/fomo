@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Confetti Animation</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .control-group .value {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-participe {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ffa07a 100%);
+            color: white;
+        }
+
+        .btn-maybe {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn-not-there {
+            background: linear-gradient(135deg, #95a5a6 0%, #bdc3c7 100%);
+            color: white;
+        }
+
+        .btn-reset {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .current-config {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .current-config h2 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .config-display {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .emoji-accent {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10000;
+        }
+
+        .emoji-accent span {
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-size: 36px;
+            transition: transform 2400ms cubic-bezier(.17, .67, .46, 1.01), opacity 1250ms ease;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎉 Test Confetti Animation</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Particle Count</label>
+                <input type="range" id="particleCount" min="0" max="500" value="100" step="10">
+                <span class="value" id="particleCountValue">100</span>
+            </div>
+
+            <div class="control-group">
+                <label>Spread (degrees)</label>
+                <input type="range" id="spread" min="0" max="360" value="70" step="5">
+                <span class="value" id="spreadValue">70</span>
+            </div>
+
+            <div class="control-group">
+                <label>Start Velocity</label>
+                <input type="range" id="startVelocity" min="0" max="100" value="35" step="1">
+                <span class="value" id="startVelocityValue">35</span>
+            </div>
+
+            <div class="control-group">
+                <label>Gravity</label>
+                <input type="range" id="gravity" min="-2" max="2" value="1.0" step="0.05">
+                <span class="value" id="gravityValue">1.0</span>
+            </div>
+
+            <div class="control-group">
+                <label>Scalar</label>
+                <input type="range" id="scalar" min="0.1" max="5" value="1.0" step="0.1">
+                <span class="value" id="scalarValue">1.0</span>
+            </div>
+
+            <div class="control-group">
+                <label>Ticks</label>
+                <input type="range" id="ticks" min="0" max="1000" value="200" step="10">
+                <span class="value" id="ticksValue">200</span>
+            </div>
+
+            <div class="control-group">
+                <label>Decay (décroissance vitesse - log)</label>
+                <input type="range" id="decay" min="0" max="100" value="94" step="1">
+                <span class="value" id="decayValue">0.94</span>
+            </div>
+
+            <div class="control-group">
+                <label>Drift (dérive horizontale)</label>
+                <input type="range" id="drift" min="-5" max="5" value="0" step="0.1">
+                <span class="value" id="driftValue">0</span>
+            </div>
+
+            <div class="control-group">
+                <label>Angle (angle de départ en degrés)</label>
+                <input type="range" id="angle" min="0" max="360" value="90" step="1">
+                <span class="value" id="angleValue">90</span>
+            </div>
+
+            <div class="control-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="flat" style="width: 18px; height: 18px;">
+                    <span>Désactiver la rotation (flat)</span>
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label>Type de particule</label>
+                <select id="particleType"
+                    style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; font-size: 0.9em;">
+                    <option value="normal">Confetti normal</option>
+                    <option value="emoji">Émojis</option>
+                    <option value="star">Étoiles</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-participe" onclick="triggerConfetti('participe')">🚀 Participe</button>
+            <button class="btn-maybe" onclick="triggerConfetti('maybe')">🤔 Maybe</button>
+            <button class="btn-not-there" onclick="triggerConfetti('not_there')">🥲 Not There</button>
+            <button class="btn-reset" onclick="resetToDefaults()">🔄 Reset</button>
+            <button class="btn-participe" onclick="testEmoji()"
+                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">✨ Test Emoji</button>
+        </div>
+
+        <div class="current-config">
+            <h2>Configuration actuelle</h2>
+            <div class="config-display" id="configDisplay"></div>
+        </div>
+
+        <div class="info">
+            <strong>💡 Astuce:</strong> Ajuste les paramètres ci-dessus et teste avec les boutons. Les valeurs sont
+            mises à jour en temps réel. Cliquez sur "Reset" pour revenir aux valeurs par défaut.
+        </div>
+
+        <div class="current-config" style="margin-top: 20px;">
+            <h2>Paramètres disponibles dans canvas-confetti</h2>
+            <div class="config-display">
+                Paramètres réels canvas-confetti (tous configurables) :
+                - particleCount: nombre de particules
+                - spread: angle de dispersion (0-360 degrés)
+                - startVelocity: vitesse initiale
+                - decay: décroissance vitesse (0-1, proche de 1 = ralentit peu)
+                - gravity: gravité (positif = vers le bas)
+                - drift: dérive horizontale (-2 à 2)
+                - angle: angle de départ en degrés (0-360)
+                - ticks: durée de vie en frames
+                - scalar: échelle/multiplicateur de taille
+                - origin: { x, y } point d'origine (0-1, 0.5 = centre)
+                - colors: string[] (couleurs)
+                - shapes: CanvasImageSource[] (formes custom)
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mapping des émojis selon le type de réponse
+        const getReactionEmojis = (responseType) => {
+            switch (responseType) {
+                case 'participe':
+                    return ['🚀', '⭐', '🎉', '😄', '🙌'];
+                case 'maybe':
+                    return ['🚀', '⭐', '🤞', '🫶', '👀'];
+                case 'not_there':
+                    return ['🚀', '⭐', '🥲', '🤗', '🫶'];
+                default:
+                    return ['🚀', '⭐', '🎉', '😄', '🙌'];
+            }
+        };
+
+        let confettiCanvas = document.createElement('canvas');
+        confettiCanvas.style.position = 'fixed';
+        confettiCanvas.style.top = '0';
+        confettiCanvas.style.left = '0';
+        confettiCanvas.style.width = '100%';
+        confettiCanvas.style.height = '100%';
+        confettiCanvas.style.pointerEvents = 'none';
+        confettiCanvas.style.zIndex = '9999';
+        document.body.appendChild(confettiCanvas);
+
+        let myConfetti = confetti.create(confettiCanvas, { resize: true, useWorker: true });
+
+        // Fonction pour obtenir l'instance confetti avec/sans Worker selon le type
+        function getConfettiInstance(useWorker = true) {
+            if (!useWorker && myConfetti._options?.useWorker) {
+                // Recréer sans Worker si nécessaire
+                if (confettiCanvas.parentNode) {
+                    confettiCanvas.parentNode.removeChild(confettiCanvas);
+                }
+                const newCanvas = document.createElement('canvas');
+                newCanvas.style.position = 'fixed';
+                newCanvas.style.top = '0';
+                newCanvas.style.left = '0';
+                newCanvas.style.width = '100%';
+                newCanvas.style.height = '100%';
+                newCanvas.style.pointerEvents = 'none';
+                newCanvas.style.zIndex = '9999';
+                document.body.appendChild(newCanvas);
+                confettiCanvas = newCanvas;
+                myConfetti = confetti.create(newCanvas, { resize: true, useWorker: false });
+            } else if (useWorker && !myConfetti._options?.useWorker) {
+                // Recréer avec Worker si nécessaire
+                if (confettiCanvas.parentNode) {
+                    confettiCanvas.parentNode.removeChild(confettiCanvas);
+                }
+                const newCanvas = document.createElement('canvas');
+                newCanvas.style.position = 'fixed';
+                newCanvas.style.top = '0';
+                newCanvas.style.left = '0';
+                newCanvas.style.width = '100%';
+                newCanvas.style.height = '100%';
+                newCanvas.style.pointerEvents = 'none';
+                newCanvas.style.zIndex = '9999';
+                document.body.appendChild(newCanvas);
+                confettiCanvas = newCanvas;
+                myConfetti = confetti.create(newCanvas, { resize: true, useWorker: true });
+            }
+            return myConfetti;
+        }
+
+        const defaults = {
+            participe: {
+                particleCount: 100,
+                spread: 85,
+                startVelocity: 50,
+                gravity: 0.9,
+                scalar: 1.1,
+                decay: 0.94,
+                drift: 0,
+                angle: 90,
+                ticks: 200
+            },
+            maybe: {
+                particleCount: 80,
+                spread: 60,
+                startVelocity: 30,
+                gravity: 0.85,
+                scalar: 0.95,
+                decay: 0.94,
+                drift: 0,
+                angle: 90,
+                ticks: 200
+            },
+            not_there: {
+                particleCount: 60,
+                spread: 50,
+                startVelocity: 25,
+                gravity: 0.7,
+                scalar: 0.9,
+                decay: 0.94,
+                drift: 0,
+                angle: 90,
+                ticks: 200
+            }
+        };
+
+        // Fonctions de conversion logarithmique base 10 pour decay
+        // Convertit slider value (0-100) → decay value (0-1)
+        function decaySliderToValue(sliderValue) {
+            // Range logarithmique de 0 à 1 avec plus de précision près de 1
+            // decay = 1 - 10^(-slider/100 * 3)
+            // À slider=0: decay = 1 - 10^0 = 0
+            // À slider=100: decay = 1 - 10^-3 = 1 - 0.001 = 0.999
+            const slider = parseFloat(sliderValue);
+            return 1 - Math.pow(10, -slider / 100 * 3);
+        }
+
+        // Convertit decay value (0-1) → slider value (0-100)
+        function decayValueToSlider(decayValue) {
+            // slider = 100 * (-log10(1 - decay)) / 3
+            const decay = parseFloat(decayValue);
+            if (decay >= 1) return 100;
+            if (decay <= 0) return 0;
+            return Math.round(100 * (-Math.log10(1 - decay)) / 3);
+        }
+
+        function updateValueDisplay() {
+            document.getElementById('particleCountValue').textContent = document.getElementById('particleCount').value;
+            document.getElementById('spreadValue').textContent = document.getElementById('spread').value;
+            document.getElementById('startVelocityValue').textContent = document.getElementById('startVelocity').value;
+            document.getElementById('gravityValue').textContent = parseFloat(document.getElementById('gravity').value).toFixed(1);
+            document.getElementById('scalarValue').textContent = parseFloat(document.getElementById('scalar').value).toFixed(1);
+            // Afficher la valeur decay réelle (convertie depuis le slider logarithmique)
+            const decaySlider = document.getElementById('decay').value;
+            const decayReal = decaySliderToValue(decaySlider);
+            document.getElementById('decayValue').textContent = decayReal.toFixed(3);
+            document.getElementById('driftValue').textContent = parseFloat(document.getElementById('drift').value).toFixed(1);
+            document.getElementById('angleValue').textContent = document.getElementById('angle').value;
+            document.getElementById('ticksValue').textContent = document.getElementById('ticks').value;
+            updateConfigDisplay();
+        }
+
+        function createStarShape(color = '#FFD700') {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 64;
+            tempCanvas.height = 64;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            if (tempCtx) {
+                const centerX = 32;
+                const centerY = 32;
+                const outerRadius = 28;
+                const innerRadius = 14;
+                const spikes = 5;
+
+                tempCtx.beginPath();
+                tempCtx.moveTo(centerX, centerY - outerRadius);
+
+                for (let i = 0; i < spikes * 2; i++) {
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                    const angle = (Math.PI * i) / spikes - Math.PI / 2;
+                    const x = centerX + Math.cos(angle) * radius;
+                    const y = centerY + Math.sin(angle) * radius;
+                    tempCtx.lineTo(x, y);
+                }
+
+                tempCtx.closePath();
+                tempCtx.fillStyle = color;
+                tempCtx.fill();
+                tempCtx.strokeStyle = '#fff';
+                tempCtx.lineWidth = 2;
+                tempCtx.stroke();
+            }
+
+            return tempCanvas;
+        }
+
+        function updateConfigDisplay() {
+            const config = getCurrentConfig();
+
+            document.getElementById('configDisplay').textContent = JSON.stringify(config, null, 2);
+        }
+
+        function getCurrentConfig() {
+            const particleType = document.getElementById('particleType').value;
+            const flat = document.getElementById('flat').checked;
+
+            // Convertir la valeur du slider decay en valeur réelle (logarithmique)
+            const decaySlider = document.getElementById('decay').value;
+            const decayReal = decaySliderToValue(decaySlider);
+
+            const baseConfig = {
+                particleCount: parseInt(document.getElementById('particleCount').value),
+                spread: parseInt(document.getElementById('spread').value),
+                startVelocity: parseInt(document.getElementById('startVelocity').value),
+                gravity: parseFloat(document.getElementById('gravity').value),
+                scalar: parseFloat(document.getElementById('scalar').value),
+                decay: decayReal, // Utiliser la valeur convertie
+                drift: parseFloat(document.getElementById('drift').value),
+                angle: parseInt(document.getElementById('angle').value),
+                ticks: parseInt(document.getElementById('ticks').value),
+                origin: { x: 0.5, y: 0.5 },
+                flat: flat // Désactive la rotation si true
+            };
+
+            return { ...baseConfig, particleType };
+        }
+
+        function triggerConfetti(type) {
+            const currentConfig = getCurrentConfig();
+            const typeDefaults = defaults[type];
+            const { particleType, ...baseConfig } = currentConfig;
+
+            // Appliquer les valeurs par défaut du type (seulement pour les paramètres non définis)
+            const config = {
+                ...typeDefaults,
+                ...baseConfig // Les valeurs de l'interface prennent priorité
+            };
+
+            console.info(`[Confetti Test] Triggering ${type}`, config);
+
+            if (particleType === 'normal') {
+                // Confetti normal
+                myConfetti(config);
+                setTimeout(() => {
+                    myConfetti({
+                        ...config,
+                        particleCount: Math.round(config.particleCount * 0.6),
+                        spread: config.spread + 15,
+                        scalar: config.scalar * 0.92
+                    });
+                }, 120);
+            } else if (particleType === 'emoji') {
+                // Émojis avec shapeFromText - respecter tous les paramètres du setup
+                const ems = getReactionEmojis(type);
+                console.info(`[Confetti Test] Triggering emojis for ${type}`, { emojis: ems, config });
+
+                // Créer tous les shapes en utilisant le scalar de la config
+                const shapes = ems.map(emoji => {
+                    try {
+                        return confetti.shapeFromText({ text: emoji, scalar: config.scalar });
+                    } catch (err) {
+                        console.error(`[Confetti Test] Error creating shape for emoji ${emoji}:`, err);
+                        return null;
+                    }
+                }).filter(shape => shape !== null);
+
+                if (shapes.length > 0) {
+                    // Un seul appel avec tous les shapes, respectant tous les paramètres
+                    // Utiliser le scalar original pour la config globale, les shapes sont déjà à la bonne taille
+                    const emojiConfig = {
+                        ...config,
+                        shapes: shapes
+                    };
+                    myConfetti(emojiConfig);
+                }
+            } else if (particleType === 'star') {
+                // Étoiles custom - respecter tous les paramètres du setup
+                const ems = getReactionEmojis(type);
+                const typeColors = type === 'participe'
+                    ? ['#FFD700', '#FFA500', '#FF6B6B']
+                    : type === 'maybe'
+                        ? ['#4facfe', '#00f2fe', '#667eea']
+                        : ['#FFB6C1', '#FFC0CB', '#FFE4E1'];
+
+                console.info(`[Confetti Test] Triggering stars for ${type}`, { emojis: ems, config });
+
+                // Créer toutes les shapes d'étoiles
+                const starPromises = ems.map((emoji, index) => {
+                    return new Promise((resolve) => {
+                        const starColor = typeColors[index % typeColors.length];
+                        const starShape = createStarShape(starColor);
+
+                        // Convertir canvas en ImageData pour éviter le problème Worker
+                        const img = new Image();
+                        img.src = starShape.toDataURL();
+
+                        img.onload = () => {
+                            resolve(img);
+                        };
+                        img.onerror = () => {
+                            resolve(null);
+                        };
+                    });
+                });
+
+                // Attendre que toutes les images soient chargées, puis créer un seul appel
+                Promise.all(starPromises).then(shapes => {
+                    const validShapes = shapes.filter(shape => shape !== null);
+                    if (validShapes.length > 0) {
+                        const starConfig = {
+                            ...config,
+                            shapes: validShapes
+                        };
+                        myConfetti(starConfig);
+                    }
+                });
+            }
+
+            // Tentative avec formes custom (commenté pour l'instant)
+            /* const starShapes = ems.map((emoji, idx) => {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 64;
+                tempCanvas.height = 64;
+                const tempCtx = tempCanvas.getContext('2d');
+
+                if (tempCtx) {
+                    // Dessiner une étoile
+                    const centerX = 32;
+                    const centerY = 32;
+                    const outerRadius = 28;
+                    const innerRadius = 14;
+                    const spikes = 5;
+
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(centerX, centerY - outerRadius);
+
+                    for (let i = 0; i < spikes * 2; i++) {
+                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                        const angle = (Math.PI * i) / spikes - Math.PI / 2;
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        tempCtx.lineTo(x, y);
+                    }
+
+                    tempCtx.closePath();
+                    // Couleurs différentes selon le type
+                    if (type === 'participe') {
+                        tempCtx.fillStyle = '#FFD700'; // Or
+                    } else if (type === 'maybe') {
+                        tempCtx.fillStyle = '#4facfe'; // Bleu
+                    } else {
+                        tempCtx.fillStyle = '#FFB6C1'; // Rose
+                    }
+                    tempCtx.fill();
+                    tempCtx.strokeStyle = '#fff';
+                    tempCtx.lineWidth = 2;
+                    tempCtx.stroke();
+                }
+
+                return tempCanvas;
+            }); */
+        }
+
+        function resetToDefaults(type = 'participe') {
+            const def = defaults[type];
+            document.getElementById('particleCount').value = def.particleCount;
+            document.getElementById('spread').value = def.spread;
+            document.getElementById('startVelocity').value = def.startVelocity;
+            document.getElementById('gravity').value = def.gravity;
+            document.getElementById('scalar').value = def.scalar;
+            // Convertir la valeur decay réelle en valeur slider (logarithmique)
+            document.getElementById('decay').value = decayValueToSlider(def.decay);
+            document.getElementById('drift').value = def.drift;
+            document.getElementById('angle').value = def.angle;
+            document.getElementById('ticks').value = def.ticks;
+            updateValueDisplay();
+        }
+
+        function testEmoji() {
+            const config = getCurrentConfig();
+            const emoji = '🚀'; // Test avec un emoji
+
+            console.info('[Confetti Test] Testing emoji', emoji);
+
+            // Créer un canvas avec l'emoji dessiné
+            const emojiCanvas = document.createElement('canvas');
+            emojiCanvas.width = 128;
+            emojiCanvas.height = 128;
+            const ctx = emojiCanvas.getContext('2d');
+
+            if (ctx) {
+                // Utiliser une police qui supporte les emojis
+                ctx.font = '96px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(emoji, 64, 64);
+            }
+
+            // Essayer différentes méthodes pour utiliser l'emoji
+            console.log('[Confetti Test] Trying different methods...');
+
+            // Méthode 1: shapes array
+            try {
+                myConfetti({
+                    ...config,
+                    particleCount: 5,
+                    shapes: [emojiCanvas],
+                    scalar: 2.0,
+                    spread: 70,
+                    startVelocity: 40
+                });
+                console.log('[Confetti Test] Method 1 (shapes array) - SUCCESS');
+            } catch (e) {
+                console.error('[Confetti Test] Method 1 failed:', e);
+            }
+
+            // Méthode 2: shapeFromText si disponible
+            if (typeof confetti.shapeFromText === 'function') {
+                try {
+                    const shape = confetti.shapeFromText({ text: emoji, scalar: 2.0 });
+                    myConfetti({
+                        ...config,
+                        particleCount: 5,
+                        shape: shape,
+                        scalar: 2.0,
+                        spread: 70,
+                        startVelocity: 40
+                    });
+                    console.log('[Confetti Test] Method 2 (shapeFromText) - SUCCESS');
+                } catch (e) {
+                    console.error('[Confetti Test] Method 2 failed:', e);
+                }
+            } else {
+                console.log('[Confetti Test] shapeFromText not available');
+            }
+
+            // Méthode 3: shapes avec ImageData
+            try {
+                const imageData = ctx.getImageData(0, 0, 128, 128);
+                const img = new Image();
+                img.src = emojiCanvas.toDataURL();
+
+                img.onload = () => {
+                    myConfetti({
+                        ...config,
+                        particleCount: 5,
+                        shapes: [img],
+                        scalar: 2.0,
+                        spread: 70,
+                        startVelocity: 40
+                    });
+                    console.log('[Confetti Test] Method 3 (Image) - SUCCESS');
+                };
+            } catch (e) {
+                console.error('[Confetti Test] Method 3 failed:', e);
+            }
+        }
+
+        // Initialiser les valeurs
+        resetToDefaults('participe');
+
+        // Écouter les changements de sliders
+        document.querySelectorAll('input[type="range"]').forEach(input => {
+            input.addEventListener('input', updateValueDisplay);
+        });
+
+        // Écouter les changements du select
+        document.getElementById('particleType').addEventListener('change', updateConfigDisplay);
+        document.getElementById('flat').addEventListener('change', updateConfigDisplay);
+
+        // Mettre à jour l'affichage au chargement
+        updateConfigDisplay();
+    </script>
+</body>
+
+</html>

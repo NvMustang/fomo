@@ -7,6 +7,7 @@ interface NavBarProps {
     onNavClick?: (path: string) => void
     currentPage?: string
     isCreateEventOpen?: boolean
+    shouldSlideIn?: boolean
 }
 
 interface NavItem {
@@ -15,9 +16,8 @@ interface NavItem {
     label: string
 }
 
-export const NavBar: React.FC<NavBarProps> = React.memo(({ onCreateEventClick, onNavClick, currentPage = 'map', isCreateEventOpen = false }) => {
+export const NavBar: React.FC<NavBarProps> = React.memo(({ onCreateEventClick, onNavClick, currentPage = 'map', isCreateEventOpen = false, shouldSlideIn = false }) => {
     const { isPublicMode } = usePrivacy()
-
 
     const navItems: NavItem[] = [
         { path: 'map', icon: MapIcon, label: 'Discover' },
@@ -27,7 +27,7 @@ export const NavBar: React.FC<NavBarProps> = React.memo(({ onCreateEventClick, o
     ]
 
     return (
-        <div className="navbar-container">
+        <div className={`navbar-container ${shouldSlideIn ? 'slide-in-from-bottom' : ''}`}>
             <button
                 className={`nav-create-floating circular-button circular-button ${isCreateEventOpen ? 'rotated' : ''}`}
                 aria-label={isCreateEventOpen ? "Fermer la création d'événement" : "Créer un événement"}

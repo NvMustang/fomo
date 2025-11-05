@@ -3,7 +3,7 @@
  * Composant UI pour afficher des notifications toast
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 
 export type ToastType = 'success' | 'error' | 'info'
 
@@ -12,6 +12,7 @@ export interface ToastMessage {
     message: string
     type: ToastType
     duration?: number
+    className?: string
 }
 
 interface ToastProps {
@@ -22,6 +23,12 @@ interface ToastProps {
 export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
     const [isVisible, setIsVisible] = useState(false)
     const [isClosing, setIsClosing] = useState(false)
+    const isVisibleRef = useRef(isVisible)
+
+    // Synchroniser la ref pour éviter de dépendre de isVisible dans l'effet principal
+    useEffect(() => {
+        isVisibleRef.current = isVisible
+    }, [isVisible])
 
     useEffect(() => {
         if (toast) {
@@ -40,7 +47,7 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
             }, toast.duration || 2000)
 
             return () => clearTimeout(timer)
-        } else if (isVisible) {
+        } else if (isVisibleRef.current) {
             // Fermeture immédiate avec animation quand toast devient null
             setIsClosing(true)
             const closeTimer = setTimeout(() => {
@@ -50,7 +57,7 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
 
             return () => clearTimeout(closeTimer)
         }
-    }, [toast, onClose, isVisible])
+    }, [toast, onClose])
 
     if (!isVisible || !toast) {
         return null
@@ -58,7 +65,7 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
 
     return (
         <div className={`toast-overlay ${isClosing ? 'closing' : ''}`}>
-            <div className={`toast-message ${toast.type}`}>
+            <div className={`toast-message ${toast.type} ${toast.className || ''}`}>
                 <h3>{toast.title}</h3>
                 {toast.message && <p>{toast.message}</p>}
             </div>

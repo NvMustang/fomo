@@ -249,9 +249,25 @@ export function FilterBar() {
         return badges
     }, [selectedResponseOption, selectedPeriodOption, selectedOrganizerOption, filters.tags, setFilters])
 
+    // One-shot pop animation after signup (VM -> normal transition)
+    const [shouldPop, setShouldPop] = useState(false)
+    useEffect(() => {
+        try {
+            const justSignedUp = sessionStorage.getItem('fomo-just-signed-up') === 'true'
+            if (justSignedUp) {
+                // Laisser la navbar slider d'abord (gérée ailleurs), puis pop la filterbar
+                const t = setTimeout(() => setShouldPop(true), 600)
+                const t2 = setTimeout(() => setShouldPop(false), 900)
+                // Nettoyer le flag pour ne pas rejouer
+                sessionStorage.removeItem('fomo-just-signed-up')
+                return () => { clearTimeout(t); clearTimeout(t2) }
+            }
+        } catch {}
+    }, [])
+
     return (
         <div
-            className={`filterbar${isExpanded ? '' : ' filterbar--collapsed'}`}
+            className={`filterbar${isExpanded ? '' : ' filterbar--collapsed'}${shouldPop ? ' filterbar--pop' : ''}`}
             onBlurCapture={handleBlurCapture}
         >
             {/* Recherche texte (toujours visible) */}

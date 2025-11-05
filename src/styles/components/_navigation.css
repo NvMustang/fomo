@@ -13,11 +13,15 @@
     padding: var(--md);
     pointer-events: none;
     background: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+    /* Permettre au halo du toggle de dépasser */
+    overflow: visible;
 }
 
 .header-actions {
     display: flex;
     pointer-events: auto;
+    /* Permettre au halo du toggle de dépasser */
+    overflow: visible;
 }
 
 /* Toggle switch */
@@ -28,6 +32,8 @@
     align-items: center;
     justify-content: center;
     transition: all var(--transition-fast);
+    /* Permettre au halo de dépasser */
+    overflow: visible;
 }
 
 .toggle-track {
@@ -93,6 +99,23 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+/* Animation slide-in depuis le bas (après signup) */
+.navbar-container.slide-in-from-bottom {
+    animation: slideInFromBottom 0.6s ease-out forwards;
+}
+
+@keyframes slideInFromBottom {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 /* Navigation bar - Web-first with internal shadow */

@@ -13,6 +13,9 @@ router.get('/', UsersController.getAllUsers)
 // POST /api/users - Créer ou mettre à jour un utilisateur (UPSERT)
 router.post('/', UsersController.upsertUser)
 
+// PUT /api/users - Mettre à jour un utilisateur existant (UPDATE uniquement)
+router.put('/', UsersController.updateUser)
+
 // POST /api/users/friendships - Créer une amitié
 router.post('/friendships', UsersController.upsertFriendship)
 

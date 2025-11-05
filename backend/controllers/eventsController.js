@@ -77,6 +77,23 @@ class EventsController {
                 // silencieux: fallback déjà géré
             }
 
+            // Enrichir avec organizerName depuis la table Users si présent
+            try {
+                if (event.organizerId) {
+                    const organizer = await DataServiceV2.getByKey(
+                        'Users!A2:Q',
+                        DataServiceV2.mappers.user,
+                        0, // key column (ID)
+                        event.organizerId
+                    )
+                    if (organizer && organizer.name) {
+                        event.organizerName = organizer.name
+                    }
+                }
+            } catch (_) {
+                // silencieux: fallback sur organizerName si présent dans l'event
+            }
+
             console.log(`✅ Événement récupéré: ${event.title}`)
             res.json({ success: true, data: event })
         } catch (error) {
@@ -202,18 +219,34 @@ class EventsController {
                 })
 
             const eventResponses = Array.from(latestResponsesMap.values())
-            const stats = { going: 0, interested: 0, not_interested: 0 }
+            const stats = {
+                going: 0,
+                participe: 0,
+                interested: 0,
+                maybe: 0,
+                not_interested: 0,
+                not_there: 0
+            }
 
             for (const response of eventResponses) {
                 switch (response.finalResponse) {
                     case 'going':
                         stats.going++
                         break
+                    case 'participe':
+                        stats.participe++
+                        break
                     case 'interested':
                         stats.interested++
                         break
+                    case 'maybe':
+                        stats.maybe++
+                        break
                     case 'not_interested':
                         stats.not_interested++
+                        break
+                    case 'not_there':
+                        stats.not_there++
                         break
                 }
             }

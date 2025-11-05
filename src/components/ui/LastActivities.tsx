@@ -29,6 +29,7 @@ interface ActivityItem {
 const getResponseLabel = (response: UserResponseValue): string => {
     switch (response) {
         case 'going':
+        case 'participe':
             return "J'y vais"
         case 'interested':
             return 'Intéressé'
@@ -55,6 +56,7 @@ export const LastActivities: React.FC = () => {
                 r.userId === user.id &&
                 r.initialResponse !== r.finalResponse && // Afficher uniquement les changements
                 (r.finalResponse === 'going' ||
+                    r.finalResponse === 'participe' ||
                     r.finalResponse === 'interested' ||
                     r.finalResponse === 'cleared' ||
                     r.finalResponse === 'not_interested')
@@ -73,14 +75,19 @@ export const LastActivities: React.FC = () => {
             const hasChange = response.initialResponse !== null &&
                 response.initialResponse !== response.finalResponse &&
                 (response.initialResponse === 'going' ||
+                    response.initialResponse === 'participe' ||
                     response.initialResponse === 'interested' ||
                     response.initialResponse === 'not_interested' ||
                     response.initialResponse === 'cleared')
 
+            // Normaliser participe -> going pour l'affichage
+            const displayResponse = response.finalResponse === 'participe' ? 'going' : response.finalResponse
+            const displayPreviousResponse = response.initialResponse === 'participe' ? 'going' : response.initialResponse
+
             return {
                 event,
-                response: response.finalResponse as 'going' | 'interested' | 'cleared' | 'not_interested',
-                previousResponse: hasChange ? response.initialResponse : undefined,
+                response: displayResponse as 'going' | 'interested' | 'cleared' | 'not_interested',
+                previousResponse: hasChange ? displayPreviousResponse : undefined,
                 timeAgo,
                 createdAt,
                 responseId: response.id // ID unique de la réponse

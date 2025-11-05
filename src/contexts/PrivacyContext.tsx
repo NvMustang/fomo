@@ -36,17 +36,21 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
     const [isPublicMode, setIsPublicMode] = useState(() => {
         // Si defaultPublicMode est fourni, l'utiliser (ignorer localStorage)
         if (defaultPublicMode !== undefined) {
+            console.log('🔍 [PrivacyContext] Initialisation avec defaultPublicMode:', defaultPublicMode)
             return defaultPublicMode
         }
         // Sinon, charger depuis localStorage
         try {
             const savedPrivacy = localStorage.getItem('fomo-privacy')
             if (savedPrivacy !== null) {
-                return JSON.parse(savedPrivacy)
+                const parsed = JSON.parse(savedPrivacy)
+                console.log('🔍 [PrivacyContext] Initialisation depuis localStorage:', parsed)
+                return parsed
             }
         } catch (error) {
             console.warn('Erreur lors du chargement de l\'état privacy:', error)
         }
+        console.log('🔍 [PrivacyContext] Initialisation avec valeur par défaut: true')
         return true // Valeur par défaut
     })
 
@@ -82,7 +86,8 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
         const newIsPublicMode = !isPublicMode
         console.log('🎬 [PrivacyContext] Toggle privacy:', {
             from: isPublicMode,
-            to: newIsPublicMode
+            to: newIsPublicMode,
+            stackTrace: new Error().stack
         })
         setIsPublicMode(newIsPublicMode)
         updateCSSVariables(newIsPublicMode)

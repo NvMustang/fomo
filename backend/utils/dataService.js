@@ -6,10 +6,10 @@
  * - Chaque table reflète uniquement l'état actuel
  * - Pas de versioning, pas d'append-only
  * - Colonnes système : modifiedAt, deletedAt
- * - Logs séparés pour le suivi des actions
  */
 
 const { sheets, SPREADSHEET_ID } = require('./sheets-config')
+const analyticsTracker = require('./analyticsTracker')
 
 // Normalisation unique des booléens provenant de Google Sheets
 // Accepte: true/false, 'true'/'false', 'TRUE'/'FALSE', 1/0, '1'/'0', 'yes'/'no'
@@ -32,6 +32,8 @@ class DataServiceV2 {
                 range: range
             })
 
+            analyticsTracker.trackRequest('googlesheets', `getAllActiveData:${range}`, true)
+
             const rows = response.data.values || []
             const activeData = []
 
@@ -44,6 +46,10 @@ class DataServiceV2 {
             return activeData
         } catch (error) {
             console.error('❌ Erreur récupération données actives:', error)
+            const errorMsg = error.message || String(error)
+            analyticsTracker.trackRequest('googlesheets', `getAllActiveData:${range}`, false, {
+                error: errorMsg
+            })
             return []
         }
     }
@@ -63,6 +69,8 @@ class DataServiceV2 {
                 range: range
             })
 
+            analyticsTracker.trackRequest('googlesheets', `getByKey:${range}`, true)
+
             const rows = response.data.values || []
 
             for (const row of rows) {
@@ -76,6 +84,10 @@ class DataServiceV2 {
             return null
         } catch (error) {
             console.error('❌ Erreur récupération par clé:', error)
+            const errorMsg = error.message || String(error)
+            analyticsTracker.trackRequest('googlesheets', `getByKey:${range}`, false, {
+                error: errorMsg
+            })
             return null
         }
     }
@@ -120,12 +132,15 @@ class DataServiceV2 {
                 resource: { values: [rowData] }
             })
 
-            // Logger l'action
-            await this.logAction('CREATE', range, rowData)
+            analyticsTracker.trackRequest('googlesheets', `createRow:${range}`, true)
 
             return { action: 'created', data: rowData }
         } catch (error) {
             console.error('❌ Erreur création ligne:', error)
+            const errorMsg = error.message || String(error)
+            analyticsTracker.trackRequest('googlesheets', `createRow:${range}`, false, {
+                error: errorMsg
+            })
             throw error
         }
     }
@@ -174,9 +189,6 @@ class DataServiceV2 {
                 resource: { values: [rowData] }
             })
 
-            // Logger l'action
-            await this.logAction('UPDATE', range, rowData, { keyColumn, keyValue })
-
             return { action: 'updated', data: rowData }
         } catch (error) {
             console.error('❌ Erreur mise à jour ligne:', error)
@@ -207,9 +219,6 @@ class DataServiceV2 {
 
             await this.updateRow(range, currentData, keyColumn, keyValue)
 
-            // Logger l'action
-            await this.logAction('DELETE', range, currentData, { keyColumn, keyValue })
-
             return { action: 'deleted', deletedAt }
         } catch (error) {
             console.error('❌ Erreur suppression logique:', error)
@@ -234,9 +243,6 @@ class DataServiceV2 {
 
             // Supprimer complètement la ligne
             await this.deleteRow(range, keyColumn, keyValue)
-
-            // Logger l'action
-            await this.logAction('HARD_DELETE', range, currentData, { keyColumn, keyValue })
 
             return { action: 'hard_deleted', keyValue }
         } catch (error) {
@@ -316,35 +322,6 @@ class DataServiceV2 {
     }
 
     /**
-     * Logger une action dans la feuille Logs
-     * @param {string} action - Type d'action (CREATE, UPDATE, DELETE)
-     * @param {string} table - Table concernée
-     * @param {Array} data - Données
-     * @param {Object} metadata - Métadonnées supplémentaires
-     */
-    static async logAction(action, table, data, metadata = {}) {
-        try {
-            const logEntry = [
-                new Date().toISOString(), // timestamp
-                action,                   // action
-                table,                    // table
-                JSON.stringify(data),     // payload
-                JSON.stringify(metadata)  // metadata
-            ]
-
-            await sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_ID,
-                range: 'Logs!A:E',
-                valueInputOption: 'RAW',
-                resource: { values: [logEntry] }
-            })
-        } catch (error) {
-            console.error('❌ Erreur logging:', error)
-            // Ne pas faire échouer l'opération principale si le logging échoue
-        }
-    }
-
-    /**
      * Mappers pour les différents types de données avec colonnes système
      */
     static mappers = {
@@ -386,13 +363,14 @@ class DataServiceV2 {
             lng: parseFloat(row[6]) || null, // NOUVEAU: longitude
             friendsCount: parseInt(row[7]) || 0,
             showAttendanceToFriends: toBool(row[8]),
-            isPublicProfile: toBool(row[9]),
-            isActive: toBool(row[10]), // Colonne K: Status (normalisé en booléen)
-            isAmbassador: toBool(row[11]),
-            allowRequests: toBool(row[12]), // Colonne M: AllowRequests
-            modifiedAt: row[13] || new Date().toISOString(),
-            deletedAt: row[14] || null,
-            lastConnexion: row[15] || null // Colonne P: LastConnexion
+            isVisitor: toBool(row[9]), // Colonne J: isVisitor (true pour visiteurs, false pour users authentifiés)
+            isPublicProfile: toBool(row[10]),
+            isActive: toBool(row[11]), // Colonne L: Status (normalisé en booléen)
+            isAmbassador: toBool(row[12]),
+            allowRequests: toBool(row[13]), // Colonne N: AllowRequests
+            modifiedAt: row[14] || new Date().toISOString(),
+            deletedAt: row[15] || null,
+            lastConnexion: row[16] || null // Colonne Q: LastConnexion
         }),
 
         // NOUVEAU SCHÉMA : Historique complet avec initialResponse et finalResponse
@@ -415,6 +393,22 @@ class DataServiceV2 {
             status: row[4] || 'active',
             modifiedAt: row[5] || new Date().toISOString(),
             deletedAt: row[6] || null
+        }),
+
+        analytics: (row) => ({
+            timestamp: row[0] || new Date().toISOString(),
+            provider: row[1] || '',
+            endpoint: row[2] || '',
+            method: row[3] || 'GET',
+            success: row[4] === 'true',
+            error: row[5] || '',
+            trackedCount: row[6] || '',
+            maptilerReferenceValue: row[7] || '',
+            maptilerReferenceNote: row[8] || '',
+            variationPercentage: row[9] || '',
+            savedAt: row[10] || new Date().toISOString(),
+            sessionId: row[11] || '', // Session ID de l'utilisateur
+            userName: row[12] || '' // Nom de l'utilisateur
         })
     }
 

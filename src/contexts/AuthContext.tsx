@@ -105,13 +105,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                 const matchedId = await fomoData.matchByEmail(email.trim())
 
                 if (matchedId) {
-                    if (matchedId.startsWith('user-')) {
-                        // User existant trouvé -> connexion directe
-                        console.log('✅ [AuthContext] User existant trouvé:', matchedId)
-                        const existingUser = await fomoData.checkUserByEmail(email.trim())
-                        if (existingUser) {
+                    // User trouvé (peut être un visiteur ou un user authentifié)
+                    console.log('✅ [AuthContext] User trouvé:', matchedId)
+                    const existingUser = await fomoData.checkUserByEmail(email.trim())
+                    if (existingUser) {
+                        // Si c'est un visiteur (isVisitor: true), le transformer en user
+                        if (existingUser.isVisitor === true) {
+                            console.log('🔄 [AuthContext] Visiteur détecté, transformation en user (isVisitor: false)...')
+                            try {
+                                // Simple UPDATE : passer isVisitor de true à false
+                                const updatedUser = await fomoData.updateUser(matchedId, {
+                                    isVisitor: false,
+                                    name: name.trim(),
+                                    city: city.trim()
+                                })
+                                if (updatedUser) {
+                                    console.log(`✅ [AuthContext] Visiteur transformé en user: ${matchedId}`)
+                                    userToConnect = updatedUser
+
+                                    // Nettoyer le sessionStorage du visitor
+                                    try {
+                                        const keysToRemove: string[] = []
+                                        for (let i = 0; i < sessionStorage.length; i++) {
+                                            const key = sessionStorage.key(i)
+                                            if (key && key.startsWith('fomo-visit-')) {
+                                                keysToRemove.push(key)
+                                            }
+                                        }
+                                        keysToRemove.forEach(key => sessionStorage.removeItem(key))
+                                        console.log(`✅ [AuthContext] sessionStorage du visitor nettoyé (${keysToRemove.length} clés supprimées)`)
+                                    } catch (error) {
+                                        console.error('⚠️ [AuthContext] Erreur nettoyage sessionStorage:', error)
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('❌ [AuthContext] Erreur transformation visiteur:', error)
+                                throw error
+                            }
+                        } else {
+                            // User authentifié existant -> connexion directe
                             userToConnect = existingUser
-                            // Mettre à jour lastConnexion lors de la connexion
+                            // Mettre à jour lastConnexion
                             const lastConnexion = new Date().toISOString()
                             try {
                                 await fomoData.saveUserToBackend(userToConnect, lastConnexion)
@@ -119,49 +153,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                             } catch (error) {
                                 console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
                             }
-                        }
-                    } else if (matchedId.startsWith('visit-')) {
-                        // Visitor trouvé -> transformer visit-xxx en user-xxx dans le frontend
-                        console.log('🔄 [AuthContext] Visitor trouvé:', matchedId, '- Transformation en user-xxx...')
-                        const newUserId = matchedId.replace(/^visit-/, 'user-')
-                        console.log(`🔄 [AuthContext] Transformation ID: ${matchedId} -> ${newUserId}`)
-
-                        const userData = {
-                            id: newUserId, // Nouvel ID user-xxx
-                            name: name.trim(),
-                            email: email.trim(),
-                            city: city.trim(),
-                            friendsCount: 0,
-                            showAttendanceToFriends: true,
-                            isPublicProfile: false,
-                            isAmbassador: false
-                        } as User
-
-                        try {
-                            // Utiliser updateUser avec newId pour transformer visit-xxx en user-xxx
-                            const migratedUser = await fomoData.updateUser(matchedId, userData, newUserId)
-                            if (migratedUser) {
-                                console.log(`✅ [AuthContext] Visitor converti en user: ${matchedId} -> ${migratedUser.id}`)
-                                userToConnect = migratedUser
-
-                                // Nettoyer le sessionStorage du visitor
-                                try {
-                                    const keysToRemove: string[] = []
-                                    for (let i = 0; i < sessionStorage.length; i++) {
-                                        const key = sessionStorage.key(i)
-                                        if (key && key.startsWith('fomo-visit-')) {
-                                            keysToRemove.push(key)
-                                        }
-                                    }
-                                    keysToRemove.forEach(key => sessionStorage.removeItem(key))
-                                    console.log(`✅ [AuthContext] sessionStorage du visitor nettoyé (${keysToRemove.length} clés supprimées)`)
-                                } catch (error) {
-                                    console.error('⚠️ [AuthContext] Erreur nettoyage sessionStorage:', error)
-                                }
-                            }
-                        } catch (error) {
-                            console.error('❌ [AuthContext] Erreur migration visitor:', error)
-                            throw error
                         }
                     }
                 }

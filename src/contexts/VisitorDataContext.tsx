@@ -32,7 +32,12 @@ export type VisitorDataContextType =
         'createEvent' | 'updateEvent' | 'sendFriendshipRequest' | 'addFriendshipAction' |
         'searchUsers' | 'getTags' | 'checkUserByEmail' | 'matchByEmail' | 'saveUserToBackend' |
         'getUserEvents' | 'searchAddresses'
-    >>
+    >> &
+    // Propriétés spécifiques au visitor (exposées pour accès unifié)
+    {
+        currentUserId: string | null
+        currentUserName: string | null
+    }
 
 export const VisitorDataContext = createContext<VisitorDataContextType | undefined>(undefined)
 
@@ -52,6 +57,9 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
     const [responses, setResponses] = useState<UserResponse[]>([])
 
     // Visitor user ID et infos (généré une seule fois)
+    // Exposés dans l'état pour accès depuis le contexte
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+    const [currentUserName, setCurrentUserName] = useState<string | null>(null)
     const visitorUserIdRef = useRef<string | null>(null)
     const visitorNameRef = useRef<string | null>(null)
     const visitorEmailRef = useRef<string | undefined>(undefined)
@@ -67,21 +75,45 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                     visitorUserIdRef.current = savedUserId
                     visitorNameRef.current = sessionStorage.getItem('fomo-visit-name')
                     visitorEmailRef.current = sessionStorage.getItem('fomo-visit-email') || undefined
+                    // Exposer dans l'état
+                    setCurrentUserId(savedUserId)
+                    setCurrentUserName(visitorNameRef.current)
                 } else {
-                    // Créer un nouveau visitorUserId
-                    visitorUserIdRef.current = `visit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+                    // Créer un nouveau user ID (avec préfixe user- même pour les visiteurs)
+                    visitorUserIdRef.current = `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
                     sessionStorage.setItem('fomo-visit-user-id', visitorUserIdRef.current)
+                    // Exposer dans l'état
+                    setCurrentUserId(visitorUserIdRef.current)
                 }
             } catch {
                 // Si sessionStorage indisponible, créer quand même un ID
-                visitorUserIdRef.current = `visit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+                visitorUserIdRef.current = `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+                setCurrentUserId(visitorUserIdRef.current)
             }
         }
     }, [])
 
+    // Synchroniser les changements de nom depuis sessionStorage
+    React.useEffect(() => {
+        const syncVisitorInfo = () => {
+            try {
+                const savedName = sessionStorage.getItem('fomo-visit-name')
+                if (savedName && savedName !== currentUserName) {
+                    visitorNameRef.current = savedName
+                    setCurrentUserName(savedName)
+                }
+            } catch {
+                // Ignorer si sessionStorage indisponible
+            }
+        }
+        // Vérifier périodiquement (toutes les secondes) pour capturer les changements
+        const interval = setInterval(syncVisitorInfo, 1000)
+        return () => clearInterval(interval)
+    }, [currentUserName])
+
     const addEventResponse = useCallback((
         eventId: string,
-        response: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
+        response: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null,
         options?: {
             targetUserId?: string
             invitedByUserId?: string
@@ -97,6 +129,9 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                 visitorUserIdRef.current = savedUserId
                 visitorNameRef.current = savedName
                 visitorEmailRef.current = savedEmail || undefined
+                // Exposer dans l'état
+                setCurrentUserId(savedUserId)
+                setCurrentUserName(savedName)
             }
         } catch {
             // Ignore si sessionStorage indisponible
@@ -125,26 +160,27 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                     const matchedId = await fomoData.matchByEmail(visitorEmailRef.current!)
 
                     if (matchedId) {
-                        if (matchedId.startsWith('user-')) {
-                            // User existant trouvé -> connexion automatique
-                            console.log(`✅ [VisitorDataContext] User existant trouvé: ${matchedId}, connexion automatique...`)
-                            if (visitorEmailRef.current) {
-                                const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
-                                if (user) {
+                        // User existant trouvé (peut être un visiteur ou un user authentifié)
+                        console.log(`✅ [VisitorDataContext] User existant trouvé: ${matchedId}`)
+                        if (visitorEmailRef.current) {
+                            const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
+                            if (user) {
+                                // Si isVisitor est false, c'est un user authentifié -> connexion automatique
+                                if (!user.isVisitor) {
+                                    console.log(`✅ [VisitorDataContext] User authentifié trouvé, connexion automatique...`)
                                     await authLogin(user.name, user.city, user.email, user)
+                                } else {
+                                    // C'est un visiteur existant -> réutiliser cet ID
+                                    console.log(`✅ [VisitorDataContext] Visiteur existant trouvé, réutilisation...`)
+                                    visitorUserIdRef.current = matchedId
+                                    sessionStorage.setItem('fomo-visit-user-id', matchedId)
                                 }
                             }
-                            return
-                        } else if (matchedId.startsWith('visit-')) {
-                            // Visitor existant trouvé -> réutiliser cet ID
-                            console.log(`✅ [VisitorDataContext] Visitor existant trouvé: ${matchedId}, réutilisation...`)
-                            visitorUserIdRef.current = matchedId
-                            sessionStorage.setItem('fomo-visit-user-id', matchedId)
-                            return
                         }
+                        return
                     }
 
-                    // Aucun utilisateur trouvé -> créer nouveau visitor
+                    // Aucun utilisateur trouvé -> créer nouveau visitor (avec isVisitor: true)
                     console.log(`📝 [VisitorDataContext] Création nouveau visitor: ${visitorUserIdRef.current}`)
                     const userData = {
                         id: visitorUserIdRef.current,
@@ -158,6 +194,7 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                         isActive: true,
                         isAmbassador: false,
                         allowRequests: false,
+                        isVisitor: true, // Marquer comme visiteur
                         createdAt: new Date().toISOString()
                     }
 
@@ -232,6 +269,10 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         hasError: false,
         dataReady: !!visitorEvent,
 
+        // Propriétés spécifiques au visitor (exposées pour accès unifié)
+        currentUserId,
+        currentUserName,
+
         // Propriétés optionnelles (stubs)
         users: [],
         userRelations: [],
@@ -267,7 +308,9 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
         getLatestResponseHelper,
         getCurrentResponseHelper,
         getLatestResponsesByEventHelper,
-        getLatestResponsesByUserHelper
+        getLatestResponsesByUserHelper,
+        currentUserId,
+        currentUserName
     ])
 
     return (

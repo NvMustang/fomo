@@ -11,11 +11,13 @@ import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { Button } from '@/components'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
-interface AuthModalProps { }
+interface AuthModalProps {
+  useVisitorStyle?: boolean // Si true, applique le style visitor-modal-dynamic
+}
 
 type AuthStep = 'email' | 'new-user'
 
-export const AuthModal: React.FC<AuthModalProps> = () => {
+export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false }) => {
   const { login, isLoading, isAuthenticated, checkUserByEmail } = useAuth()
   const { matchByEmail } = useFomoDataContext()
   const [currentStep, setCurrentStep] = useState<AuthStep>('email')
@@ -58,11 +60,32 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
           if (user) {
             await login(user.name, user.city, user.email, user)
             console.log('✅ [AuthModal] Connexion réussie')
+            // Marquer le signup pour animation navbar
+            try {
+              sessionStorage.setItem('fomo-just-signed-up', 'true')
+            } catch (e) {
+              // Ignorer si sessionStorage indisponible
+            }
           }
-        } else if (matchedId.startsWith('visit-')) {
-          // Visitor trouvé -> rediriger vers inscription
-          console.log('⚠️ [AuthModal] Visitor détecté, passage à l\'inscription')
-          setCurrentStep('new-user')
+        } else {
+          // User trouvé (peut être visiteur ou user authentifié) -> vérifier isVisitor
+          const existingUser = await checkUserByEmail(emailToCheck.trim())
+          if (existingUser?.isVisitor === true) {
+            // Visiteur trouvé -> rediriger vers inscription
+            console.log('⚠️ [AuthModal] Visiteur détecté, passage à l\'inscription')
+            setCurrentStep('new-user')
+          } else {
+            // User authentifié -> connexion automatique
+            console.log('✅ [AuthModal] User authentifié trouvé, connexion automatique...')
+            await login(existingUser!.name, existingUser!.city, existingUser!.email, existingUser!)
+            console.log('✅ [AuthModal] Connexion réussie')
+            // Marquer le signup pour animation navbar
+            try {
+              sessionStorage.setItem('fomo-just-signed-up', 'true')
+            } catch (e) {
+              // Ignorer si sessionStorage indisponible
+            }
+          }
         }
       } else {
         // Aucun utilisateur trouvé -> rediriger vers inscription
@@ -130,6 +153,12 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
 
     try {
       await login(name.trim(), city.trim(), email.trim())
+      // Marquer le signup pour animation navbar
+      try {
+        sessionStorage.setItem('fomo-just-signed-up', 'true')
+      } catch (e) {
+        // Ignorer si sessionStorage indisponible
+      }
     } catch (error) {
       setError('Erreur lors de la création du profil. Réessayez.')
       console.error('Erreur de création:', error)
@@ -140,10 +169,15 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
 
   const renderEmailStep = () => {
     const isInWelcomeScreen = !isAuthenticated
+    const modalClass = useVisitorStyle 
+      ? 'modal visitor-modal-dynamic' 
+      : isInWelcomeScreen 
+        ? 'modal modal-welcome' 
+        : 'modal'
     return (
-      <div className="modal_container">
-        <div className={`modal ${isInWelcomeScreen ? 'modal-welcome' : ''}`} onClick={e => e.stopPropagation()}>
-          <div className="modal-content">
+      <div className={`modal_container ${isInWelcomeScreen ? 'modal-no-backdrop' : ''}`}>
+        <div className={modalClass} onClick={e => e.stopPropagation()}>
+          <div className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
             <h2 style={{ margin: 0, marginBottom: 'var(--md)', fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Bienvenue sur FOMO</h2>
             <p className="auth-subtitle">Renseignez votre email</p>
             <br />
@@ -188,10 +222,12 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
   }
 
 
-  const renderNewUserStep = () => (
-    <div className="modal_container">
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-content">
+  const renderNewUserStep = () => {
+    const modalClass = useVisitorStyle ? 'modal visitor-modal-dynamic' : 'modal'
+    return (
+      <div className="modal_container modal-no-backdrop">
+        <div className={modalClass} onClick={e => e.stopPropagation()}>
+          <div className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
             <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Créer votre profil</h2>
             <button
@@ -267,7 +303,8 @@ export const AuthModal: React.FC<AuthModalProps> = () => {
         </div>
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <>

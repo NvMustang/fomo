@@ -62,14 +62,16 @@
     position: fixed;
     inset: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    padding-top: 15vh;
+    /* Positionner à 85% de la hauteur (15vh depuis le haut = 85% du viewport) */
     z-index: 99999;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
+    background: transparent;
+    backdrop-filter: none;
     animation: overlayFadeIn 0.3s ease-out;
-    pointer-events: auto;
-    /* Intercepte les gestes pour masquer la barre d'adresse */
+    pointer-events: none;
+    /* N'intercepte plus les gestes pour préserver l'immersion */
 }
 
 .toast-overlay.closing {
@@ -77,15 +79,56 @@
 }
 
 .toast-message {
-    background: var(--surface);
+    /* Glassmorphism effect inspiré de la navbar */
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
     padding: var(--lg) var(--xl);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-xl);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
     text-align: center;
-    animation: messageSlideUp 0.4s ease-out 0.1s both;
-    border: 2px solid var(--current-color);
-    max-width: 90vw;
+    animation: toastSlideUpBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+    border: none;
+    max-width: 360px;
     width: 100%;
+    position: relative;
+    overflow: hidden;
+    /* Le toast lui-même doit être cliquable même si l'overlay ne l'est pas */
+    pointer-events: auto;
+}
+
+/* Lueur subtile sur les bords */
+.toast-message::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--radius-lg);
+    padding: 2px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* Bordure dégradé pour toast visitor (identique au modal visitor) */
+.toast-message.toast-visitor::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%);
+    opacity: 0.7;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
 }
 
 .toast-message h3 {
@@ -132,6 +175,45 @@
         opacity: 1;
         transform: translateY(0) scale(1);
     }
+}
+
+/* Animation toast améliorée avec bounce */
+@keyframes toastSlideUpBounce {
+    0% {
+        opacity: 0;
+        transform: translateY(50px) scale(0.7) rotate(-2deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateY(-10px) scale(1.05) rotate(1deg);
+    }
+
+    80% {
+        transform: translateY(5px) scale(0.98) rotate(-0.5deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+/* Animation de sortie pour toast */
+@keyframes toastSlideDown {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.8) rotate(2deg);
+    }
+}
+
+.toast-overlay.closing .toast-message {
+    animation: toastSlideDown 0.3s ease-in forwards;
 }
 
 

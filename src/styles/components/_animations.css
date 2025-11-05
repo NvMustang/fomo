@@ -126,3 +126,146 @@
 .share-section-collapsing {
     animation: shareSectionCollapse 0.3s ease-out forwards;
 }
+
+/* ========================
+   ETOILES SCINTILLANTES (effet wouaw)
+======================== */
+
+@keyframes starTwinkle {
+    0% {
+        opacity: 0;
+        transform: scale(0) rotate(0deg);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.2) rotate(180deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(0) rotate(360deg);
+    }
+}
+
+@keyframes starFloat {
+    0% {
+        transform: translateY(0) translateX(0) scale(0);
+        opacity: 1;
+    }
+
+    20% {
+        transform: translateY(calc(var(--star-y, -100px) * 0.2)) translateX(calc(var(--star-x, 0px) * 0.2)) scale(1.5);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(var(--star-y, -100px)) translateX(var(--star-x, 0px)) scale(0.5);
+        opacity: 0;
+    }
+}
+
+/* Container pour les étoiles */
+.stars-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 10000;
+    /* Overlay transparent avec blur pour effet backdrop */
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.01);
+    /* Très léger pour permettre le blur */
+}
+
+.star {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: radial-gradient(circle, #ffd700 0%, #ffed4e 50%, transparent 70%);
+    border-radius: 50%;
+    animation: starTwinkle 0.8s ease-out forwards, starFloat 2s ease-out forwards;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.9), 0 0 30px rgba(255, 215, 0, 0.6), 0 0 50px rgba(255, 215, 0, 0.3);
+    filter: brightness(1.2);
+}
+
+/* Variantes de couleurs pour les étoiles */
+.star--variant-1 {
+    background: radial-gradient(circle, #ffd700 0%, #ffed4e 50%, transparent 70%);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.9), 0 0 30px rgba(255, 215, 0, 0.6), 0 0 50px rgba(255, 215, 0, 0.3);
+}
+
+.star--variant-2 {
+    background: radial-gradient(circle, #ffed4e 0%, #fff9c4 50%, transparent 70%);
+    box-shadow: 0 0 15px rgba(255, 237, 78, 0.9), 0 0 30px rgba(255, 237, 78, 0.6), 0 0 50px rgba(255, 237, 78, 0.3);
+}
+
+.star--variant-3 {
+    background: radial-gradient(circle, #ffb347 0%, #ffd700 50%, transparent 70%);
+    box-shadow: 0 0 15px rgba(255, 179, 71, 0.9), 0 0 30px rgba(255, 179, 71, 0.6), 0 0 50px rgba(255, 179, 71, 0.3);
+}
+
+/* Animation pour le container lui-même (fade out après l'animation) */
+.stars-container--fade-out {
+    animation: fadeOut 0.3s ease-out 1.7s forwards;
+}
+
+/* ========================
+   TOAST ANIMATION DOUCE
+======================== */
+
+@keyframes toastIntroSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.toast-intro-animation {
+    animation: toastIntroSlideUp 0.4s ease-out;
+}
+
+/* ========================
+   HALO PULSE (pour toggle privacy)
+======================== */
+
+@keyframes haloPulse {
+    0% {
+        box-shadow:
+            0 0 0 0 rgba(59, 130, 246, 0.8),
+            0 0 0 0 rgba(147, 197, 253, 0.6);
+        transform: scale(1);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 15px rgba(59, 130, 246, 0),
+            0 0 0 25px rgba(147, 197, 253, 0);
+        transform: scale(1.1);
+    }
+
+    100% {
+        box-shadow:
+            0 0 0 0 rgba(59, 130, 246, 0),
+            0 0 0 0 rgba(147, 197, 253, 0);
+        transform: scale(1);
+    }
+}
+
+.privacy-toggle-halo {
+    position: relative;
+    /* S'assurer que le halo n'est pas coupé */
+    overflow: visible;
+    /* Animation directement sur le toggle - répétition infinie jusqu'au clic */
+    animation: haloPulse 1s ease-out infinite;
+    border-radius: var(--radius-full);
+}

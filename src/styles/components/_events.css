@@ -12,17 +12,26 @@
     transform: translateX(-50%);
     z-index: 1004;
 
+    /* Initialement invisible pour le fade in */
 
 
+    /* Ne pas bloquer les interactions avec la carte sauf quand visible */
+    pointer-events: none;
 }
+
+
 
 .event-card {
     width: 360px;
-    background: var(--surface);
+    /* Glassmorphism effect inspiré de la navbar */
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: var(--md);
-    box-shadow: var(--shadow);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
     border-left: 3px solid var(--current-color);
     position: relative;
     overflow: hidden;
@@ -35,6 +44,17 @@
     /* Améliorer l'apparence du scroll */
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
+    /* Assurer l'interaction au-dessus de la carte */
+    pointer-events: auto;
+}
+
+/* Zone cliquable pour toggle les détails de l'événement */
+.event-card-clickable-area {
+    cursor: pointer;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 /* Sur la page profile, pas de scroll dans l'EventCard, utilise flex */
@@ -46,6 +66,134 @@
 /* Événements offline (isOnline === false) : bordure gauche en gris */
 .event-card--offline {
     border-left-color: var(--text-muted);
+}
+
+/* FakeEventCard - Carte floutée avec overlay teaser */
+.fake-event-card {
+    position: relative;
+    width: 360px;
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--md);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    border-left: 3px solid var(--current-color);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+}
+
+.fake-event-card-overlay {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.fake-event-card-content {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    pointer-events: none;
+}
+
+.fake-event-card-content .event-card-body {
+    opacity: 0.6;
+}
+
+.fake-event-card-content .event-cover-image {
+    opacity: 0.6;
+}
+
+.fake-event-card-teaser {
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    text-align: center;
+    /* Style identique au toast */
+    padding: var(--lg) var(--xl);
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    border: none;
+    max-width: 360px;
+    width: 100%;
+    min-width: 280px;
+    overflow: hidden;
+    pointer-events: auto;
+    /* Ne pas affecter le layout de la carte parente */
+    margin: 0;
+    box-sizing: border-box;
+}
+
+/* Lueur subtile sur les bords (comme le toast) */
+.fake-event-card-teaser::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%);
+    opacity: 0.7;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.fake-event-card-message {
+    margin: 0 0 var(--md) 0;
+    padding: 0;
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+    position: relative;
+    z-index: 2;
+    line-height: 1.4;
+}
+
+.fake-event-card-cta {
+    width: 100%;
+    /* Styles identiques au map-teaser-cta - inversés */
+    font-weight: var(--font-weight-semibold);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xs);
+    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%) !important;
+    border: var(--border-width) solid rgb(172, 131, 182) !important;
+    box-shadow: 0 6px 20px rgb(58, 38, 56);
+    transition: all var(--transition-fast);
+    transform: translateY(-2px);
+    position: relative;
+    z-index: 2;
+}
+
+.fake-event-card-cta:hover {
+    background: linear-gradient(-135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
+    box-shadow: var(--shadow-lg), 0 0 0 2px rgba(255, 255, 255, 0.1);
+    transform: translateY(0);
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.fake-event-card-cta:active {
+    background: linear-gradient(-135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
+    transform: translateY(0);
+    box-shadow: var(--shadow), 0 0 0 3px rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* Wrapper d'item de liste pour animer la suppression (calendar/list) */
@@ -106,7 +254,6 @@
 .event-card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--xs);
     padding: var(--sm) var(--sm) 0;
     border-top-left-radius: var(--radius-lg);
@@ -229,10 +376,6 @@
 
 
 
-/* Rotation spécifique pour le bouton d'expansion (180° au lieu de 45°) */
-.circular-button.expand-rotated {
-    transform: rotate(180deg) scale(1.05);
-}
 
 /* Rotation pour l'icône de partage (comme le bouton expandable) */
 .event-card img[src="/share-icon.svg"] {

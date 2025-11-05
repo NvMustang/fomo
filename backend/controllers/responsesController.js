@@ -81,7 +81,7 @@ class ResponsesController {
             }
 
             // Validation des réponses
-            const validResponses = ['going', 'interested', 'not_interested', 'cleared', 'seen', 'invited', null]
+            const validResponses = ['going', 'participe', 'interested', 'maybe', 'not_interested', 'not_there', 'cleared', 'seen', 'invited', null]
             if (initialResponse !== null && !validResponses.includes(initialResponse)) {
                 return res.status(400).json({
                     success: false,
@@ -257,75 +257,6 @@ class ResponsesController {
         }
     }
 
-    /**
-     * Migrer toutes les réponses d'un userId vers un autre
-     * Utilisé lors de la conversion d'un visitor en user
-     */
-    static async migrateResponses(oldUserId, newUserId) {
-        try {
-            console.log(`🔄 Migration des réponses: ${oldUserId} -> ${newUserId}`)
-
-            // Récupérer toutes les réponses actives de l'ancien userId
-            const allResponses = await DataServiceV2.getAllActiveData(
-                RESPONSES_RANGE,
-                DataServiceV2.mappers.response
-            )
-
-            const responsesToMigrate = allResponses.filter(r => r.userId === oldUserId)
-            console.log(`📝 ${responsesToMigrate.length} réponses à migrer`)
-
-            // Pour chaque réponse, créer une nouvelle réponse avec le nouveau userId
-            // et supprimer l'ancienne (soft delete)
-            for (const response of responsesToMigrate) {
-                const oldResponseId = response.id // Utiliser l'ID réel de la réponse
-
-                // Générer un nouvel ID selon le format du nouveau schéma
-                const timestamp = Date.now()
-                const randomSuffix = Math.random().toString(36).substring(2, 8)
-                const newResponseId = `${response.eventId}_${newUserId}_${timestamp}_${randomSuffix}`
-
-                // Créer la nouvelle réponse avec le nouveau userId (NOUVEAU SCHÉMA)
-                // Utiliser les mêmes valeurs initialResponse/finalResponse de l'ancienne réponse
-                const rowData = [
-                    newResponseId,                           // A: ID (nouveau format avec timestamp)
-                    response.createdAt || new Date().toISOString(), // B: CreatedAt (garder l'original)
-                    newUserId,                               // C: User ID (nouveau - CORRIGÉ)
-                    response.invitedByUserId || 'none',      // D: InvitedByUserId ('none' si non renseigné)
-                    response.eventId,                         // E: Event ID
-                    response.initialResponse || '',           // F: InitialResponse (garder l'original)
-                    response.finalResponse || '',             // G: FinalResponse (garder l'original)
-                ]
-
-                await DataServiceV2.upsertData(
-                    RESPONSES_RANGE,
-                    rowData,
-                    0,
-                    newResponseId
-                )
-
-                console.log(`✅ Réponse migrée: ${oldResponseId} -> ${newResponseId} (userId: ${oldUserId} -> ${newUserId})`)
-
-                // Hard delete de l'ancienne réponse (suppression complète)
-                try {
-                    await DataServiceV2.hardDelete(
-                        RESPONSES_RANGE,
-                        0,
-                        oldResponseId
-                    )
-                    console.log(`✅ Ancienne réponse hard-deleted: ${oldResponseId}`)
-                } catch (error) {
-                    // Si la réponse n'existe pas ou est déjà supprimée, ignorer l'erreur et continuer
-                    console.log(`⚠️ Impossible de hard-delete ${oldResponseId}, peut-être déjà supprimée: ${error.message}`)
-                }
-            }
-
-            console.log(`✅ Migration terminée: ${responsesToMigrate.length} réponses migrées`)
-            return { migrated: responsesToMigrate.length }
-        } catch (error) {
-            console.error('❌ Erreur migration réponses:', error)
-            throw error
-        }
-    }
 }
 
 module.exports = ResponsesController

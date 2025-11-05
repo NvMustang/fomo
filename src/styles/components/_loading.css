@@ -26,6 +26,39 @@
     background: linear-gradient(135deg, var(--color-private), var(--color-public));
     z-index: 9999;
     animation: fadeIn 0.5s ease-in;
+    pointer-events: auto;
+}
+
+.loading-screen.fading-out {
+    animation: fadeOut 0.5s ease-out forwards;
+    pointer-events: none;
+}
+
+/* Variante partielle : prend seulement 70% de la hauteur pour laisser voir le FakeEventCard */
+.loading-screen-partial {
+    height: 70vh;
+    bottom: auto;
+    top: 0;
+    z-index: 1003;
+    /* Au-dessus de la carte mais sous event-card-container (1004) */
+    /* Fond transparent pour laisser voir la carte en dessous */
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Variante transparente : fond transparent pour voir les animations derrière */
+.loading-screen-transparent {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    pointer-events: none;
+    /* Permet les interactions avec les éléments en dessous */
+}
+
+.loading-screen-transparent .loading-content {
+    pointer-events: auto;
+    /* Mais garde les interactions pour le contenu lui-même */
 }
 
 @keyframes fadeIn {
@@ -126,6 +159,12 @@
     opacity: 0;
     transform: translateY(20px);
     animation: welcomeAuthFadeIn 1s ease-out 1.5s forwards;
+}
+
+/* Ajustement pour mode partiel : centrer le modal verticalement dans les 70% */
+.loading-screen-partial .welcome-auth-overlay {
+    align-items: center;
+    bottom: 0;
 }
 
 @keyframes welcomeAuthFadeIn {

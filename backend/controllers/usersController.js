@@ -5,8 +5,12 @@
 
 const DataServiceV2 = require('../utils/dataService')
 const ResponsesController = require('./responsesController')
+const { sheets, SPREADSHEET_ID } = require('../utils/sheets-config')
 
 class UsersController {
+    // Range Google Sheets pour la feuille Users (inclut isVisitor en colonne J)
+    static USERS_RANGE = 'Users!A2:Q'
+
     // ===== MÉTHODES PRIVÉES UTILITAIRES =====
 
     /**
@@ -21,7 +25,7 @@ class UsersController {
      */
     static async _getAllUsersFromDb() {
         return await DataServiceV2.getAllActiveData(
-            'Users!A2:P',
+            UsersController.USERS_RANGE,
             DataServiceV2.mappers.user
         )
     }
@@ -46,7 +50,7 @@ class UsersController {
             const userEmail = UsersController.normalizeEmail(u.email)
             return userEmail === email &&
                 u.id &&
-                u.id.startsWith('visit-') &&
+                u.isVisitor === true &&
                 u.isActive === true
         })
     }
@@ -83,7 +87,7 @@ class UsersController {
             console.log(`👥 Récupération utilisateur: ${userId}`)
 
             const user = await DataServiceV2.getByKey(
-                'Users!A2:P',
+                UsersController.USERS_RANGE,
                 DataServiceV2.mappers.user,
                 0, // key column (ID)
                 userId
@@ -106,68 +110,20 @@ class UsersController {
 
     /**
      * Créer ou mettre à jour un utilisateur (UPSERT)
+     * NOUVELLE LOGIQUE : Plus de migration, on passe juste isVisitor de true à false
      */
     static async upsertUser(req, res) {
         try {
             const userData = req.body
-            const oldId = userData.oldId // Ancien ID si migration (visit-xxx → user-xxx)
-            let userId = userData.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+            let userId = userData.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
 
             const normalizedEmail = UsersController.normalizeEmail(userData.email)
 
-            // Détecter et migrer les réponses d'un visitor vers le user
-            let visitorIdToMigrate = null
-
-            // Si oldId est fourni explicitement, l'utiliser
-            if (oldId && oldId !== userId && oldId.startsWith('visit-')) {
-                visitorIdToMigrate = oldId
-                console.log(`🔄 [upsertUser] Migration explicite via oldId: ${oldId} -> ${userId}`)
-            }
-            // Sinon, chercher automatiquement un visitor avec le même email
-            else if (normalizedEmail) {
-                const visitor = await UsersController.findVisitorByEmail(null, normalizedEmail)
-
-                if (visitor && visitor.id !== userId) {
-                    visitorIdToMigrate = visitor.id
-                    console.log(`🔄 [upsertUser] Visitor détecté automatiquement: ${visitorIdToMigrate} -> ${userId}`)
-                }
-            }
-
-            // Migrer les réponses si un visitor a été trouvé
-            if (visitorIdToMigrate) {
-                // Vérifier si le nouvel ID existe déjà
-                const existingUserWithNewId = await DataServiceV2.getByKey(
-                    'Users!A2:P',
-                    DataServiceV2.mappers.user,
-                    0,
-                    userId
-                )
-
-                if (existingUserWithNewId && existingUserWithNewId.id !== visitorIdToMigrate) {
-                    return res.status(409).json({
-                        success: false,
-                        error: 'Un utilisateur avec cet ID existe déjà'
-                    })
-                }
-
-                // 1. Migrer les réponses du visitor vers le user
-                await ResponsesController.migrateResponses(visitorIdToMigrate, userId)
-                console.log(`✅ [upsertUser] Réponses migrées: ${visitorIdToMigrate} -> ${userId}`)
-
-                // 2. Supprimer l'ancien visitor (hard delete)
-                await DataServiceV2.hardDelete(
-                    'Users!A2:P',
-                    0,
-                    visitorIdToMigrate
-                )
-                console.log(`✅ [upsertUser] Ancien visitor supprimé: ${visitorIdToMigrate}`)
-            }
-
             console.log(`🔄 Upsert utilisateur: ${userId}`)
 
-            // Vérifier si l'utilisateur existe pour préserver createdAt lors d'un update
+            // Vérifier si l'utilisateur existe pour préserver createdAt et isVisitor lors d'un update
             const existingUser = await DataServiceV2.getByKey(
-                'Users!A2:P',
+                UsersController.USERS_RANGE,
                 DataServiceV2.mappers.user,
                 0,
                 userId
@@ -176,7 +132,11 @@ class UsersController {
             // createdAt : préserver lors d'un update, définir à maintenant lors d'une création
             const createdAt = existingUser?.createdAt || new Date().toISOString()
 
+            // isVisitor : préserver si existant, sinon utiliser la valeur fournie (défaut: false pour nouveaux users)
+            const isVisitor = existingUser ? (existingUser.isVisitor ?? false) : (userData.isVisitor !== undefined ? userData.isVisitor : false)
+
             // Préparer les données pour la feuille (tous les champs explicitement, comme pour events)
+            // Structure: A=ID, B=CreatedAt, C=Name, D=Email, E=City, F=Lat, G=Lng, H=FriendsCount, I=ShowAttendanceToFriends, J=isVisitor, K=isPublicProfile, L=isActive, M=isAmbassador, N=allowRequests, O=modifiedAt, P=deletedAt, Q=lastConnexion
             const rowData = [
                 userId,                                    // A: ID
                 createdAt,                                 // B: CreatedAt (préservé si update, nouveau si create)
@@ -187,17 +147,18 @@ class UsersController {
                 userData.lng || '',                       // G: Longitude
                 userData.friendsCount !== undefined ? userData.friendsCount : 0, // H: Friends Count
                 userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true, // I: Privacy (défaut: true)
-                userData.isPublicProfile !== undefined ? userData.isPublicProfile : false, // J: Is Public Profile (défaut: false)
-                userData.isActive !== undefined ? userData.isActive : true, // K: Is Active (défaut: true)
-                userData.isAmbassador !== undefined ? userData.isAmbassador : false, // L: Is Ambassador (défaut: false)
-                userData.allowRequests !== undefined ? userData.allowRequests : true, // M: Allow Requests (défaut: true)
-                userData.modifiedAt || new Date().toISOString(), // N: ModifiedAt (fourni ou maintenant)
-                '',                                       // O: DeletedAt (vide)
-                new Date().toISOString()                  // P: LastConnexion (toujours mis à jour à maintenant)
+                isVisitor,                                // J: isVisitor (préservé si update, sinon valeur fournie)
+                userData.isPublicProfile !== undefined ? userData.isPublicProfile : false, // K: Is Public Profile (défaut: false)
+                userData.isActive !== undefined ? userData.isActive : true, // L: Is Active (défaut: true)
+                userData.isAmbassador !== undefined ? userData.isAmbassador : false, // M: Is Ambassador (défaut: false)
+                userData.allowRequests !== undefined ? userData.allowRequests : true, // N: Allow Requests (défaut: true)
+                userData.modifiedAt || new Date().toISOString(), // O: ModifiedAt (fourni ou maintenant)
+                '',                                       // P: DeletedAt (vide)
+                new Date().toISOString()                  // Q: LastConnexion (toujours mis à jour à maintenant)
             ]
 
             const result = await DataServiceV2.upsertData(
-                'Users!A2:P',
+                UsersController.USERS_RANGE,
                 rowData,
                 0, // key column (ID)
                 userId
@@ -216,6 +177,119 @@ class UsersController {
     }
 
     /**
+     * Mettre à jour un utilisateur (UPDATE uniquement - pas de création)
+     * Utilisé pour transformer un visiteur en user (isVisitor: true → false)
+     */
+    static async updateUser(req, res) {
+        try {
+            const userData = req.body
+            const userId = userData.id
+
+            if (!userId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'userId est requis'
+                })
+            }
+
+            console.log(`🔄 Update utilisateur: ${userId}`)
+
+            // Vérifier si l'utilisateur existe
+            const existingUser = await DataServiceV2.getByKey(
+                UsersController.USERS_RANGE,
+                DataServiceV2.mappers.user,
+                0,
+                userId
+            )
+
+            if (!existingUser) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Utilisateur non trouvé'
+                })
+            }
+
+            // Récupérer la ligne actuelle pour la mettre à jour
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: UsersController.USERS_RANGE
+            })
+
+            const rows = response.data.values || []
+            const rowIndex = rows.findIndex(row => row && row[0] === userId)
+
+            if (rowIndex === -1) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Utilisateur non trouvé dans la feuille'
+                })
+            }
+
+            // Récupérer la ligne actuelle
+            const currentRow = rows[rowIndex]
+
+            // Mettre à jour uniquement les champs fournis dans userData
+            const updatedRow = [
+                currentRow[0], // A: ID (inchangé)
+                currentRow[1], // B: CreatedAt (inchangé)
+                userData.name !== undefined ? userData.name : currentRow[2], // C: Name
+                userData.email !== undefined ? UsersController.normalizeEmail(userData.email) : currentRow[3], // D: Email
+                userData.city !== undefined ? userData.city : currentRow[4], // E: City
+                userData.lat !== undefined ? userData.lat : currentRow[5], // F: Lat
+                userData.lng !== undefined ? userData.lng : currentRow[6], // G: Lng
+                userData.friendsCount !== undefined ? userData.friendsCount : currentRow[7], // H: FriendsCount
+                userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : currentRow[8], // I: ShowAttendanceToFriends
+                userData.isVisitor !== undefined ? userData.isVisitor : currentRow[9], // J: isVisitor (important pour transformation)
+                userData.isPublicProfile !== undefined ? userData.isPublicProfile : currentRow[10], // K: isPublicProfile
+                userData.isActive !== undefined ? userData.isActive : currentRow[11], // L: isActive
+                userData.isAmbassador !== undefined ? userData.isAmbassador : currentRow[12], // M: isAmbassador
+                userData.allowRequests !== undefined ? userData.allowRequests : currentRow[13], // N: allowRequests
+                new Date().toISOString(), // O: modifiedAt (toujours mis à jour)
+                currentRow[15] || '', // P: deletedAt (inchangé)
+                new Date().toISOString() // Q: lastConnexion (toujours mis à jour)
+            ]
+
+            // Mettre à jour la ligne
+            const sheetName = 'Users'
+            const spreadsheet = await sheets.spreadsheets.get({
+                spreadsheetId: SPREADSHEET_ID
+            })
+            const sheet = spreadsheet.data.sheets.find(s => s.properties.title === sheetName)
+            if (!sheet) {
+                throw new Error(`Feuille "${sheetName}" non trouvée`)
+            }
+
+            // Calculer l'index réel dans Google Sheets (rowIndex + 2 car range commence à A2)
+            const sheetRowIndex = rowIndex + 2
+
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `Users!A${sheetRowIndex}:Q${sheetRowIndex}`,
+                valueInputOption: 'RAW',
+                resource: { values: [updatedRow] }
+            })
+
+            // Récupérer l'utilisateur mis à jour
+            const updatedUser = await DataServiceV2.getByKey(
+                UsersController.USERS_RANGE,
+                DataServiceV2.mappers.user,
+                0,
+                userId
+            )
+
+            console.log(`✅ Utilisateur mis à jour: ${userId}`)
+            res.json({
+                success: true,
+                data: updatedUser,
+                action: 'updated'
+            })
+        } catch (error) {
+            console.error('❌ Erreur update utilisateur:', error)
+            res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
+    /**
      * Supprimer un utilisateur (soft delete)
      */
     static async deleteUser(req, res) {
@@ -224,7 +298,7 @@ class UsersController {
             console.log(`🗑️ Suppression utilisateur: ${userId}`)
 
             const result = await DataServiceV2.softDelete(
-                'Users!A2:P',
+                UsersController.USERS_RANGE,
                 0, // key column (ID)
                 userId
             )
@@ -553,8 +627,7 @@ class UsersController {
 
     /**
      * Rechercher un utilisateur par email et retourner uniquement son ID
-     * Retourne: user-xxx, visit-xxx, ou null
-     * Priorité: user-xxx avant visit-xxx si les deux existent
+     * Retourne: user-xxx (visiteur ou user authentifié) ou null
      * GET /api/users/match-email/:email
      */
     static async matchByEmail(req, res) {
@@ -565,23 +638,16 @@ class UsersController {
 
             const activeUsers = await UsersController.getActiveUsers()
 
-            // Chercher d'abord un user (priorité)
+            // Chercher un utilisateur (visiteur ou user authentifié) par email
             const user = activeUsers.find(u => {
                 const userEmail = UsersController.normalizeEmail(u.email)
-                return userEmail === normalizedEmail && u.id && u.id.startsWith('user-')
+                return userEmail === normalizedEmail && u.id
             })
 
             if (user) {
-                console.log(`✅ [matchByEmail] User trouvé: ${user.id}`)
+                const userType = user.isVisitor === true ? 'visiteur' : 'user authentifié'
+                console.log(`✅ [matchByEmail] ${userType} trouvé: ${user.id}`)
                 return res.json({ success: true, data: user.id })
-            }
-
-            // Si pas de user, chercher un visitor
-            const visitor = await UsersController.findVisitorByEmail(activeUsers, normalizedEmail)
-
-            if (visitor) {
-                console.log(`✅ [matchByEmail] Visitor trouvé: ${visitor.id}`)
-                return res.json({ success: true, data: visitor.id })
             }
 
             console.log(`❌ [matchByEmail] Aucun utilisateur trouvé pour: "${normalizedEmail}"`)

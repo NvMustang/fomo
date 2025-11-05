@@ -61,7 +61,7 @@ const drive = google.drive({ version: 'v3', auth })
 // - Vercel (production) : utilise GOOGLE_SPREADSHEET_ID (production)
 const isLocal = !process.env.VERCEL
 const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
-const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ'
+const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
 
 const SPREADSHEET_ID = isLocal && testSpreadsheetId
     ? testSpreadsheetId  // Local : toujours utiliser la DB de test si disponible

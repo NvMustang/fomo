@@ -6,25 +6,32 @@
 
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { MapRenderer } from '@/map/MapRenderer'
-import { EventCard, Button } from '@/components'
+import { EventCard } from '@/components'
+import { FakeEventCard } from '@/components/ui/FakeEventCard'
 import { useFilters } from '@/contexts/FiltersContext'
 
-import { useAuth } from '@/contexts/AuthContext'
 import { usePrivacy } from '@/contexts/PrivacyContext'
 import type { Event } from '@/types/fomoTypes'
 import { FilterBar } from '@/components/ui/FilterBar'
 
 import { WelcomeScreen } from '@/components/modals/WelcomeScreen'
+import { useStarsAnimation } from '@/components/visitorIntegration'
 
 // ===== TYPES =====
+interface VisitorModeProps {
+  enabled: boolean
+  event?: Event | null
+  onEventCardMount?: () => void
+  fakePinsLogic?: import('@/components/visitorIntegration').FakePinsLogic
+  onResponseClick?: (responseType: import('@/types/fomoTypes').UserResponseValue) => void
+  onEventCardClose?: () => void
+  starsAnimation?: React.ReactNode
+}
+
 interface DiscoverPageProps {
   isModalOpen: (modalID: string) => boolean
   onMapReady?: () => void
-  isVisitorMode?: boolean
-  visitorEvent?: Event | null
-  onEventCardMount?: () => void
-  onVisitorFormCompleted?: (organizerName: string) => void
-  autoCenterEvent?: Event
+  visitorMode?: VisitorModeProps
   onEventCentered?: () => void
 }
 
@@ -32,29 +39,46 @@ interface DiscoverPageProps {
 const DiscoverPage: React.FC<DiscoverPageProps> = ({
   isModalOpen,
   onMapReady,
-  isVisitorMode = false,
-  visitorEvent = null,
-  onEventCardMount,
-  onVisitorFormCompleted,
-  autoCenterEvent,
+  visitorMode,
   onEventCentered
 }) => {
   // ===== HOOKS CONTEXTUELS =====
   const { getMapEvents } = useFilters()
-  const { isAuthenticated } = useAuth()
   const { isPublicMode } = usePrivacy()
 
   // ===== ÉTATS LOCAUX =====
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [showTeaserPins, setShowTeaserPins] = useState(false) // Génère les fake pins
-  const [showTeaserMessage, setShowTeaserMessage] = useState(false) // Affiche le message teaser
-  const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
+  // Unifier les sources visitor via visitorMode si fourni
+  const vmEnabled = !!visitorMode?.enabled
+  const vmEvent = visitorMode?.event || null
+  const vmFakePins = visitorMode?.fakePinsLogic
+  const vmOnResponseClick = visitorMode?.onResponseClick
+  const vmOnEventCardMount = visitorMode?.onEventCardMount
+  const vmStarsAnimation = visitorMode?.starsAnimation
 
-  const prevIsPublicModeRef = useRef(isPublicMode)
+  // En mode visitor, définir selectedEvent immédiatement pour afficher l'EventCard et masquer l'écran de chargement
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(
+    vmEnabled && vmEvent ? vmEvent : null
+  )
+
+  // La logique de clic sur les événements est unifiée dans handleEventClick (mode normal et visitor)
+
+  // Utiliser fakePinsLogic si fourni, sinon créer des états locaux (pour compatibilité)
+  const showTeaserPins = vmFakePins?.showTeaserPins ?? false
+  const showWelcomeScreen = vmFakePins?.showWelcomeScreen ?? false
+  const setShowWelcomeScreen = vmFakePins?.setShowWelcomeScreen ?? (() => { })
+  const fakeEvents = vmFakePins?.fakeEvents ?? []
+
+  // Synchroniser selectedFakeEvent de fakePinsLogic avec selectedEvent unifié
+  const selectedFakeEventFromLogic = vmFakePins?.selectedFakeEvent ?? null
+
+  // Animation des étoiles pour les réponses (mode normal)
+  // En mode visitor, utiliser l'animation fournie par visitorMode
+  const { triggerStars, StarsAnimation: normalStarsAnimation } = useStarsAnimation()
+  const StarsAnimation = vmEnabled && vmStarsAnimation ? vmStarsAnimation : normalStarsAnimation
 
   // Exposer setSelectedEvent globalement pour LastActivities
   useEffect(() => {
-    if (!isVisitorMode) {
+    if (!vmEnabled) {
       window.setSelectedEventFromProfile = (event: Event) => {
         setSelectedEvent(event)
         // Si on est sur la page Discover, centrer sur l'événement
@@ -70,102 +94,128 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return () => {
       delete (window as any).setSelectedEventFromProfile
     }
-  }, [isVisitorMode])
+  }, [vmEnabled])
 
   // ===== CONSTANTES ET CALCULS SIMPLES =====
   // Source stable pour la carte: utiliser getMapEvents (source de vérité selon mode privacy)
   // Mode public : tous les événements de getDiscoverEvents()
   // Mode private : uniquement les événements avec une réponse (exclut null/inexistant)
-  const filteredEvents = isVisitorMode && visitorEvent ? [visitorEvent] : getMapEvents()
-
-  // ===== FONCTIONS UTILITAIRES =====
-  const generateRandomPointsInRadius = useCallback((centerLat: number, centerLng: number, radiusKm: number, count: number): Array<{ lat: number; lng: number }> => {
-    const points: Array<{ lat: number; lng: number }> = []
-    const degreesPerKm = 1 / 111 // 1 degré de latitude ≈ 111 km
-
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * 2 * Math.PI
-      const distanceKm = Math.random() * radiusKm
-
-      const latOffset = distanceKm * degreesPerKm * Math.cos(angle)
-      const lngOffset = distanceKm * degreesPerKm * Math.sin(angle) / Math.cos(centerLat * Math.PI / 180)
-
-      points.push({
-        lat: centerLat + latOffset,
-        lng: centerLng + lngOffset
-      })
-    }
-
-    return points
-  }, [])
+  const filteredEvents = vmEnabled && vmEvent ? [vmEvent] : getMapEvents()
 
   // ===== HANDLERS =====
-  // Handlers de la carte
-  const handleEventClick = useCallback((event: Event | null) => {
-    if (event) {
-      // Si c'est un fake event en mode visitor, afficher le teaser au lieu d'ouvrir l'EventCard
-      if (isVisitorMode && event.id.startsWith('fake-')) {
-        setShowTeaserMessage(true) // Afficher le message teaser
-        return
-      }
-      setSelectedEvent(event)
-    } else {
-      // Fermer l'EventCard lors d'un clic sur la carte (sans features)
-      setSelectedEvent(null)
+  // Fonction helper pour fermer toutes les EventCards
+  const closeAllEventCards = useCallback(() => {
+    setSelectedEvent(null)
+    // Synchroniser avec fakePinsLogic si en mode visitor
+    if (vmEnabled && vmFakePins) {
+      vmFakePins.setSelectedFakeEvent(null)
     }
-  }, [isVisitorMode])
+    // En mode visitor, synchroniser selectedEventRef et fermer via la fonction globale
+    if (vmEnabled) {
+      if ((window as any).__updateVisitorSelectedEventRef) {
+        (window as any).__updateVisitorSelectedEventRef(null)
+      }
+      if ((window as any).__closeEventCard) {
+        (window as any).__closeEventCard()
+      }
+    }
+  }, [vmEnabled, vmFakePins])
+
+  // Handler commun pour les clics sur les événements (mode normal et visitor)
+  const handleEventClick = useCallback((event: Event | null) => {
+    // Clic sur la carte (sans features) - fermer toutes les EventCards
+    if (!event) {
+      closeAllEventCards()
+      return
+    }
+
+    // Utiliser un seul état selectedEvent pour tous les événements (vrais et fake)
+    // La synchronisation avec fakePinsLogic se fait via useEffect
+    if (vmEnabled) {
+      // Mode visitor : synchroniser selectedEventRef et utiliser setSelectedEvent via __openEventCard
+      if ((window as any).__updateVisitorSelectedEventRef) {
+        (window as any).__updateVisitorSelectedEventRef(event)
+      }
+      if ((window as any).__openEventCard) {
+        (window as any).__openEventCard(event)
+      }
+    } else {
+      // Mode normal : utiliser setSelectedEvent directement
+      setSelectedEvent(event)
+    }
+  }, [vmEnabled, closeAllEventCards])
+
+  // Handler pour quand la carte est prête
+  const handleMapReady = useCallback(() => {
+    // Appeler le callback original si fourni
+    onMapReady?.()
+
+    // En mode visitor, centrer sur le pin de l'événement
+    if (vmEnabled && vmEvent && vmEvent.venue) {
+      // Petit délai pour laisser la carte se stabiliser
+      setTimeout(() => {
+        if ((window as any).centerMapOnEvent) {
+          (window as any).centerMapOnEvent(vmEvent)
+          // Appeler onEventCentered après le centrage
+          onEventCentered?.()
+        }
+      }, 100)
+    }
+  }, [vmEnabled, vmEvent, onMapReady, onEventCentered])
 
   const handleClusterClick = useCallback((_feature: unknown) => {
-    if (isVisitorMode) {
+    if (vmEnabled) {
       return // Désactiver les clics sur cluster en mode visitor
     }
     setSelectedEvent(null) // Fermer l'EventCard si ouvert
-  }, [isVisitorMode])
+  }, [vmEnabled])
 
 
   // ===== CALCULS =====
 
-  const fakeEvents = useMemo(() => {
-    if (!showTeaserPins || !visitorEvent?.venue?.lat || !visitorEvent?.venue?.lng) {
-      return []
-    }
-
-    const points = generateRandomPointsInRadius(
-      visitorEvent.venue.lat,
-      visitorEvent.venue.lng,
-      50, // 50km de rayon
-      50  // 50 pins
-    )
-
-    return points.map((point, index) => ({
-      id: `fake-${index}`,
-      venue: {
-        lat: point.lat,
-        lng: point.lng,
-        name: '',
-        address: ''
-      },
-      title: '',
-      isPublic: true,
-      isOnline: true
-    } as Event))
-  }, [showTeaserPins, visitorEvent, generateRandomPointsInRadius])
-
   const allEventsToDisplay = useMemo(() => {
     if (showTeaserPins && fakeEvents.length > 0) {
-      return [...filteredEvents, ...fakeEvents]
+      // En mode visitor avec fake pins, afficher uniquement les fake events (pas de vrais events)
+      return fakeEvents
     }
     return filteredEvents
   }, [filteredEvents, fakeEvents, showTeaserPins])
 
   // ===== EFFETS =====
-  // Notifier le parent que l'EventCard est monté (mode visitor)
+  // Synchroniser selectedFakeEvent de fakePinsLogic avec selectedEvent unifié
+  // selectedEvent est la source de vérité principale
+  // On synchronise seulement si fakePinsLogic change indépendamment (cas rare)
   useEffect(() => {
-    if (isVisitorMode && selectedEvent && onEventCardMount) {
-      onEventCardMount()
+    // Si fakePinsLogic a un fake event et que selectedEvent n'est pas déjà ce fake event
+    if (selectedFakeEventFromLogic && selectedFakeEventFromLogic !== selectedEvent) {
+      const currentIsFake = selectedEvent && ((selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake)
+      // Ne synchroniser que si selectedEvent n'est pas déjà un fake event (pour éviter d'écraser un vrai event)
+      if (!currentIsFake) {
+        setSelectedEvent(selectedFakeEventFromLogic)
+      }
     }
-  }, [isVisitorMode, selectedEvent, onEventCardMount])
+  }, [selectedFakeEventFromLogic])
 
+  // Synchroniser fakePinsLogic quand selectedEvent change et que c'est un fake event
+  useEffect(() => {
+    if (vmEnabled && vmFakePins) {
+      const isFake = selectedEvent && ((selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake)
+      if (isFake && selectedEvent !== selectedFakeEventFromLogic) {
+        // Mettre à jour fakePinsLogic seulement si selectedEvent est différent
+        vmFakePins.setSelectedFakeEvent(selectedEvent)
+      } else if (!selectedEvent && selectedFakeEventFromLogic) {
+        // Si selectedEvent est null et que fakePinsLogic a encore un fake event, le réinitialiser
+        vmFakePins.setSelectedFakeEvent(null)
+      }
+    }
+  }, [selectedEvent, vmEnabled, vmFakePins, selectedFakeEventFromLogic])
+  // Notifier le parent que l'EventCard est monté (mode visitor)
+  // Appel immédiat pour masquer l'écran de chargement - l'animation flyTo attendra 2 secondes
+  useEffect(() => {
+    if (vmEnabled && selectedEvent && vmOnEventCardMount) {
+      vmOnEventCardMount()
+    }
+  }, [vmEnabled, selectedEvent, vmOnEventCardMount])
 
   // Fermer l'EventCard lors de l'ouverture du modal CreateEvent
   useEffect(() => {
@@ -174,62 +224,88 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [isModalOpen, selectedEvent])
 
-  // Gérer autoCenterEvent depuis ProfilePage (legacy, maintenant géré par setSelectedEventFromProfile)
-  useEffect(() => {
-    if (autoCenterEvent && !isVisitorMode) {
-      setSelectedEvent(autoCenterEvent)
-      onEventCentered?.()
-    }
-  }, [autoCenterEvent, isVisitorMode, onEventCentered])
-
   // Détecter le changement de privacy et fermer l'EventCard
-  // Logique spécifique pour les pins fantômes en mode visitor
+  // (La séquence Public Mode est gérée dans visitorIntegration.tsx)
+  const prevIsPublicModeRef = useRef(isPublicMode)
   useEffect(() => {
+    // Ne fermer l'EventCard que lors d'un VRAI changement de isPublicMode
+    // (pas lors du changement de selectedEvent)
     if (prevIsPublicModeRef.current !== isPublicMode) {
       prevIsPublicModeRef.current = isPublicMode
       // Fermer l'EventCard lors du changement de privacy
       if (selectedEvent) {
         setSelectedEvent(null)
       }
-      // En mode visiteur, générer les pins fantômes après toggle privacy (mais ne pas afficher le teaser)
-      if (isVisitorMode) {
-        setShowTeaserPins(true) // Génère les pins pour qu'ils soient visibles sur la carte
-        setShowTeaserMessage(false) // Ne pas afficher le message par défaut
-        setTimeout(() => {
-          if ((window as any).zoomOutMap) {
-            (window as any).zoomOutMap(8, 20000)
-          }
-        }, 100)
+    }
+  }, [isPublicMode, selectedEvent])
+
+  // Le toast a été supprimé car le teaser sur la FakeEventCard remplit ce rôle
+
+  // Exposer la fonction de fermeture EventCard pour visitorIntegration
+  useEffect(() => {
+    if (vmEnabled) {
+      const closeEventCard = () => {
+        setSelectedEvent(null)
+      }
+      const openEventCard = (event: Event | null) => {
+        if (event) {
+          setSelectedEvent(event)
+        }
+      }
+        ; (window as any).__closeEventCard = closeEventCard
+        ; (window as any).__openEventCard = openEventCard
+      return () => {
+        delete (window as any).__closeEventCard
+        delete (window as any).__openEventCard
       }
     }
-  }, [isPublicMode, isVisitorMode, selectedEvent])
+  }, [vmEnabled])
 
-  // Fermer WelcomeScreen si l'utilisateur se connecte
+  // Fade-in des pins réels lors de la transition VM → normal
+  const [shouldFadeInRealEvents, setShouldFadeInRealEvents] = useState(false)
+  const prevVmEnabledRef = useRef(vmEnabled)
   useEffect(() => {
-    if (isAuthenticated && showWelcomeScreen) {
-      setShowWelcomeScreen(false)
-      setShowTeaserPins(false)
-      setShowTeaserMessage(false)
+    // Détecter la transition VM désactivé → normal (user connecté)
+    if (prevVmEnabledRef.current && !vmEnabled) {
+      // Délai de 200ms pour laisser le fade-out des fake pins se terminer
+      const t = setTimeout(() => setShouldFadeInRealEvents(true), 200)
+      const t2 = setTimeout(() => setShouldFadeInRealEvents(false), 1000)
+      return () => { clearTimeout(t); clearTimeout(t2) }
     }
-  }, [isAuthenticated, showWelcomeScreen])
+    prevVmEnabledRef.current = vmEnabled
+  }, [vmEnabled])
+
+  // Pop FilterBar lors de la transition VM → normal
+  const [shouldPopFilterBar, setShouldPopFilterBar] = useState(false)
+  useEffect(() => {
+    try {
+      const shouldPop = sessionStorage.getItem('fomo-pop-filterbar') === 'true'
+      if (shouldPop && !vmEnabled) {
+        setShouldPopFilterBar(true)
+        // Nettoyer après animation
+        setTimeout(() => {
+          sessionStorage.removeItem('fomo-pop-filterbar')
+          setShouldPopFilterBar(false)
+        }, 600)
+      }
+    } catch {
+      // Ignorer si sessionStorage indisponible
+    }
+  }, [vmEnabled])
 
   return (
     <>
-      <div className="map-container">
+      <div className={`map-container${shouldFadeInRealEvents ? ' map-container--fade-in-real-events' : ''}`}>
         <MapRenderer
           events={allEventsToDisplay}
-          onEventClick={handleEventClick}
+          onPinClick={handleEventClick}
           onClusterClick={handleClusterClick}
-          onMapReady={onMapReady}
-          autoCenterEvent={
-            autoCenterEvent || (isVisitorMode && visitorEvent ? visitorEvent : undefined)
-          }
-          onEventCentered={onEventCentered}
+          onMapReady={handleMapReady}
         />
 
         {/* FilterBar en overlay centré - masquée en mode visitor */}
-        {!isVisitorMode && (
-          <div className="filterbar-overlay">
+        {!vmEnabled && (
+          <div className={`filterbar-overlay ${shouldPopFilterBar ? 'filterbar-pop' : ''}`}>
             <div className="filterbar-card">
               <FilterBar />
             </div>
@@ -237,98 +313,67 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         )}
       </div>
 
-      {/* Teaser en bas de page (mode visiteur après clic sur fake pin) */}
-      {showTeaserMessage && (
-        <div className="modal_container">
-          <div className="modal modal-teaser">
-            <div className="modal-content">
-              <p className="map-teaser-message">
-                Pour voir les informations de cet événement, rejoins FOMO !
-              </p>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={() => setShowWelcomeScreen(true)}
-                className="map-teaser-cta"
-              >
-                <span className="map-teaser-text" data-size="xs">
-                  <span className="map-teaser-word"> G
-                    <img
-                      src="/globe-icon.svg"
-                      alt="O"
-                      style={{
-                        height: '1em',
-                        width: '1em',
-                        display: 'block',
-                        filter: 'brightness(0) invert(1)',
-                        transform: 'translateY(-0.05em)'
-                      }}
-                    />
-                  </span>
-                  <span className="map-teaser-word">
-                    <img
-                      src="/lock-icon.svg"
-                      alt="O"
-                      style={{
-                        height: '1em',
-                        width: '1em',
-                        display: 'block',
-                        filter: 'brightness(0) invert(1)',
-                        transform: 'translateY(-0.05em)'
-                      }}
-                    />N
-                  </span>
-                  <span className="map-teaser-word">F
-                    <img
-                      src="/globe-icon.svg"
-                      alt="O"
-                      style={{
-                        height: '1em',
-                        width: '1em',
-                        display: 'block',
-                        filter: 'brightness(0) invert(1)',
-                        transform: 'translateY(-0.05em)'
-                      }}
-                    />
-                    M
-                    <img
-                      src="/lock-icon.svg"
-                      alt="O"
-                      style={{
-                        height: '1em',
-                        width: '1em',
-                        display: 'block',
-                        filter: 'brightness(0) invert(1)',
-                        transform: 'translateY(-0.05em)'
-                      }}
-                    />
-                  </span>
-                </span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* WelcomeScreen en fondu par-dessus la carte */}
       {showWelcomeScreen && (
-        <WelcomeScreen />
+        <WelcomeScreen partialHeight={true} />
       )}
 
-      {selectedEvent && (
-        <div className="event-card-container">
-          <EventCard
-            key={selectedEvent.id}
-            event={selectedEvent}
-            showToggleResponse={true}
-            
-            onVisitorFormCompleted={onVisitorFormCompleted}
-          />
-        </div>
-      )}
+      {/* EventCard unifiée (vraie ou fake) */}
+      {selectedEvent && (() => {
+        // Détecter si c'est un fake event
+        const isFake = (selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake
+
+        if (isFake) {
+          // Afficher FakeEventCard pour les fake events
+          return (
+            <div className="event-card-container fade-in-500ms">
+              <FakeEventCard
+                event={selectedEvent}
+                variantIndex={vmFakePins?.fakeEventVariantIndex ?? 0}
+                onJoinClick={() => {
+                  setShowWelcomeScreen(true)
+                  // Tracking
+                  console.info('🎯 [Analytics] auth_modal_opened')
+                }}
+              />
+            </div>
+          )
+        } else {
+          // Afficher EventCard pour les vrais events
+          return (
+            <div className="event-card-container">
+              <EventCard
+                key={selectedEvent.id}
+                event={selectedEvent}
+                showToggleResponse={true}
+                onResponseClick={(responseType) => {
+                  // En mode visitor, utiliser le handler visitor
+                  if (vmEnabled && vmOnResponseClick) {
+                    vmOnResponseClick(responseType)
+                  } else {
+                    // Afficher les étoiles quand une réponse est cliquée (mode normal)
+                    // Normaliser le responseType pour les animations (participe/going, maybe/interested, not_there/not_interested)
+                    let normalizedResponseType: 'participe' | 'maybe' | 'not_there' | undefined
+                    if (responseType === 'going' || responseType === 'participe') {
+                      normalizedResponseType = 'participe'
+                    } else if (responseType === 'interested' || responseType === 'maybe') {
+                      normalizedResponseType = 'maybe'
+                    } else if (responseType === 'not_interested' || responseType === 'not_there') {
+                      normalizedResponseType = 'not_there'
+                    }
+                    triggerStars(normalizedResponseType)
+                  }
+                }}
+              />
+            </div>
+          )
+        }
+      })()}
+      {/* Animation étoiles scintillantes - rendue dans un portail */}
+      {StarsAnimation}
     </>
   )
 }
-
 
 export default DiscoverPage

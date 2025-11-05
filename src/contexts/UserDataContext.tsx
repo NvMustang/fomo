@@ -39,6 +39,10 @@ export interface FomoDataContextType {
     getLatestResponsesByEvent: (userId: string) => Map<string, UserResponse>
     getLatestResponsesByUser: (eventId: string) => Map<string, UserResponse>
 
+    // Identité utilisateur actuel (unifié pour visitor et user)
+    currentUserId: string | null
+    currentUserName: string | null
+
     // Actions
     refreshEvents: () => Promise<void>
     refreshUsers: () => Promise<void>
@@ -51,7 +55,7 @@ export interface FomoDataContextType {
     updateEvent: (eventId: string, eventData: Event) => Promise<Event | null>
     addEventResponse: (
         eventId: string,
-        finalResponse: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
+        finalResponse: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null,
         options?: {
             email?: string
             targetUserId?: string // Si présent, utilise cet userId au lieu de user.id
@@ -398,7 +402,7 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
      */
     const addEventResponse = useCallback((
         eventId: string,
-        finalResponse: 'going' | 'interested' | 'not_interested' | 'cleared' | 'seen' | 'invited' | null,
+        finalResponse: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null,
         options?: {
             targetUserId?: string // Si présent, utilise cet userId au lieu de user.id
             invitedByUserId?: string
@@ -640,6 +644,10 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         getLatestResponsesByEvent,
         getLatestResponsesByUser,
 
+        // Identité utilisateur actuel (unifié pour visitor et user)
+        currentUserId: user?.id || null,
+        currentUserName: user?.name || null,
+
         // Actions
         refreshEvents,
         refreshUsers,
@@ -682,6 +690,8 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         events, users, responses, userRelations,
         eventsError, usersError, responsesError, relationsError,
         isLoading, hasError, dataReady,
+        // Identité utilisateur
+        user?.id, user?.name,
         // Helpers pour réponses
         getLatestResponse, getCurrentResponse, getLatestResponsesByEvent, getLatestResponsesByUser,
         // Fonctions stabilisées avec useCallback

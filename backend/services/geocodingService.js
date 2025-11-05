@@ -4,6 +4,7 @@
  */
 
 const axios = require('axios')
+const analyticsTracker = require('../utils/analyticsTracker')
 
 class GeocodingService {
     /**
@@ -74,6 +75,9 @@ class GeocodingService {
             const response = await axios.get(mapboxUrl)
 
             if (!response.data.features) {
+                analyticsTracker.trackRequest('mapbox', 'geocoding', false, {
+                    error: 'Format de réponse Mapbox invalide'
+                })
                 throw new Error('Format de réponse Mapbox invalide')
             }
 
@@ -88,12 +92,24 @@ class GeocodingService {
             }))
 
             console.log(`✅ ${results.length} résultats Mapbox trouvés`)
+
+            // Tracker succès
+            analyticsTracker.trackRequest('mapbox', 'geocoding', true)
+
             return {
                 success: true,
                 data: results
             }
         } catch (error) {
             console.error('❌ Erreur recherche Mapbox:', error.message)
+
+            // Tracker erreur
+            const errorMsg = error.response?.status
+                ? `HTTP ${error.response.status}: ${error.message}`
+                : error.message
+            analyticsTracker.trackRequest('mapbox', 'geocoding', false, {
+                error: errorMsg
+            })
 
             // Si c'est une erreur 401 (token invalide), donner des instructions
             if (error.response?.status === 401) {

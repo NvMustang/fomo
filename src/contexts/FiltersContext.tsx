@@ -25,7 +25,9 @@ import {
     matchTags,
     matchOrganizer,
     userResponsesMapper,
-    getUsersMapByIds
+    getUsersMapByIds,
+    createEmptyGroups,
+    type Groups
 } from '@/utils/filterTools'
 
 interface Filters {
@@ -47,15 +49,7 @@ interface FiltersContextType {
     getEventsByPrivacy: () => Event[]
     getOnlineEvents: () => Event[]
     getOnlineEventsGroupedByPeriods: () => { periods: CalendarPeriod[]; totalEvents: number }
-    getOnlineEventsGroupedByResponses: () => {
-        going: Event[]
-        interested: Event[]
-        not_interested: Event[]
-        seen: Event[]
-        cleared: Event[]
-        invited: Event[]
-        null: Event[]
-    }
+    getOnlineEventsGroupedByResponses: () => Groups<Event>
 
     // Branches
     getCalendarEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
@@ -89,15 +83,7 @@ interface FiltersContextType {
         blockedUsers: Friend[]
     }
     getGuests: (eventId: string) => UserResponse[]
-    getGuestsGroupedByResponse: (eventId: string) => {
-        invited: UserResponse[]
-        going: UserResponse[]
-        interested: UserResponse[]
-        not_interested: UserResponse[]
-        seen: UserResponse[]
-        cleared: UserResponse[]
-        null: UserResponse[]
-    }
+    getGuestsGroupedByResponse: (eventId: string) => Groups<UserResponse>
 }
 
 // ===== CONTEXT =====
@@ -141,7 +127,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     })
 
     // Importer les contextes nécessaires pour le filtrage
-    const { events, eventsError, dataReady, responses, userRelations, users, getLatestResponsesByUser } = useFomoDataContext()
+    const { events, eventsError, dataReady, responses, userRelations, users, getLatestResponsesByUser, currentUserId } = useFomoDataContext()
     const { user } = useAuth()
     const { isPublicMode } = usePrivacy()
 
@@ -177,9 +163,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         // Filtrer par isPublic selon PrivacyContext
         // isPublicMode = true → afficher uniquement les événements publics
         // isPublicMode = false → afficher uniquement les événements privés
-        const eventsByPrivacy = events.filter(e => matchPublic(e, isPublicMode))
-
-        return eventsByPrivacy
+        return events.filter(e => matchPublic(e, isPublicMode))
     }, [dataReady, events, isPublicMode])
 
     /**
@@ -211,18 +195,10 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
      * 
      * @returns Groupes d'événements online par type de réponse (going, interested, etc.)
      */
-    const getOnlineEventsGroupedByResponses = useCallback(() => {
+    const getOnlineEventsGroupedByResponses = useCallback((): Groups<Event> => {
         const onlineEvents = getOnlineEvents()
         if (onlineEvents.length === 0) {
-            return {
-                going: [],
-                interested: [],
-                not_interested: [],
-                seen: [],
-                cleared: [],
-                invited: [],
-                null: []
-            }
+            return createEmptyGroups<Event>()
         }
 
         // Construire le dictionnaire userResponses pour le groupement
@@ -261,11 +237,13 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             }
         }
 
-        // Prendre going + interested depuis onlineEventsGroupedByResponses
+        // Prendre going + participe + interested + maybe depuis onlineEventsGroupedByResponses
         const responseGroups = getOnlineEventsGroupedByResponses()
         const goingEvents = responseGroups.going
+        const participeEvents = responseGroups.participe
         const interestedEvents = responseGroups.interested
-        const calendarResponseEvents = [...goingEvents, ...interestedEvents]
+        const maybeEvents = responseGroups.maybe
+        const calendarResponseEvents = [...goingEvents, ...participeEvents, ...interestedEvents, ...maybeEvents]
 
         // Grouper par période
         const calendarGrouped = groupEventsByPeriods(calendarResponseEvents)
@@ -327,26 +305,31 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     /**
      * Source de vérité pour la carte (MapRenderer).
      * - Mode public : retourne tous les événements de getDiscoverEvents()
-     * - Mode private : retourne uniquement les événements où l'utilisateur a une réponse (exclut null/inexistant)
+     * - Mode private : retourne uniquement les événements où l'utilisateur a une réponse (exclut chaîne vide)
+     * 
+     * Note : Les visiteurs sont gérés séparément dans DiscoverPage (filtre directement sur visitorEvent)
      * 
      * @returns Événements pour la carte selon le mode privacy
      */
     const getMapEvents = useCallback((): Event[] => {
+        // Source de vérité : getDiscoverEvents()
+        const discoverEvents = getDiscoverEvents().events
+
         if (isPublicMode) {
             // Mode public : retourner tous les événements de getDiscoverEvents()
-            return getDiscoverEvents().events
+            return discoverEvents
         } else {
-            // Mode private : retourner uniquement les événements avec une réponse (exclut null/inexistant)
-            const onlineEvents = getOnlineEvents()
-            const userResponsesMap = userResponsesMapper(onlineEvents, responses, user?.id)
+            // Mode private : retourner uniquement les événements avec une réponse (exclut chaîne vide)
+            // Utiliser currentUserId pour fonctionner avec visitor et user authentifié
+            const userResponsesMap = userResponsesMapper(discoverEvents, responses, currentUserId || undefined)
 
-            // Filtrer pour ne garder que les événements avec une réponse (pas null, pas vide)
-            return onlineEvents.filter(e => {
+            // Filtrer pour ne garder que les événements avec une réponse (userResponsesMapper retourne '' si pas de réponse)
+            return discoverEvents.filter(e => {
                 const response = userResponsesMap[e.id]
-                return response !== '' && response !== undefined && response !== null
+                return response !== ''
             })
         }
-    }, [isPublicMode, getDiscoverEvents, getOnlineEvents, responses, user?.id])
+    }, [isPublicMode, getDiscoverEvents, responses, currentUserId])
 
     /**
      * Filtre les événements où l'utilisateur est organisateur.
@@ -464,7 +447,8 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             // "Nouveaux" : inclure les événements sans réponse (null) ET les événements invités (invited)
             responseEvents = [...responseGroups.null, ...responseGroups.invited]
         } else {
-            responseEvents = responseGroups[response] || []
+            // Utiliser directement la clé de réponse (plus de conversion nécessaire)
+            responseEvents = responseGroups[response as keyof typeof responseGroups] || []
         }
 
         // Intersection entre les événements fournis et ceux de la réponse
@@ -600,16 +584,34 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             availableResponses.push({ value: 'going', label: 'J\'y vais', count: goingCount })
         }
 
+        // Compter les événements participe visibles
+        const participeCount = responseGroups.participe.filter(e => visibleEventIds.has(e.id)).length
+        if (participeCount > 0) {
+            availableResponses.push({ value: 'participe', label: 'J\'y vais', count: participeCount })
+        }
+
         // Compter les événements interested visibles
         const interestedCount = responseGroups.interested.filter(e => visibleEventIds.has(e.id)).length
         if (interestedCount > 0) {
             availableResponses.push({ value: 'interested', label: 'Intéressé', count: interestedCount })
         }
 
+        // Compter les événements maybe visibles
+        const maybeCount = responseGroups.maybe.filter(e => visibleEventIds.has(e.id)).length
+        if (maybeCount > 0) {
+            availableResponses.push({ value: 'maybe', label: 'Peut-être', count: maybeCount })
+        }
+
         // Compter les événements not_interested visibles
         const notInterestedCount = responseGroups.not_interested.filter(e => visibleEventIds.has(e.id)).length
         if (notInterestedCount > 0) {
             availableResponses.push({ value: 'not_interested', label: 'Pas intéressé', count: notInterestedCount })
+        }
+
+        // Compter les événements not_there visibles
+        const notThereCount = responseGroups.not_there.filter(e => visibleEventIds.has(e.id)).length
+        if (notThereCount > 0) {
+            availableResponses.push({ value: 'not_there', label: 'Pas là', count: notThereCount })
         }
 
         // Compter les événements seen + cleared visibles (regroupés en "Non répondu")
@@ -624,8 +626,11 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         const eventsWithResponses = new Set(
             [
                 ...responseGroups.going,
+                ...responseGroups.participe,
                 ...responseGroups.interested,
+                ...responseGroups.maybe,
                 ...responseGroups.not_interested,
+                ...responseGroups.not_there,
                 ...responseGroups.seen,
                 ...responseGroups.cleared
             ].map(e => e.id)
@@ -788,7 +793,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         // Obtenir les réponses pour cet événement avec les types valides
         // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses par utilisateur
         const latestResponsesMap = getLatestResponsesByUser(eventId)
-        const validResponses: UserResponseValue[] = ['going', 'interested', 'not_interested', 'seen', 'cleared', 'invited']
+        const validResponses: UserResponseValue[] = ['going', 'interested', 'maybe', 'not_interested', 'not_there', 'seen', 'cleared', 'invited']
         const eventResponses = Array.from(latestResponsesMap.values()).filter(r =>
             r.finalResponse &&
             validResponses.includes(r.finalResponse)
@@ -827,17 +832,9 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
      * @param eventId - ID de l'événement
      * @returns Objet avec groupes par type de réponse
      */
-    const getGuestsGroupedByResponse = useCallback((eventId: string) => {
+    const getGuestsGroupedByResponse = useCallback((eventId: string): Groups<UserResponse> => {
         if (!user?.id) {
-            return {
-                invited: [] as UserResponse[],
-                going: [] as UserResponse[],
-                interested: [] as UserResponse[],
-                not_interested: [] as UserResponse[],
-                seen: [] as UserResponse[],
-                cleared: [] as UserResponse[],
-                null: [] as UserResponse[]
-            }
+            return createEmptyGroups<UserResponse>()
         }
         const guests = getGuests(eventId)
         return groupUsersByResponses(guests)

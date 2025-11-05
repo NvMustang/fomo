@@ -30,6 +30,13 @@
     /* Permet au modal de gérer son propre scroll */
 }
 
+/* Modal sans backdrop - affiché par-dessus la carte */
+.modal-no-backdrop {
+    /* Pas de backdrop, juste le modal flottant */
+    z-index: 1007;
+    /* Au-dessus de tout pour être visible par-dessus la carte */
+}
+
 /* Modal principal */
 .modal {
     /* Style du modal */
@@ -37,10 +44,14 @@
 
     width: 360px;
     max-height: 70vh;
-    background: rgba(255, 255, 255, 0.9);
+    /* Glassmorphism effect inspiré de la navbar */
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
 
     border-radius: var(--radius-lg);
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
     border: 2px solid var(--current-color);
 
     pointer-events: auto;
@@ -48,9 +59,46 @@
     display: flex;
     flex-direction: column;
 
-
     /* Animation d'entrée */
-    animation: overlayFadeIn 0.3s ease-out;
+    animation: modalSlideUp 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Lueur subtile sur les bords du modal */
+.modal::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--radius-lg);
+    padding: 2px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes modalSlideUp {
+    0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.9);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateY(-5px) scale(1.02);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 /* Contenu spécifique aux modals avec formulaire */
@@ -193,4 +241,55 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* Modal visitor dynamique avec variantes émotionnelles */
+.visitor-form-dynamic {
+    /* Glassmorphism effect inspiré de la navbar (comme les toasts) */
+    background: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(var(--glass-blur-strong)) !important;
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) !important;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
+}
+
+.visitor-modal-dynamic {
+    /* Glassmorphism effect inspiré de la navbar */
+    background: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(var(--glass-blur-strong)) !important;
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) !important;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
+    border: none !important;
+}
+
+/* Bordure dégradé pour modal visitor (comme le teaser) */
+.visitor-modal-dynamic::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%);
+    opacity: 0.7;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.visitor-form-header {
+    text-align: center;
+    padding: var(--md) 0;
+}
+
+.visitor-form-header h2 {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Amélioration du toast avec animation douce */
+.toast-message {
+    animation: toastIntroSlideUp 0.4s ease-out;
 }

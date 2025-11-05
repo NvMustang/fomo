@@ -13,6 +13,10 @@ const { SPREADSHEET_ID } = require('./utils/sheets-config')
 const isLocal = !process.env.VERCEL
 const envType = isLocal ? '🧪 TEST' : '📊 PRODUCTION'
 
+// Initialiser la sauvegarde automatique des analytics backend
+const autoSaveBackendAnalytics = require('./utils/autoSaveBackendAnalytics')
+autoSaveBackendAnalytics.init()
+
 // Démarrage du serveur
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 FOMO Beta Backend démarré sur le port ${PORT}`)

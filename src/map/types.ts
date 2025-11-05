@@ -45,13 +45,13 @@ export interface MapViewProps {
   events: Event[]
 
   // Callbacks
-  onEventClick?: (event: Event | null) => void
+  onPinClick?: (event: Event | null) => void
   onClusterClick?: (cluster: any) => void
   onMapReady?: () => void
 
   // Auto-centrer sur un événement au chargement
   autoCenterEvent?: Event | null
-  onEventCentered?: () => void
+  onPinCentered?: () => void
 
   // Style
   style?: React.CSSProperties

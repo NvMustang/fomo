@@ -15,6 +15,7 @@ import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction,
 import { isFriendshipActionData } from '@/types/fomoTypes'
 import { getApiBaseUrl } from '@/config/env'
 import { format } from 'date-fns'
+import { analyticsTracker } from './analyticsTracker'
 
 
 // ===== CONFIGURATION =====
@@ -214,19 +215,40 @@ class ApiClient {
             })
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+                const errorMsg = `HTTP ${response.status}: ${response.statusText}`
+                analyticsTracker.trackRequest('backend', endpoint, false, {
+                    method: options?.method || 'GET',
+                    error: errorMsg
+                })
+                throw new Error(errorMsg)
             }
 
             const result = await response.json()
 
             if (result.success) {
                 console.log(`✅ [API SUCCESS] ${endpoint} - Data received`)
+                analyticsTracker.trackRequest('backend', endpoint, true, {
+                    method: options?.method || 'GET'
+                })
                 return result.data
             } else {
-                throw new Error(result.error || 'Erreur API')
+                const errorMsg = result.error || 'Erreur API'
+                analyticsTracker.trackRequest('backend', endpoint, false, {
+                    method: options?.method || 'GET',
+                    error: errorMsg
+                })
+                throw new Error(errorMsg)
             }
         } catch (error) {
             console.error(`❌ [API ERROR] ${endpoint}:`, error)
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            if (!errorMsg.includes('HTTP')) {
+                // Ne pas tracker deux fois si déjà tracké
+                analyticsTracker.trackRequest('backend', endpoint, false, {
+                    method: options?.method || 'GET',
+                    error: errorMsg
+                })
+            }
             if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
                 throw new Error('Impossible de se connecter au serveur. Vérifiez que le backend est démarré.')
             }
@@ -527,7 +549,7 @@ export class FomoDataManager {
     getUserResponse(userId: string, eventId: string, responses: UserResponse[]): UserResponseValue {
         // NOUVEAU SYSTÈME : Trouver la dernière réponse (la plus récente)
         const userEventResponses = responses
-            .filter(r => r.userId === userId && r.eventId === eventId && !r.deletedAt)
+            .filter(r => r.userId === userId && r.eventId === eventId)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         return userEventResponses.length > 0 ? userEventResponses[0].finalResponse : null
     }
@@ -617,35 +639,16 @@ export class FomoDataManager {
     }
 
 
-    async updateUser(userId: string, userData: User, newId?: string): Promise<User | null> {
+    async updateUser(userId: string, userData: Partial<User>, newId?: string): Promise<User | null> {
         try {
-            // Préparer le payload avec tous les champs explicites (comme pour events)
+            // Préparer le payload avec uniquement les champs fournis (mise à jour partielle)
             const payload: any = {
-                id: newId && newId !== userId ? newId : userId, // Nouvel ID si migration, sinon ID actuel
-                name: userData.name,
-                email: userData.email,
-                city: userData.city,
-                lat: userData.lat || null,
-                lng: userData.lng || null,
-                friendsCount: userData.friendsCount,
-                // Valeurs par défaut pour users (écrasent les anciennes valeurs)
-                showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true,
-                privacy: { showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true },
-                isPublicProfile: userData.isPublicProfile !== undefined ? userData.isPublicProfile : false,
-                isActive: true, // Toujours actif
-                isAmbassador: userData.isAmbassador !== undefined ? userData.isAmbassador : false,
-                allowRequests: userData.allowRequests !== undefined ? userData.allowRequests : true,
-                modifiedAt: new Date().toISOString(),
-                lastConnexion: new Date().toISOString()
-            }
-
-            // Si changement d'ID, indiquer l'ancien ID pour la migration
-            if (newId && newId !== userId) {
-                payload.oldId = userId // Ancien ID pour migration des réponses
+                id: newId || userId, // Utiliser newId si fourni, sinon userId
+                ...userData // Inclure tous les champs fournis dans userData (isVisitor, name, city, etc.)
             }
 
             const response = await fetch(`${API_BASE_URL}/users`, {
-                method: 'POST',
+                method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -658,16 +661,7 @@ export class FomoDataManager {
 
             const result = await response.json()
             if (result.success && result.data) {
-                return {
-                    id: result.data.id,
-                    name: result.data.name,
-                    email: result.data.email,
-                    city: result.data.city,
-                    friendsCount: result.data.friendsCount || 0,
-                    showAttendanceToFriends: result.data.showAttendanceToFriends ?? true,
-                    isPublicProfile: result.data.isPublicProfile ?? false,
-                    isAmbassador: result.data.isAmbassador ?? false
-                } as User
+                return result.data as User
             }
 
             return null
@@ -762,7 +756,7 @@ const fomoDataApi = {
     // Auth
     checkUserByEmail: (email: string) => fomoDataManager.checkUserByEmail(email),
     matchByEmail: (email: string) => fomoDataManager.matchByEmail(email),
-    updateUser: (userId: string, userData: User, newId?: string) => fomoDataManager.updateUser(userId, userData, newId),
+    updateUser: (userId: string, userData: User, newId?: string) => fomoDataManager.updateUser(userId, userData as Partial<User>, newId),
     saveUserToBackend: (userData: User) => fomoDataManager.saveUserToBackend(userData),
 
     // Responses

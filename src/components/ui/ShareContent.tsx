@@ -55,8 +55,11 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
             return {
                 invited: [] as typeof responses,
                 going: [] as typeof responses,
+                participe: [] as typeof responses,
                 interested: [] as typeof responses,
+                maybe: [] as typeof responses,
                 not_interested: [] as typeof responses,
+                not_there: [] as typeof responses,
                 seen: [] as typeof responses,
                 cleared: [] as typeof responses,
                 null: [] as typeof responses
@@ -75,9 +78,12 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
 
         return {
             going: convertToUsers(guestsGrouped.going),
+            participe: convertToUsers(guestsGrouped.participe),
             interested: convertToUsers(guestsGrouped.interested),
+            maybe: convertToUsers(guestsGrouped.maybe),
             invited: convertToUsers(guestsGrouped.invited),
             not_interested: convertToUsers(guestsGrouped.not_interested),
+            not_there: convertToUsers(guestsGrouped.not_there),
             seen: convertToUsers(guestsGrouped.seen),
             cleared: convertToUsers(guestsGrouped.cleared)
         }
@@ -102,9 +108,12 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
     const notParticipatingFriends = useMemo(() => {
         const guestUserIds = new Set([
             ...guestsUsers.going.map(u => u.id),
+            ...guestsUsers.participe.map(u => u.id),
             ...guestsUsers.interested.map(u => u.id),
+            ...guestsUsers.maybe.map(u => u.id),
             ...guestsUsers.invited.map(u => u.id),
             ...guestsUsers.not_interested.map(u => u.id),
+            ...guestsUsers.not_there.map(u => u.id),
             ...guestsUsers.seen.map(u => u.id),
             ...guestsUsers.cleared.map(u => u.id)
         ])
@@ -576,9 +585,12 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
                                         )}
 
                                         {guestsUsers.going.length === 0 &&
+                                            guestsUsers.participe.length === 0 &&
                                             guestsUsers.interested.length === 0 &&
+                                            guestsUsers.maybe.length === 0 &&
                                             guestsUsers.invited.length === 0 &&
                                             guestsUsers.not_interested.length === 0 &&
+                                            guestsUsers.not_there.length === 0 &&
                                             guestsUsers.seen.length === 0 &&
                                             guestsUsers.cleared.length === 0 &&
                                             notParticipatingFriends.length === 0 && (

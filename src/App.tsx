@@ -12,18 +12,16 @@ import {
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { DeviceProvider, useDevice } from '@/contexts/DeviceContext'
 import { PrivacyProvider, usePrivacy } from '@/contexts/PrivacyContext'
-import { FomoDataProvider, useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { FiltersProvider } from '@/contexts/FiltersContext'
-import { useToast } from '@/hooks'
-import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { WelcomeScreen } from '@/components'
+import { VisitorIntegrationWrapper } from '@/components/visitorIntegration'
 
 import CalendarPage from '@/pages/CalendarPage'
 import ConversationPageComponent from '@/pages/ConversationPage'
 import ProfilePageComponent from '@/pages/ProfilePage'
 import DiscoverPage from '@/pages/DiscoverPage'
-import type { Event } from '@/types/fomoTypes'
-import { getApiBaseUrl } from '@/config/env'
+import DashboardPage from '@/pages/DashboardPage'
 
 
 // App principal
@@ -37,205 +35,17 @@ export default function App() {
 
 // Composant qui a accès à AuthContext - LOGIQUE SIMPLE
 const AppWithAuth = () => {
-    const { user, isAuthenticated } = useAuth()
-    console.log(`🔄 [App] Showing AppWithAuth - user: ${user?.id || 'none'}, isAuthenticated: ${isAuthenticated}`)
+    const { isAuthenticated } = useAuth()
+    console.info('🔄 [App] AppWithAuth render', { isAuthenticated })
 
-    // Détecter le mode visitor depuis l'URL
-    const [visitorEventId, setVisitorEventId] = useState<string | null>(null)
-    const [visitorEvent, setVisitorEvent] = useState<Event | null>(null)
-    const [isLoadingVisitorEvent, setIsLoadingVisitorEvent] = useState(false)
-    const [visitorEventError, setVisitorEventError] = useState<string | null>(null)
-
-    useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search)
-        const eventId = urlParams.get('event')
-        if (eventId && !isAuthenticated) {
-            setVisitorEventId(eventId)
-        } else {
-            setVisitorEventId(null)
-        }
-    }, [isAuthenticated])
-
-    // Charger l'événement visitor si nécessaire
-    useEffect(() => {
-        if (!visitorEventId || isAuthenticated) {
-            setVisitorEvent(null)
-            setIsLoadingVisitorEvent(false)
-            return
-        }
-
-        setIsLoadingVisitorEvent(true)
-        setVisitorEventError(null)
-
-        const loadVisitorEvent = async () => {
-            try {
-                const apiUrl = getApiBaseUrl()
-                const response = await fetch(`${apiUrl}/events/${visitorEventId}`)
-                if (!response.ok) {
-                    throw new Error('Événement non trouvé')
-                }
-                const data = await response.json()
-                if (data.success && data.data) {
-                    setVisitorEvent(data.data)
-                } else {
-                    throw new Error('Format de réponse invalide')
-                }
-            } catch (error) {
-                console.error('Erreur chargement événement visitor:', error)
-                setVisitorEventError(error instanceof Error ? error.message : 'Erreur de chargement')
-            } finally {
-                setIsLoadingVisitorEvent(false)
-            }
-        }
-
-        loadVisitorEvent()
-    }, [visitorEventId, isAuthenticated])
-
-    const isVisitorMode = visitorEventId !== null && !isAuthenticated
-
-    // FomoDataProvider choisit automatiquement entre VisitorDataProvider et UserDataProvider
+    // Toute la logique d'intégration visitor est centralisée dans VisitorIntegrationWrapper
     return (
-        <FomoDataProvider visitorEvent={isVisitorMode ? visitorEvent : null}>
-            {/* Si pas authentifié et pas mode visitor, afficher WelcomeScreen (qui contient AuthModal) */}
-            {!isAuthenticated && !isVisitorMode ? (
-                <WelcomeScreen />
-            ) : isVisitorMode ? (
-                <VisitorModeApp
-                    visitorEvent={visitorEvent}
-                    isLoadingVisitorEvent={isLoadingVisitorEvent}
-                    visitorEventError={visitorEventError}
-                />
-            ) : (
-                <AppWithDataReady />
-            )}
-        </FomoDataProvider>
+        <VisitorIntegrationWrapper>
+            <AppWithDataReady />
+        </VisitorIntegrationWrapper>
     )
 }
 
-// Composant pour le mode visitor
-const VisitorModeApp = ({
-    visitorEvent,
-    isLoadingVisitorEvent,
-    visitorEventError
-}: {
-    visitorEvent: Event | null
-    isLoadingVisitorEvent: boolean
-    visitorEventError: string | null
-}) => {
-    const [eventCardMounted, setEventCardMounted] = useState(false)
-
-    // Afficher WelcomeScreen jusqu'à ce que EventCard soit monté
-    if (isLoadingVisitorEvent || !visitorEvent || visitorEventError || !eventCardMounted) {
-        return (
-            <DeviceProvider>
-                <PrivacyProvider defaultPublicMode={false}>
-                    <FiltersProvider>
-                        <VisitorModeContent
-                            visitorEvent={visitorEvent}
-                            visitorEventError={visitorEventError}
-                            onEventCardMount={() => setEventCardMounted(true)}
-                        />
-                        <WelcomeScreen showSpinner={true} />
-                    </FiltersProvider>
-                </PrivacyProvider>
-            </DeviceProvider>
-        )
-    }
-
-    return (
-        <DeviceProvider>
-            <PrivacyProvider defaultPublicMode={false}>
-                <FiltersProvider>
-                    <VisitorModeContent
-                        visitorEvent={visitorEvent}
-                        visitorEventError={null}
-                        onEventCardMount={() => setEventCardMounted(true)}
-                    />
-                </FiltersProvider>
-            </PrivacyProvider>
-        </DeviceProvider>
-    )
-}
-
-// Contenu du mode visitor
-const VisitorModeContent = ({
-    visitorEvent,
-    visitorEventError,
-    onEventCardMount
-}: {
-    visitorEvent: Event | null
-    visitorEventError: string | null
-    onEventCardMount: () => void
-}) => {
-    const { isPublicMode, setToggleDisabled } = usePrivacy()
-    const { showToast } = useToast()
-
-    // Désactiver le toggle au démarrage en mode visitor (sera activé après complétion du formulaire)
-    // Vérifier si le formulaire a déjà été complété (visitorName existe en sessionStorage)
-    useEffect(() => {
-        try {
-            const hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
-            setToggleDisabled(!hasCompletedForm)
-        } catch {
-            // Si sessionStorage indisponible, désactiver par défaut
-            setToggleDisabled(true)
-        }
-        return () => {
-            setToggleDisabled(false) // Réactiver en cas de démontage
-        }
-    }, [setToggleDisabled])
-
-    // Handler appelé quand le formulaire visitor est complété
-    const handleVisitorFormCompleted = useCallback((organizerName: string) => {
-        // Activer le toggle privacy
-        setToggleDisabled(false)
-
-        // Afficher le toast de remerciement
-        const toastMessage: ToastMessage = {
-            title: `${organizerName} vous remercie pour votre réponse !`,
-            message: 'Découvrez les événements autour de chez vous via le bouton en haut à droite.',
-            type: 'success',
-            duration: 5000
-        }
-        showToast(toastMessage)
-    }, [setToggleDisabled, showToast])
-
-    const isModalOpen = useCallback((_modalID: string): boolean => {
-        // En mode visitor, aucun modal n'est ouvert
-        return false
-    }, [])
-
-    if (visitorEventError || !visitorEvent) {
-        return (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-muted)' }}>
-                        {visitorEventError || 'Événement non trouvé'}
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
-    const { currentToast, hideToast } = useToast()
-
-    return (
-        <div className={`app ${isPublicMode ? 'public' : 'private'}`}>
-            <Header />
-            <main className="app-body">
-                <DiscoverPage
-                    isModalOpen={isModalOpen}
-                    isVisitorMode={true}
-                    visitorEvent={visitorEvent}
-                    onEventCardMount={onEventCardMount}
-                    onVisitorFormCompleted={handleVisitorFormCompleted}
-                />
-            </main>
-            {/* NavBar masquée en mode visitor */}
-            <Toast toast={currentToast} onClose={hideToast} />
-        </div>
-    )
-}
 
 // Composant qui vérifie dataReady après authentification
 const AppWithDataReady = () => {
@@ -271,11 +81,11 @@ const AppReady = () => {
     // === CHARGEMENT DES DONNÉES ===
     // Attendre que les données du backend soient chargées
     if (!dataReady) {
-        console.log('⏳ [App] Showing WelcomeScreen - data not ready')
+        console.info('⏳ [App] WelcomeScreen while data not ready')
         return <WelcomeScreen showSpinner={true} />
     }
 
-    console.log('🚀 [App] Data and map ready, showing main app')
+    console.info('🚀 [App] Data and map ready')
 
     return <AppContent />
 }
@@ -283,12 +93,56 @@ const AppReady = () => {
 // Composant interne qui a accès au contexte FomoData - GÈRE SES PROPRES ÉTATS
 const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     // === ÉTATS APP ===
-    const [currentPage, setCurrentPage] = useState<string>('map') // Démarre directement sur map
+    // Détecter la route depuis l'URL
+    const getInitialPage = (): string => {
+        const path = window.location.pathname
+        if (path === '/dashboard') {
+            return 'dashboard'
+        }
+        return 'map'
+    }
+
+    const [currentPage, setCurrentPage] = useState<string>(getInitialPage())
     const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState<boolean>(false)
-    const [selectedEventFromProfile, setSelectedEventFromProfile] = useState<Event | null>(null)
+    const [shouldSlideInNavBar, setShouldSlideInNavBar] = useState(false)
+    
+    // Callback pour réinitialiser la sélection d'événement depuis le profil
+    const handleEventCentered = useCallback(() => {
+        // La sélection est gérée par DiscoverPage via window.setSelectedEventFromProfile
+        // Ce callback est appelé après le centrage pour nettoyer
+    }, [])
+
+    // Écouter les changements d'URL pour la navigation
+    useEffect(() => {
+        const handlePopState = () => {
+            const path = window.location.pathname
+            if (path === '/dashboard') {
+                setCurrentPage('dashboard')
+            } else if (path === '/') {
+                setCurrentPage('map')
+            }
+        }
+
+        window.addEventListener('popstate', handlePopState)
+        return () => window.removeEventListener('popstate', handlePopState)
+    }, [])
+
+    // Détecter si l'utilisateur vient de s'authentifier (après signup)
+    useEffect(() => {
+        // Vérifier si on vient du mode visitor (signup récent)
+        const hasJustSignedUp = sessionStorage.getItem('fomo-just-signed-up') === 'true'
+        if (hasJustSignedUp) {
+            setShouldSlideInNavBar(true)
+            // Nettoyer le flag après animation
+            setTimeout(() => {
+                sessionStorage.removeItem('fomo-just-signed-up')
+            }, 1000)
+        }
+    }, [])
 
 
-    const { showToast, hideToast, currentToast } = useToast()
+    // ⚠️ TEMPORAIREMENT DÉSACTIVÉ - Toast qui suit le viewport
+    // const { showToast, hideToast } = useToast()
     const { platformInfo } = useDevice()
     const { isPublicMode } = usePrivacy()
 
@@ -299,9 +153,13 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     // TODO: Optimiser pour éviter les rerenders inutiles
     useEffect(() => {
         // ⚠️ TEMPORAIREMENT DÉSACTIVÉ - Toast qui suit le viewport
+        // Code commenté pour éviter les erreurs TypeScript
+        // Décommenter et réactiver useToast() si besoin de réactiver cette fonctionnalité
         return undefined
 
-        // eslint-disable-next-line no-unreachable
+        /* eslint-disable */
+        /*
+        const { showToast, hideToast } = useToast()
         console.log('🔄 [App] useEffect viewport monitoring - platformInfo:', platformInfo?.isMobile, 'visualViewport:', !!window.visualViewport)
 
         if (!platformInfo?.isMobile || !window.visualViewport) return
@@ -311,27 +169,19 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
         let viewportCheckTimeout: number | null = null
         let isScrollStable = true
 
-        // Vérifier si le scroll est stable (pas de changement de scrollY)
         const checkScrollStability = () => {
             const currentScrollY = window.scrollY
             if (Math.abs(currentScrollY - lastScrollY) > 1) {
-                // Scroll en cours (même avec inertie)
                 isScrollStable = false
                 lastScrollY = currentScrollY
-
-                // Réinitialiser le timeout pour attendre la fin du scroll
                 if (scrollCheckTimeout !== null) {
                     clearTimeout(scrollCheckTimeout)
                 }
-
-                // Après 500ms sans changement de scrollY, considérer le scroll comme stable
                 scrollCheckTimeout = window.setTimeout(() => {
                     isScrollStable = true
-                    // Vérifier le viewport une fois le scroll stable
                     checkViewport()
                 }, 500)
             } else {
-                // Scroll stable
                 isScrollStable = true
             }
         }
@@ -340,28 +190,20 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             const currentHeight = window.visualViewport?.height || 0
             const screenHeight = window.screen.height
             const heightPercentage = currentHeight / screenHeight
-
-            // === GESTION DU TOAST DE SCROLL ===
-            // Toast uniquement entre 70% et 85% et quand scroll stable
-            // (clavier ouvert = < 70%, barre d'adresse cachée = > 85%)
             const isViewportInRange = heightPercentage >= 0.70 && heightPercentage < 0.85
 
-            // Fermeture immédiate si le viewport sort de la plage (même pendant le scroll)
             if (!isViewportInRange) {
                 hideToast()
                 return
             }
 
-            // Ouverture du toast uniquement si le scroll est stable
             if (!isScrollStable) return
 
-            // Debounce uniquement pour l'ouverture du toast (évite les ouvertures/fermetures trop rapides)
             if (viewportCheckTimeout !== null) {
                 clearTimeout(viewportCheckTimeout)
             }
 
             viewportCheckTimeout = window.setTimeout(() => {
-                // Vérifier à nouveau que le viewport est toujours dans la plage
                 const currentHeightCheck = window.visualViewport?.height || 0
                 const screenHeightCheck = window.screen.height
                 const heightPercentageCheck = currentHeightCheck / screenHeightCheck
@@ -380,29 +222,19 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             }, 300)
         }
 
-        const handleScroll = () => {
-            checkScrollStability()
-        }
+        const handleScroll = () => checkScrollStability()
+        const handleViewportChange = () => checkViewport()
 
-        const handleViewportChange = () => {
-            // Toujours vérifier le viewport (pour fermeture immédiate du toast)
-            checkViewport()
-        }
-
-        // Setup des event listeners
         const vp = window.visualViewport
         if (vp) {
-            // TypeScript strict mode: vp est vérifié non-null dans le if
             vp!.addEventListener('resize', handleViewportChange)
         }
         window.addEventListener('scroll', handleScroll, { passive: true })
 
-        // Appel initial avec délai pour laisser le scroll se stabiliser
         const initialTimeout = window.setTimeout(() => {
             checkViewport()
         }, 1000)
 
-        // Cleanup
         return () => {
             if (window.visualViewport) {
                 window.visualViewport.removeEventListener('resize', handleViewportChange)
@@ -412,17 +244,26 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             if (viewportCheckTimeout !== null) clearTimeout(viewportCheckTimeout)
             clearTimeout(initialTimeout)
         }
-    }, [platformInfo?.isMobile, showToast, hideToast])
+        */
+    }, [platformInfo?.isMobile])
 
 
 
     // Fonction pour changer de page
     const handleNavClick = (page: string) => {
-        console.log('🔄 [App] Navigation: changing page from', currentPage, 'to', page)
+        console.info('🔄 [App] Navigation change', { from: currentPage, to: page })
         setCurrentPage(page)
+        
+        // Mettre à jour l'URL sans recharger la page
+        if (page === 'dashboard') {
+            window.history.pushState({}, '', '/dashboard')
+        } else if (page === 'map') {
+            window.history.pushState({}, '', '/')
+        }
+        
         // Réinitialiser l'événement sélectionné lors d'un changement de page manuel
-        if (page !== 'map') {
-            setSelectedEventFromProfile(null)
+        if (page !== 'map' && (window as any).setSelectedEventFromProfile) {
+            // La sélection est gérée par DiscoverPage via window.setSelectedEventFromProfile
         }
     }
 
@@ -458,12 +299,12 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             <Header />
             <main className="app-body">
                 {/* Rendre seulement la page active pour éviter les re-renders inutiles */}
+                {currentPage === 'dashboard' && <DashboardPage />}
                 {currentPage === 'map' && (
                     <DiscoverPage
                         isModalOpen={isModalOpen}
                         onMapReady={onMapReady}
-                        autoCenterEvent={selectedEventFromProfile || undefined}
-                        onEventCentered={() => setSelectedEventFromProfile(null)}
+                        onEventCentered={handleEventCentered}
                     />
                 )}
                 {currentPage === 'list' && <CalendarPage />}
@@ -475,6 +316,7 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
                 onNavClick={handleNavClick}
                 currentPage={currentPage}
                 isCreateEventOpen={isCreateEventModalOpen}
+                shouldSlideIn={shouldSlideInNavBar}
             />
 
             {/* Modal de création d'événement */}
@@ -482,9 +324,6 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
                 isOpen={isCreateEventModalOpen}
                 onClose={handleCloseCreateEventModal}
             />
-
-            {/* Toast global */}
-            <Toast toast={currentToast} onClose={hideToast} />
         </div>
     )
 }

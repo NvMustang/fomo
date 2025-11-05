@@ -13,6 +13,14 @@ import './styles/index.css'
 import ConsoleLogger from './utils/consoleLogger'
 ConsoleLogger.init()
 
+// Initialiser l'intercepteur HTTP pour analytics
+import { initHttpInterceptor } from './utils/httpInterceptor'
+initHttpInterceptor()
+
+// Initialiser la sauvegarde automatique des analytics (indépendant du dashboard)
+import { autoSaveAnalytics } from './utils/autoSaveAnalytics'
+autoSaveAnalytics.init()
+
 // ===== RENDU DE L'APPLICATION =====
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 

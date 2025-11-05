@@ -302,50 +302,94 @@ export function userResponsesMapper(
 }
 
 /**
+ * Type pour les groupes de réponses (événements ou utilisateurs)
+ */
+export type Groups<T> = {
+    going: T[]
+    participe: T[]
+    interested: T[]
+    maybe: T[]
+    not_interested: T[]
+    not_there: T[]
+    seen: T[]
+    cleared: T[]
+    invited: T[]
+    null: T[]
+}
+
+/**
+ * Crée un objet Groups vide avec tous les tableaux initialisés à []
+ */
+export function createEmptyGroups<T>(): Groups<T> {
+    return {
+        going: [],
+        participe: [],
+        interested: [],
+        maybe: [],
+        not_interested: [],
+        not_there: [],
+        seen: [],
+        cleared: [],
+        invited: [],
+        null: []
+    }
+}
+
+/**
+ * Options pour la fonction de groupement d'événements par réponse
+ */
+export interface GroupEventsByUserResponseOptions {
+    /**
+     * Fonction pour extraire la valeur de réponse à utiliser pour le groupement
+     * @default (e, map) => map[e.id] || null
+     */
+    getResponseValue?: (event: Event, userResponsesMap: Record<string, string>) => UserResponseValue | string | null | undefined
+
+    /**
+     * Mapping personnalisé des valeurs de réponse vers les clés de groupe
+     * Si non fourni, utilise un mapping par défaut (1:1)
+     * @default undefined (mapping direct)
+     */
+    responseKeyMap?: (value: UserResponseValue | string | null | undefined) => keyof Groups<Event>
+}
+
+/**
  * Groupe les événements par réponse utilisateur en se basant sur le dictionnaire userResponses.
  * Retourne des tableaux d'événements par catégorie, incluant un groupe 'null' (aucune réponse).
+ * 
+ * @param events - Liste des événements à grouper
+ * @param userResponsesMap - Dictionnaire associant eventId à la réponse utilisateur
+ * @param options - Options de configuration pour le groupement
+ * @returns Objet avec groupes par type de réponse
  */
 export function groupEventsByUserResponse(
     events: Event[],
-    userResponsesMap: Record<string, string>
-): {
-    going: Event[]
-    interested: Event[]
-    not_interested: Event[]
-    seen: Event[]
-    cleared: Event[]
-    invited: Event[]
-    null: Event[]
-} {
-    const groups = {
-        going: [] as Event[],
-        interested: [] as Event[],
-        not_interested: [] as Event[],
-        seen: [] as Event[],
-        cleared: [] as Event[],
-        invited: [] as Event[],
-        null: [] as Event[],
-    }
+    userResponsesMap: Record<string, string>,
+    options?: GroupEventsByUserResponseOptions
+): Groups<Event> {
+    const getResponseValue = options?.getResponseValue ?? ((e: Event, map: Record<string, string>) => {
+        const value = map[e.id]
+        return value === '' || value === undefined ? null : value
+    })
+
+    const responseKeyMap = options?.responseKeyMap ?? ((value: UserResponseValue | string | null | undefined) => {
+        // Mapping par défaut : valeur directe vers clé de groupe
+        if (value === null || value === undefined || value === '') return 'null' as const
+        return value as keyof Groups<Event>
+    })
+
+    const groups = createEmptyGroups<Event>()
 
     events.forEach(e => {
-        const r = userResponsesMap[e.id]
-        switch (r) {
-            case 'going':
-                groups.going.push(e); break
-            case 'interested':
-                groups.interested.push(e); break
-            case 'not_interested':
-                groups.not_interested.push(e); break
-            case 'seen':
-                groups.seen.push(e); break
-            case 'cleared':
-                groups.cleared.push(e); break
-            case 'invited':
-                groups.invited.push(e); break
-            case '':
-            case undefined:
-            default:
-                groups.null.push(e); break
+        const responseValue = getResponseValue(e, userResponsesMap)
+        const groupKey = responseKeyMap(responseValue)
+
+        // Vérifier que la clé existe dans le grouped
+        if (groupKey in groups) {
+            (groups[groupKey] as Event[]).push(e)
+        } else {
+            // Fallback vers null si la clé n'existe pas
+            groups.null.push(e)
         }
     })
 
@@ -368,11 +412,11 @@ export function mapResponseValuesToSelectOptions(
         if (response === null) {
             // Nouveaux (null)
             optionsMap.set('null', { value: 'null', label: 'Nouveaux', sortOrder: 1 })
-        } else if (response === 'going') {
-            // J'y vais
+        } else if (response === 'going' || response === 'participe') {
+            // J'y vais (participe est traité comme going pour l'affichage)
             optionsMap.set('going', { value: 'going', label: 'J\'y vais', sortOrder: 2 })
-        } else if (response === 'interested') {
-            // Intéressé
+        } else if (response === 'interested' || response === 'maybe') {
+            // Intéressé / Peut-être (mappé vers "interested" pour les filtres)
             optionsMap.set('interested', { value: 'interested', label: 'Intéressé', sortOrder: 3 })
         } else if (response === 'cleared' || response === 'seen') {
             // Non répondu (regroupé pour cleared et seen)
@@ -404,10 +448,15 @@ export function findResponseOption(
     // Convertir la valeur sélectionnée en option
     if (response === null) {
         return options.find(opt => opt.value === 'null') || null
-    } else if (response === 'going') {
+    } else if (response === 'going' || response === 'participe') {
+        // participe est traité comme going pour l'affichage
         return options.find(opt => opt.value === 'going') || null
-    } else if (response === 'interested') {
+    } else if (response === 'interested' || response === 'maybe') {
+        // "maybe" est mappé vers "interested" pour les filtres
         return options.find(opt => opt.value === 'interested') || null
+    } else if (response === 'not_interested' || response === 'not_there') {
+        // "not_there" est mappé vers "not_interested" pour les filtres
+        return options.find(opt => opt.value === 'not_interested') || null
     } else if (response === 'cleared' || response === 'seen') {
         // Pour "Non répondu", on peut choisir 'cleared' comme valeur par défaut
         return options.find(opt => opt.value === 'non_repondu') || null
@@ -533,7 +582,7 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
  */
 export function getPeriod(event: Event): { key: string; label: string; startDate: Date; endDate: Date } {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-   
+
 
     // Dates converties dans le fuseau local
     const startTz = toZonedTime(event.startsAt, userTimezone)
@@ -621,57 +670,54 @@ export function intersectEventIds(...sets: Array<Set<string> | undefined>): stri
 // ===== UTILITAIRES POUR LES INVITATIONS =====
 
 /**
+ * Options pour la fonction de groupement générique
+ */
+export interface GroupUsersByResponsesOptions {
+    /**
+     * Fonction pour extraire la valeur de réponse à utiliser pour le groupement
+     * @default (r) => r.finalResponse
+     */
+    getResponseValue?: (response: UserResponse) => UserResponseValue
+
+    /**
+     * Mapping personnalisé des valeurs de réponse vers les clés de groupe
+     * Si non fourni, utilise un mapping par défaut (1:1)
+     * @default undefined (mapping direct)
+     */
+    responseKeyMap?: (value: UserResponseValue) => keyof (Groups<UserResponse> & { invited: UserResponse[] })
+}
+
+/**
  * Groupe une liste de UserResponse par type de réponse.
  * Fonction générique réutilisable pour grouper des réponses utilisateur.
  * 
  * @param responses - Liste des réponses utilisateur à grouper (UserResponse[])
+ * @param options - Options de configuration pour le groupement
  * @returns Objet avec groupes par type de réponse
  */
 export function groupUsersByResponses(
-    responses: UserResponse[]
-): {
-    invited: UserResponse[]
-    going: UserResponse[]
-    interested: UserResponse[]
-    not_interested: UserResponse[]
-    seen: UserResponse[]
-    cleared: UserResponse[]
-    null: UserResponse[]
-} {
-    const grouped = {
-        invited: [] as UserResponse[],
-        going: [] as UserResponse[],
-        interested: [] as UserResponse[],
-        not_interested: [] as UserResponse[],
-        seen: [] as UserResponse[],
-        cleared: [] as UserResponse[],
-        null: [] as UserResponse[]
-    }
+    responses: UserResponse[],
+    options?: GroupUsersByResponsesOptions
+): Groups<UserResponse> & { invited: UserResponse[] } {
+    const getResponseValue = options?.getResponseValue ?? ((r: UserResponse) => r.finalResponse)
+    const responseKeyMap = options?.responseKeyMap ?? ((value: UserResponseValue) => {
+        // Mapping par défaut : valeur directe vers clé de groupe
+        if (value === null) return 'null' as const
+        return value as keyof (Groups<UserResponse> & { invited: UserResponse[] })
+    })
+
+    const grouped = { ...createEmptyGroups<UserResponse>() } as Groups<UserResponse> & { invited: UserResponse[] }
 
     responses.forEach(response => {
-        switch (response.finalResponse) {
-            case 'invited':
-                grouped.invited.push(response)
-                break
-            case 'going':
-                grouped.going.push(response)
-                break
-            case 'interested':
-                grouped.interested.push(response)
-                break
-            case 'not_interested':
-                grouped.not_interested.push(response)
-                break
-            case 'seen':
-                grouped.seen.push(response)
-                break
-            case 'cleared':
-                grouped.cleared.push(response)
-                break
-            case null:
-            default:
-                grouped.null.push(response)
-                break
+        const responseValue = getResponseValue(response)
+        const groupKey = responseKeyMap(responseValue)
+
+        // Vérifier que la clé existe dans le grouped
+        if (groupKey in grouped) {
+            (grouped[groupKey] as UserResponse[]).push(response)
+        } else {
+            // Fallback vers null si la clé n'existe pas
+            grouped.null.push(response)
         }
     })
 
