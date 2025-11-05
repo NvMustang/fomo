@@ -327,9 +327,18 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 event={selectedEvent}
                 variantIndex={vmFakePins?.fakeEventVariantIndex ?? 0}
                 onJoinClick={() => {
-                  setShowWelcomeScreen(true)
-                  // Tracking
-                  console.info('🎯 [Analytics] auth_modal_opened')
+                  // En mode visitor, fermer la FakeEventCard et déclencher le flux visitor
+                  if (vmEnabled && vmOnResponseClick) {
+                    // Fermer la FakeEventCard
+                    setSelectedEvent(null)
+                    // Déclencher le flux visitor avec "participe" pour ouvrir le modal VisitorNameModal
+                    vmOnResponseClick('participe')
+                  } else {
+                    // Mode normal : ouvrir WelcomeScreen
+                    setShowWelcomeScreen(true)
+                    // Tracking
+                    console.info('🎯 [Analytics] auth_modal_opened')
+                  }
                 }}
               />
             </div>
