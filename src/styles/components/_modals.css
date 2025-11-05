@@ -10,8 +10,8 @@
 .modal_overlay {
     position: fixed;
     inset: 0;
-    z-index: 1005;
-    /* Au-dessus de event-card-container (1004) */
+    z-index: 1010;
+    /* Au-dessus de event-card-container (1004) et FakeEventCard */
     background: rgba(0, 0, 0, 0.5);
     /* Animation d'entrée */
     animation: overlayFadeIn 0.3s ease-out;
@@ -24,8 +24,8 @@
     bottom: calc(var(--navbar-height) + var(--button-radius) + var(--sm));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1006;
-    /* Au-dessus de l'overlay (1005) */
+    z-index: 1011;
+    /* Au-dessus de l'overlay (1010) */
     overflow: visible;
     /* Permet au modal de gérer son propre scroll */
 }
@@ -33,7 +33,7 @@
 /* Modal sans backdrop - affiché par-dessus la carte */
 .modal-no-backdrop {
     /* Pas de backdrop, juste le modal flottant */
-    z-index: 1007;
+    z-index: 1012;
     /* Au-dessus de tout pour être visible par-dessus la carte */
 }
 
