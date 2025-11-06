@@ -473,10 +473,10 @@ export function useStarsAnimation(options?: {
                     // Configuration fixe pour le modal visitor (bas de l'écran, centré)
                     cfg = {
                         particleCount: 50,
-                        spread: 40,
+                        spread: 30,
                         startVelocity: 21,
                         gravity: 0.9,
-                        scalar: 3,
+                        scalar: 4,
                         decay: 0.9760116708098051,
                         drift: 0,
                         angle: 90,
@@ -734,10 +734,10 @@ const VisitorModeContent: React.FC<{
             fakePinsLogic.setSelectedFakeEvent(null)
 
             // Réactiver interactions map et fade-out fake pins
-            const map = window.getMap?.()
+            const map = window.getMap?.() as { dragPan?: { enable: () => void }; scrollZoom?: { enable: () => void } } | undefined
             if (map) {
-                map.dragPan.enable()
-                map.scrollZoom.enable()
+                map.dragPan?.enable()
+                map.scrollZoom?.enable()
             }
 
             // Séquence de transition à la connexion avec délais de 200ms

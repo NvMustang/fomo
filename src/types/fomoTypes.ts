@@ -70,6 +70,7 @@ export interface Event {
     isPast?: boolean
     friendsGoingNames?: string[]
     friendsInterestedNames?: string[]
+    isFake?: boolean // Indique si l'événement est un événement factice (pour les fake pins)
     // Propriétés de compatibilité pour les composants existants
     date?: string
     time?: string

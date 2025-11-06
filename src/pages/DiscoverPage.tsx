@@ -67,7 +67,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   // Utiliser fakePinsLogic si fourni, sinon créer des états locaux (pour compatibilité)
   const showTeaserPins = vmFakePins?.showTeaserPins ?? false
   const showWelcomeScreen = vmFakePins?.showWelcomeScreen ?? false
-  const setShowWelcomeScreen = vmFakePins?.setShowWelcomeScreen ?? (() => { })
   const fakeEvents = vmFakePins?.fakeEvents ?? []
 
   // Synchroniser selectedFakeEvent de fakePinsLogic avec selectedEvent unifié
@@ -483,20 +482,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
             <div className="event-card-container fade-in-500ms">
               <FakeEventCard
                 event={selectedEvent}
-                onJoinClick={() => {
-                  // En mode visitor, fermer la FakeEventCard et déclencher le flux visitor
-                  if (vmEnabled && vmOnResponseClick) {
-                    // Fermer la FakeEventCard
-                    setSelectedEvent(null)
-                    // Déclencher le flux visitor avec "participe" pour ouvrir le modal VisitorNameModal
-                    vmOnResponseClick('participe')
-                  } else {
-                    // Mode normal : ouvrir WelcomeScreen
-                    setShowWelcomeScreen(true)
-                    // Tracking
-                    console.info('🎯 [Analytics] auth_modal_opened')
-                  }
-                }}
               />
             </div>
           )

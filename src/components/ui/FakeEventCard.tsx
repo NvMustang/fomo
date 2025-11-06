@@ -12,13 +12,11 @@ import { setStylingPin } from '@/map/stylingPinsController'
 
 interface FakeEventCardProps {
     event: Event
-    onJoinClick?: () => void
 }
 
 
 export const FakeEventCard: React.FC<FakeEventCardProps> = React.memo(({
-    event,
-    onJoinClick
+    event
 }) => {
     const { isPublicMode } = usePrivacy()
     
@@ -65,8 +63,13 @@ export const FakeEventCard: React.FC<FakeEventCardProps> = React.memo(({
 
     // Handler pour le changement de réponse (purement visuel)
     const handleResponseChange = (next: UserResponseValue) => {
+        // Filtrer les valeurs 'seen' et 'invited' qui ne sont pas des réponses valides pour les boutons
+        const validResponseTypes: Array<'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared'> = 
+            ['going', 'participe', 'interested', 'maybe', 'not_interested', 'not_there', 'cleared']
+        
         const nextFinal: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' =
-            next === null ? 'cleared' : next
+            next === null ? 'cleared' : 
+            (validResponseTypes.includes(next as any) ? next as 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' : 'cleared')
         
         setSelectedResponse(next)
         
