@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { UserCard } from '@/components'
-import { useToast } from '@/hooks'
+import { useToast, useModalScrollHint } from '@/hooks'
 import type { User } from '@/types/fomoTypes'
 
 interface AddFriendModalProps {
@@ -48,6 +48,9 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
     const [isSearching, setIsSearching] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
+
+    // Animation de scroll à l'ouverture du modal
+    const modalContentRef = useModalScrollHint(isOpen)
 
     // Debounce de la recherche (comme FilterBar)
     useEffect(() => {
@@ -162,7 +165,7 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                 <div className="modal" onClick={(e) => e.stopPropagation()}>
 
 
-                    <div className="modal-content modal-form">
+                    <div ref={modalContentRef} className="modal-content modal-form">
                         <div className="form-section">
                             <label htmlFor="friend-search" className="form-label">
                                 Rechercher par nom ou email

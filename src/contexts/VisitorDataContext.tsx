@@ -10,6 +10,7 @@ import type { Event, UserResponse, UserResponseValue } from '@/types/fomoTypes'
 import type { FomoDataContextType } from './UserDataContext'
 import { addEventResponseShared, getLatestResponse, getCurrentResponse as getCurrentResponseShared, getLatestResponsesByEvent as getLatestResponsesByEventShared, getLatestResponsesByUser as getLatestResponsesByUserShared } from '@/utils/eventResponseUtils'
 import { useAuth } from './AuthContext'
+import { getCity } from '@/utils/getSessionId'
 
 // ===== TYPES =====
 
@@ -182,11 +183,15 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
 
                     // Aucun utilisateur trouvé -> créer nouveau visitor (avec isVisitor: true)
                     console.log(`📝 [VisitorDataContext] Création nouveau visitor: ${visitorUserIdRef.current}`)
+                    
+                    // Récupérer la ville depuis toutes les sources possibles
+                    const visitorCity = getCity() || ''
+                    
                     const userData = {
                         id: visitorUserIdRef.current,
                         name: visitorNameRef.current,
                         email: visitorEmailRef.current,
-                        city: '',
+                        city: visitorCity,
                         friendsCount: 0,
                         showAttendanceToFriends: false,
                         privacy: { showAttendanceToFriends: false },

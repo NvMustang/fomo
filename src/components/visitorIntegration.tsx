@@ -18,9 +18,12 @@ import { Header } from '@/components'
 import { getApiBaseUrl } from '@/config/env'
 import type { Event, UserResponseValue } from '@/types/fomoTypes'
 import { VisitorNameModal } from '@/components/modals/VisitorNameModal'
+import { SignUpModal } from '@/components/modals/SignUpModal'
 import { useFomoDataContext, FomoDataProvider } from '@/contexts/FomoDataProvider'
 import { getUser } from '@/utils/filterTools'
 import { Toast } from '@/components/ui/Toast'
+import { PREDEFINED_FAKE_EVENTS } from '@/utils/fakeEventsData'
+import { getPexelsImages } from '@/utils/pexelsService'
 
 /**
  * Hook pour gérer l'intégration du mode visitor
@@ -175,187 +178,79 @@ export const VisitorModeApp: React.FC<{
 /**
  * Hook pour gérer les fake pins en mode visitor
  */
-export function useFakePins(isPublicMode: boolean) {
+export function useFakePins() {
     const [showTeaserPins, setShowTeaserPins] = useState(false)
     const [selectedFakeEvent, setSelectedFakeEvent] = useState<Event | null>(null)
-    const [isPublicModeSequence, setIsPublicModeSequence] = useState(false)
-    const [hasStartedPublicSequence, setHasStartedPublicSequence] = useState(false)
     const [showWelcomeScreen, setShowWelcomeScreen] = useState(false)
-    // Initialiser avec un index aléatoire entre 0 et 49 pour commencer la rotation à un point aléatoire
-    const [fakeEventVariantIndex, setFakeEventVariantIndex] = useState(() => Math.floor(Math.random() * 50)) // Rotation 0-49 avec départ aléatoire
-    const prevIsPublicModeRef = useRef(isPublicMode)
+    const [fakeEventsWithImages, setFakeEventsWithImages] = useState<Event[]>([])
 
-    // Fonction pour générer des points autour d'une ville dans un rayon donné
-    const generatePointsAroundCity = useCallback((
-        centerLat: number,
-        centerLng: number,
-        minRadiusKm: number,
-        maxRadiusKm: number,
-        count: number
-    ): Array<{ lat: number; lng: number }> => {
-        const points: Array<{ lat: number; lng: number }> = []
-        const degreesPerKm = 1 / 111 // 1 degré de latitude ≈ 111 km
-
-        for (let i = 0; i < count; i++) {
-            const angle = Math.random() * 2 * Math.PI
-            // Distance aléatoire entre minRadiusKm et maxRadiusKm
-            const distanceKm = minRadiusKm + Math.random() * (maxRadiusKm - minRadiusKm)
-
-            const latOffset = distanceKm * degreesPerKm * Math.cos(angle)
-            const lngOffset = distanceKm * degreesPerKm * Math.sin(angle) / Math.cos(centerLat * Math.PI / 180)
-
-            points.push({
-                lat: centerLat + latOffset,
-                lng: centerLng + lngOffset
-            })
+    // Charger les images depuis Pexels pour les fake events
+    useEffect(() => {
+        if (!showTeaserPins || fakeEventsWithImages.length > 0) {
+            return
         }
 
-        return points
-    }, [])
+        // Récupérer les titres des events prédéfinis
+        const titles = PREDEFINED_FAKE_EVENTS.map(event => event.title)
 
-    // Fonction pour générer des points autour des grandes villes belges
-    const generateRandomPointsInBelgium = useCallback((): Array<{ lat: number; lng: number }> => {
-        const points: Array<{ lat: number; lng: number }> = []
+        // Charger les images depuis Pexels
+        getPexelsImages(titles)
+            .then((imageMap) => {
+                // Créer les events avec les images
+                const eventsWithImages: Event[] = PREDEFINED_FAKE_EVENTS.map((event) => {
+                    const imageUrl = imageMap.get(event.title) || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=400&h=300&fit=crop&crop=center'
+                    return {
+                        ...event,
+                        coverUrl: imageUrl
+                    } as Event
+                })
 
-        // Coordonnées des grandes villes belges
-        const cities = [
-            { name: 'Bruxelles', lat: 50.8503, lng: 4.3517 },
-            { name: 'Liège', lat: 50.6326, lng: 5.5797 },
-            { name: 'Namur', lat: 50.4669, lng: 4.8675 },
-            { name: 'Mons', lat: 50.4542, lng: 3.9522 },
-            { name: 'Bastogne', lat: 50.0030, lng: 5.7190 },
-            { name: 'Gand', lat: 51.0543, lng: 3.7174 }
-        ]
+                setFakeEventsWithImages(eventsWithImages)
+            })
+            .catch((error) => {
+                console.error('[FakePins] Erreur lors du chargement des images Pexels:', error)
+                // Fallback : utiliser une image par défaut
+                const eventsWithFallback: Event[] = PREDEFINED_FAKE_EVENTS.map((event) => ({
+                    ...event,
+                    coverUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=400&h=300&fit=crop&crop=center'
+                } as Event))
+                setFakeEventsWithImages(eventsWithFallback)
+            })
+    }, [showTeaserPins, fakeEventsWithImages.length])
 
-        // Pour chaque ville : 5 pins proches (0-15km) + 10 pins moyens (15-60km)
-        // Total : 6 villes × 15 pins = 90 pins
-        cities.forEach((city) => {
-            // 5 pins à proximité proche (0-15km)
-            const closePins = generatePointsAroundCity(city.lat, city.lng, 0, 15, 5)
-            points.push(...closePins)
+    // Réinitialiser les events quand on désactive les fake pins
+    useEffect(() => {
+        if (!showTeaserPins) {
+            setFakeEventsWithImages([])
+        }
+    }, [showTeaserPins])
 
-            // 10 pins à distance moyenne (15-60km)
-            const mediumPins = generatePointsAroundCity(city.lat, city.lng, 15, 60, 10)
-            points.push(...mediumPins)
-        })
-
-        return points
-    }, [generatePointsAroundCity])
-
-    // Générer les fake events
+    // Générer les fake events (utiliser la liste prédéfinie avec images)
     const fakeEvents = useMemo(() => {
         if (!showTeaserPins) {
             return []
         }
 
-        // Générer 90 fake pins répartis autour des grandes villes belges
-        // 6 villes × (5 proches 0-15km + 10 moyens 15-60km) = 90 pins
-        const points = generateRandomPointsInBelgium()
+        return fakeEventsWithImages
+    }, [showTeaserPins, fakeEventsWithImages])
 
-        return points.map((point, index) => ({
-            id: `fake-${index}`,
-            venue: {
-                lat: point.lat,
-                lng: point.lng,
-                name: '',
-                address: ''
-            },
-            title: '',
-            isPublic: true,
-            isOnline: true,
-            isFake: true, // Marqueur pour MapRenderer
-            startsAt: '',
-            endsAt: '',
-            tags: [],
-            coverUrl: '',
-            description: '',
-            organizerId: '',
-            organizerName: '',
-            stats: { going: 0, interested: 0, friendsGoing: 0, goingCount: 0, interestedCount: 0, notInterestedCount: 0, totalResponses: 0, friendsGoingCount: 0, friendsInterestedCount: 0, friendsGoingList: '', friendsInterestedList: '' }
-        } as Event))
-    }, [showTeaserPins, generateRandomPointsInBelgium])
-
-    // Détecter le changement de privacy et lancer la séquence Public Mode
-    useEffect(() => {
-        if (prevIsPublicModeRef.current !== isPublicMode) {
-            prevIsPublicModeRef.current = isPublicMode
-
-            // En mode visiteur ET basculement vers Public Mode, lancer la séquence
-            if (isPublicMode && !hasStartedPublicSequence) {
-                console.info('[VM] Starting Public Mode sequence')
-                setHasStartedPublicSequence(true)
-                setIsPublicModeSequence(true)
-                setShowTeaserPins(true)
-                setSelectedFakeEvent(null)
-
-                const targetZoom = 8
-                const durationMs = 15000
-
-                // Lancer zoom-out après un court délai pour laisser le temps aux fake pins d'être injectés dans la source
-                setTimeout(() => {
-                    console.info('[VM] Attempting to call startPublicModeSequence', {
-                        available: !!(window as any).startPublicModeSequence,
-                        targetZoom,
-                        durationMs
-                    })
-                    if ((window as any).startPublicModeSequence) {
-                        try {
-                            console.info('[VM] Calling startPublicModeSequence', { targetZoom, durationMs })
-                                ; (window as any).startPublicModeSequence(targetZoom, durationMs)
-                            console.info('[VM] startPublicModeSequence called successfully')
-                        } catch (err) {
-                            console.error('[VM] Error during startPublicModeSequence', err)
-                        }
-                    } else {
-                        console.warn('[VM] startPublicModeSequence not available')
-                    }
-                }, 200)
-
-                // Fin de séquence: marquer la séquence comme terminée (interactions laissées actives)
-                const endTimer = window.setTimeout(() => {
-                    setIsPublicModeSequence(false)
-                }, durationMs + 200)
-
-                // Cleanup en cas de changement d'état prématuré
-                return () => {
-                    clearTimeout(endTimer)
-                    setIsPublicModeSequence(false)
-                }
-            }
-        }
-    }, [isPublicMode, hasStartedPublicSequence])
-
-    // Handler pour sélectionner un fake event avec rotation
+    // Handler pour sélectionner un fake event
     const handleSelectFakeEvent = useCallback((event: Event | null) => {
-        if (event) {
-            // Incrémenter l'index pour rotation (0-49) seulement si on ouvre un nouveau fake event
-            // Si c'est le même event, ne pas incrémenter
-            // La rotation continue en boucle : après 49, on revient à 0
-            if (!selectedFakeEvent || selectedFakeEvent.id !== event.id) {
-                setFakeEventVariantIndex((prev) => (prev + 1) % 50)
-            }
-        } else {
-            // Ne pas réinitialiser l'index quand on ferme - continuer la séquence
-            // L'index reste où il en est pour la prochaine ouverture
-        }
         setSelectedFakeEvent(event)
-    }, [selectedFakeEvent])
+    }, [])
 
     return {
         showTeaserPins,
         setShowTeaserPins,
         selectedFakeEvent,
         setSelectedFakeEvent: handleSelectFakeEvent,
-        isPublicModeSequence,
-        setIsPublicModeSequence,
         showWelcomeScreen,
         setShowWelcomeScreen,
-        fakeEvents,
-        fakeEventVariantIndex
+        fakeEvents
     }
 }
 
-export type FakePinsLogic = ReturnType<typeof useFakePins> & { fakeEventVariantIndex?: number }
+export type FakePinsLogic = ReturnType<typeof useFakePins>
 
 /**
  * Hook pour gérer le flux d'intégration visitor
@@ -391,37 +286,30 @@ export function useVisitorIntegrationFlow(
             return
         }
 
-        // Vérifier si le formulaire a déjà été rempli (nom saisi en sessionStorage)
-        let hasAlreadySubmitted = false
+        // Fermer le toast impatience si présent
+        if (window.__hideVisitorToast) {
+            window.__hideVisitorToast()
+        }
+
+        // Sauvegarder la réponse et jouer l'animation des étoiles AVANT d'ouvrir le modal
+        const normalizedResponseType = responseType as 'participe' | 'maybe' | 'not_there'
+        setSelectedResponseType(normalizedResponseType)
+
+        // Sauvegarder la réponse pour qu'EventCard l'utilise
         try {
-            hasAlreadySubmitted = sessionStorage.getItem('fomo-visit-name') !== null
+            sessionStorage.setItem('fomo-visit-pending-response', normalizedResponseType)
         } catch {
             // Ignorer si sessionStorage indisponible
         }
 
-        if (hasAlreadySubmitted) {
-            // Si le formulaire a déjà été rempli, sauvegarder la réponse pour qu'EventCard l'utilise
-            // EventCard enverra la réponse dans son handleClose
-            try {
-                sessionStorage.setItem('fomo-visit-pending-response', responseType as 'participe' | 'maybe' | 'not_there')
-            } catch {
-                // Ignorer si sessionStorage indisponible
-            }
-            // Ne pas ouvrir le modal, la réponse sera envoyée par EventCard.handleClose
-            return
-        }
-
-        // Sinon, sauvegarder la réponse et jouer l'animation des étoiles AVANT d'ouvrir le modal
-        const normalizedResponseType = responseType as 'participe' | 'maybe' | 'not_there'
-        setSelectedResponseType(normalizedResponseType)
-
         // Jouer l'animation des étoiles avec le bon responseType
         triggerStars(normalizedResponseType)
 
-        // Ouvrir le modal après un court délai pour laisser l'animation se jouer
+        // Ouvrir le modal 1 seconde après la fin de l'animation des étoiles (3000ms + 1000ms)
+        // À chaque changement de réponse, afficher le modal
         setTimeout(() => {
             setShowVisitorModal(true)
-        }, 500) // Délai pour laisser l'animation démarrer
+        }, 4000) // 1 seconde après la fin de l'animation (3s animation + 1s délai)
     }, [selectedEvent, triggerStars])
 
     // Handler pour la confirmation du modal visitor
@@ -569,7 +457,7 @@ export function useStarsAnimation(options?: {
             }
 
             // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const load = (window as any).__confettiLoader || ((window as any).__confettiLoader = import('canvas-confetti'))
+            const load = window.__confettiLoader || (window.__confettiLoader = import('canvas-confetti'))
             load.then((mod: any) => {
                 console.info('[StarsAnimation] canvas-confetti loaded')
                 const confetti = mod.default || mod
@@ -739,78 +627,114 @@ export function useStarsAnimation(options?: {
 }
 
 /**
- * Contenu du mode visitor
+ * Contenu du mode visitor - Nouvelle séquence refondue
  */
 const VisitorModeContent: React.FC<{
     visitorEvent: Event | null
     visitorEventError: string | null
 }> = ({ visitorEvent, visitorEventError }) => {
     const { isPublicMode, setToggleDisabled } = usePrivacy()
-    const { showToast } = useToast()
+    const { showToast, hideToast } = useToast()
     const { isAuthenticated } = useAuth()
     const { users } = useFomoDataContext()
 
     // Gérer les fake pins
-    const fakePinsLogic = useFakePins(isPublicMode)
+    const fakePinsLogic = useFakePins()
 
-    // Référence locale pour conditionner le modal visitor (plus de contrôle direct sur DiscoverPage)
+    // Référence locale pour conditionner le modal visitor
     const selectedEventRef = useRef<Event | null>(null)
 
-    // Refs pour le toast initial (déclenché lors du montage de l'EventCard)
-    const hasShownIntroToastRef = useRef(false)
-    const hasStartedFadeInRef = useRef(false)
+    // États pour la nouvelle séquence
+    const [responseButtonsDisabled, setResponseButtonsDisabled] = useState(true)
+    const [showSignUpModal, setShowSignUpModal] = useState(false)
+    const [signUpModalButtonDelay, setSignUpModalButtonDelay] = useState(999999) // Délai très long pour cacher le bouton initialement
+    const [showWelcomeScreenFromSignUp, setShowWelcomeScreenFromSignUp] = useState(false)
+    const [hasCompletedForm, setHasCompletedForm] = useState(false)
+    const [hasShownFakeEventsToast, setHasShownFakeEventsToast] = useState(false) // État pour déclencher le useEffect
 
-    // Déclencher le toast initial après le flyTo + fade-in de l'EventCard
-    const handleEventCardMount = useCallback(() => {
-        if (!visitorEvent || hasStartedFadeInRef.current) return
+    // Refs pour suivre l'état de la séquence
+    const hasStartedFlyToRef = useRef(false)
+    const hasShownInvitationToastRef = useRef(false)
+    const hasOpenedVisitorEventCardRef = useRef(false)
+    const hasShownDetailsToastRef = useRef(false)
+    const hasActivatedButtonsRef = useRef(false)
+    const hasShownImpatienceToastRef = useRef(false)
+    const hasCompletedFormRef = useRef(false)
+    const hasShownThankYouToastRef = useRef(false)
+    const hasShownPssstToastRef = useRef(false)
+    const hasToggledPrivacyRef = useRef(false)
+    const hasShownExplorationToastRef = useRef(false)
+    const lastOpenedFakeEventCardIdRef = useRef<string | null>(null)
+    const hasShownFakeEventsToastRef = useRef(false)
 
-        const fadeInTimer = setTimeout(() => {
-            hasStartedFadeInRef.current = true
+    // Timer cumulatifs (en millisecondes depuis le début)
+    // Étape 1: 0s (initialisation)
+    // Étape 2: 1s (chargement) + 3s (flyTo) = 4s
+    // Étape 4: 4s + 3s = 7s (après ouverture EventCard)
+    // Étape 6: 7s + 5s = 12s (après activation boutons)
+    // Étape 9: variable (après fermeture formulaire) + 1s
+    // Étape 10: variable + 1s + 2s = variable + 3s
+    // Étape 12: variable (après toggle) + 10s (zoom-out)
+    // Étape 14: variable (après ouverture fake card) + 10s
 
-            setTimeout(() => {
-                if (hasShownIntroToastRef.current) return
+    // Étape 1: Initialisation - Toggle inactif, attendre 1s puis lancer flyTo 3s
+    useEffect(() => {
+        if (!visitorEvent || hasStartedFlyToRef.current) return
 
-                const organizer = getUser(users || [], visitorEvent.organizerId)
-                const organizerName = organizer?.name || visitorEvent.organizerName || 'L\'organisateur'
+        // Désactiver toggle au démarrage
+        setToggleDisabled(true)
 
-                showToast({
-                    title: `${organizerName} t'attend 🎉`,
-                    message: `Tu viens ? Pour connaître les détails, clique sur la carte de l'événement !`,
-                    type: 'info',
-                    duration: 5000,
-                    className: 'toast-visitor'
-                })
+        // Attendre 1s après chargement puis lancer flyTo 3s
+        const timer1 = setTimeout(() => {
+            hasStartedFlyToRef.current = true
+            // Lancer flyTo vers l'événement (3s)
+            if (window.centerMapOnEvent && visitorEvent.venue) {
+                window.centerMapOnEvent(visitorEvent, 3000)
+            }
+        }, 1000)
 
-                hasShownIntroToastRef.current = true
-            }, 2000)
-        }, 4000)
+        // Étape 2: Toast invitation en bas après flyTo (4s total = 1s + 3s)
+        const timer2 = setTimeout(() => {
+            if (hasShownInvitationToastRef.current) return
 
-        return () => clearTimeout(fadeInTimer)
-    }, [visitorEvent, users, showToast])
+            showToast({
+                title: `Tu es invité à ${visitorEvent.title || 'cet événement'}! 👋`,
+                message: 'Tap sur le pin bleu pour afficher l\'événement !',
+                type: 'info',
+                position: 'bottom',
+                className: 'toast-visitor'
+                // Pas de duration - attend le clic sur le pin
+            })
+
+            hasShownInvitationToastRef.current = true
+        }, 4000) // 1s + 3s
+
+        return () => {
+            clearTimeout(timer1)
+            clearTimeout(timer2)
+        }
+    }, [visitorEvent, users, showToast, setToggleDisabled])
 
     // Synchroniser selectedEventRef avec selectedEvent dans DiscoverPage
-    // (utilisé pour le flux du modal visitor)
     useEffect(() => {
-        // Exposer une fonction pour que DiscoverPage puisse mettre à jour selectedEventRef
         const updateSelectedEventRef = (event: Event | null) => {
             selectedEventRef.current = event
         }
-            ; (window as any).__updateVisitorSelectedEventRef = updateSelectedEventRef
+            ; (window.__updateVisitorSelectedEventRef = updateSelectedEventRef)
         return () => {
-            delete (window as any).__updateVisitorSelectedEventRef
+            delete window.__updateVisitorSelectedEventRef
         }
     }, [])
 
-    // Fermer WelcomeScreen et terminer séquence Public Mode si l'utilisateur se connecte
+    // Fermer WelcomeScreen si l'utilisateur se connecte
     useEffect(() => {
         if (isAuthenticated) {
             fakePinsLogic.setShowWelcomeScreen(false)
             fakePinsLogic.setShowTeaserPins(false)
             fakePinsLogic.setSelectedFakeEvent(null)
-            fakePinsLogic.setIsPublicModeSequence(false)
 
             // Réactiver interactions map et fade-out fake pins
-            const map = (window as any).getMap?.()
+            const map = window.getMap?.()
             if (map) {
                 map.dragPan.enable()
                 map.scrollZoom.enable()
@@ -818,8 +742,8 @@ const VisitorModeContent: React.FC<{
 
             // Séquence de transition à la connexion avec délais de 200ms
             // 1. Fade-out fake pins
-            if ((window as any).fadeOutFakePins) {
-                (window as any).fadeOutFakePins()
+            if (window.fadeOutFakePins) {
+                window.fadeOutFakePins()
             }
 
             // 2. Attendre 200ms puis fade-in vrais pins (géré par DiscoverPage)
@@ -851,95 +775,253 @@ const VisitorModeContent: React.FC<{
         }
     }, [isAuthenticated, fakePinsLogic, showToast])
 
-    // Désactiver le toggle au démarrage en mode visitor (sera activé après complétion du formulaire)
-    // Vérifier si le formulaire a déjà été complété (visitorName existe en sessionStorage)
+    // Handler pour détecter l'ouverture de l'EventCard
+    const handleEventCardOpened = useCallback((event: Event | null) => {
+        if (!event || hasOpenedVisitorEventCardRef.current || !visitorEvent) return
+
+        const eventId = event.id
+        const isVisitorEvent = eventId === visitorEvent.id
+
+        if (!isVisitorEvent) return
+
+        hasOpenedVisitorEventCardRef.current = true
+        // Le toast invitation a déjà été fermé lors du clic sur le pin
+
+        // Étape 4: Toast détails après 3s
+        setTimeout(() => {
+            if (hasShownDetailsToastRef.current) return
+
+            showToast({
+                title: 'Tu veux plus de détails ? 👀',
+                message: 'Tap sur l\'étiquette de l\'événement !',
+                type: 'info',
+                position: 'top',
+                className: 'toast-visitor'
+                // Pas de duration - attend le clic sur l'étiquette
+            })
+
+            hasShownDetailsToastRef.current = true
+        }, 3000) // 3s après ouverture EventCard
+    }, [visitorEvent, showToast])
+
+    // Handler pour fermer le toast invitation lors du clic sur le pin
+    const handlePinClick = useCallback(() => {
+        // Fermer le toast invitation immédiatement
+        if (hasShownInvitationToastRef.current) {
+            hideToast()
+        }
+    }, [hideToast])
+
+    // Exposer les fonctions pour que DiscoverPage puisse les utiliser
     useEffect(() => {
-        try {
-            const hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
-            setToggleDisabled(!hasCompletedForm)
-        } catch {
-            // Si sessionStorage indisponible, désactiver par défaut
-            setToggleDisabled(true)
-        }
+        ; (window.__onVisitorEventCardOpened = handleEventCardOpened)
+            ; (window.__hideVisitorToast = hideToast)
+            ; (window.__onVisitorPinClick = handlePinClick)
         return () => {
-            setToggleDisabled(false) // Réactiver en cas de démontage
+            delete window.__onVisitorEventCardOpened
+            delete window.__hideVisitorToast
+            delete window.__onVisitorPinClick
         }
-    }, [setToggleDisabled])
+    }, [handleEventCardOpened, handlePinClick, hideToast])
+
+
+    // Étape 5: Clic sur étiquette EventCard → activer boutons
+    // Exposer une fonction globale pour que EventCard puisse activer les boutons
+    useEffect(() => {
+        const activateButtons = () => {
+            if (hasActivatedButtonsRef.current) return
+            hasActivatedButtonsRef.current = true
+            setResponseButtonsDisabled(false)
+            hideToast() // Fermer toast détails
+
+            // Étape 6: Toast impatience après 5s
+            setTimeout(() => {
+                if (hasShownImpatienceToastRef.current) return
+
+                const organizer = getUser(users || [], visitorEvent?.organizerId || '')
+                const organizerName = organizer?.name || visitorEvent?.organizerName || 'L\'organisateur'
+
+                showToast({
+                    title: `${organizerName} attend ta réponse avec impatience ! ⏰`,
+                    message: 'Seras-tu présent ?',
+                    type: 'info',
+                    position: 'top',
+                    bounceAnimation: true,
+                    className: 'toast-visitor'
+                    // Pas de duration - attend le clic sur une réponse
+                })
+
+                hasShownImpatienceToastRef.current = true
+            }, 5000) // 5s après activation boutons
+        }
+
+            ; (window.__activateVisitorButtons = activateButtons)
+        return () => {
+            delete window.__activateVisitorButtons
+        }
+    }, [visitorEvent, users, showToast])
 
     // Handler appelé quand le formulaire visitor est complété
-    const handleVisitorFormCompleted = useCallback((_organizerName: string) => {
-        // Activer le toggle privacy
-        setToggleDisabled(false)
+    const handleVisitorFormCompleted = useCallback((organizerName: string) => {
+        // Ne traiter que la première complétion du formulaire
+        if (hasCompletedFormRef.current) {
+            return // Déjà complété, ne rien faire
+        }
 
-        // Ajouter le halo pulse au toggle privacy après un délai pour s'assurer que le DOM est mis à jour
+        hasCompletedFormRef.current = true
+        setHasCompletedForm(true)
+
+        // Étape 9: Toast remerciement après 1s
         setTimeout(() => {
-            const toggleElement = document.querySelector('.toggle-switch')
-            if (toggleElement) {
-                toggleElement.classList.add('privacy-toggle-halo')
+            if (hasShownThankYouToastRef.current) return
 
-                // Retirer la classe quand l'utilisateur clique sur le toggle
-                const handleToggleClick = () => {
-                    toggleElement.classList.remove('privacy-toggle-halo')
-                    toggleElement.removeEventListener('click', handleToggleClick)
-                }
+            showToast({
+                title: 'Merci pour ta réponse ! 🙏',
+                message: `${organizerName} est maintenant prévenu(e).`,
+                type: 'success',
+                position: 'top',
+                duration: 3000,
+                className: 'toast-visitor'
+            })
 
-                // Ajouter l'event listener pour retirer la classe au clic
-                toggleElement.addEventListener('click', handleToggleClick, { once: true })
-            }
-        }, 100) // Délai pour laisser le DOM se mettre à jour après setToggleDisabled
-    }, [setToggleDisabled])
+            hasShownThankYouToastRef.current = true
+
+            // Étape 10: Toast Pssst + Modal signup après 5s (6s total depuis fermeture formulaire)
+            setTimeout(() => {
+                if (hasShownPssstToastRef.current) return
+
+                showToast({
+                    title: 'Pssst! 👀',
+                    message: (
+                        <>
+                            Sait-on que sur FOMO, tu peux aussi découvrir les events publics autour de chez toi ?
+                            Bascule en mode public via un tap sur le bouton en haut à droite !
+                        </>
+                    ),
+                    type: 'info',
+                    position: 'top',
+                    className: 'toast-visitor'
+                    // Pas de duration - attend le tap sur le toggle
+                })
+
+                // Ouvrir modal signup en même temps (fade in simultané) mais bouton caché
+                setShowSignUpModal(true)
+
+                hasShownPssstToastRef.current = true
+            }, 5000) // 5s après toast remerciement (au lieu de 2s)
+        }, 1000) // 1s après fermeture formulaire
+
+        // Activer le toggle privacy (une seule fois, à la première complétion)
+        setToggleDisabled(false)
+    }, [setToggleDisabled, showToast])
 
     // Handler pour fermer EventCard (utilisé après fermeture du modal)
     const handleEventCardClose = useCallback(() => {
         // Fermer EventCard en réinitialisant selectedEventRef
         selectedEventRef.current = null
+        hasOpenedVisitorEventCardRef.current = false
         // Notifier DiscoverPage pour fermer l'EventCard via window
-        if ((window as any).__closeEventCard) {
-            (window as any).__closeEventCard()
+        if (window.__closeEventCard) {
+            window.__closeEventCard()
         }
+    }, [])
 
-        // Vérifier si le formulaire a été complété (visitorName existe)
-        let hasCompletedForm = false
-        try {
-            hasCompletedForm = sessionStorage.getItem('fomo-visit-name') !== null
-        } catch {
-            // Ignorer si sessionStorage indisponible
+    // Étape 11: Attendre tap sur toggle privacy puis lancer zoom-out 10s
+    useEffect(() => {
+        if (!isPublicMode || hasToggledPrivacyRef.current || !hasCompletedForm) return
+
+        hasToggledPrivacyRef.current = true
+        hideToast() // Fermer toast Pssst
+
+        // Lancer animation zoom-out 10s
+        const targetZoom = 8
+        const durationMs = 10000
+        fakePinsLogic.setShowTeaserPins(true)
+
+        setTimeout(() => {
+            if (window.startPublicModeSequence) {
+                window.startPublicModeSequence(targetZoom, durationMs)
+            }
+        }, 200)
+
+        // Étape 12: Toast exploration après fin animation zoom-out (10s)
+        setTimeout(() => {
+            if (hasShownExplorationToastRef.current) return
+
+            showToast({
+                title: 'Bienvenu en mode public! 📍',
+                message: 'Maintenant, tu peux explorer la carte tranquillement, et voir les détails des événements, mais ça, tu sais déjà 😉',
+                type: 'info',
+                position: 'top',
+                className: 'toast-visitor'
+                // Pas de duration - attend le clic sur un fake pin
+            })
+
+            hasShownExplorationToastRef.current = true
+        }, durationMs + 200) // 10s + 200ms
+
+        // Le bouton sera affiché 2s après le toast "Ces events te semblent FAKE ?" (géré dans le useEffect)
+    }, [isPublicMode, hasCompletedForm, fakePinsLogic, showToast])
+
+    // Handler pour détecter l'ouverture de FakeEventCard
+    const handleFakeEventCardOpened = useCallback((event: Event | null) => {
+        if (!event) return
+
+        const eventId = event.id
+        const isFakeEvent = eventId && eventId.startsWith('fake-')
+
+        if (!isFakeEvent) return
+
+        // Ne traiter qu'une seule fois par fake event
+        if (lastOpenedFakeEventCardIdRef.current === eventId) return
+        lastOpenedFakeEventCardIdRef.current = eventId
+
+        hideToast() // Fermer toast exploration
+
+        // Étape 14: Toast fake events
+        setTimeout(() => {
+            if (hasShownFakeEventsToastRef.current) return
+
+            showToast({
+                title: 'Ces events te semblent FAKE ? 🤔',
+                message: "C'est normal, ils le sont... C'était un test pour vérifier que tu maîtrises l'app. 💪 Maintenant que tu gères, il est temps de découvrir les VRAIS événements 🚀",
+                type: 'info',
+                position: 'top',
+                className: 'toast-visitor'
+                // Pas de duration - attend le clic sur le bouton signup
+            })
+
+            hasShownFakeEventsToastRef.current = true
+            setHasShownFakeEventsToast(true) // Déclencher le useEffect pour afficher le bouton
+        }, 30000) // 30s après ouverture FakeEventCard
+    }, [showToast])
+
+    // Surveiller l'affichage du toast "Ces events te semblent FAKE ?" et afficher le bouton 4s après
+    useEffect(() => {
+        if (!hasShownFakeEventsToast) return
+
+        // Afficher le bouton 4 secondes après l'affichage du toast (2s + 2s supplémentaires)
+        const timer = setTimeout(() => {
+            setSignUpModalButtonDelay(0) // Afficher le bouton
+        }, 4000) // 4s après le toast
+
+        return () => clearTimeout(timer)
+    }, [hasShownFakeEventsToast]) // Déclencher quand le toast est affiché
+
+    // Exposer la fonction pour que DiscoverPage puisse notifier l'ouverture de FakeEventCard
+    useEffect(() => {
+        ; (window.__onVisitorFakeEventCardOpened = handleFakeEventCardOpened)
+        return () => {
+            delete window.__onVisitorFakeEventCardOpened
         }
+    }, [handleFakeEventCardOpened])
 
-        // Si le formulaire a été complété, activer le toggle et ajouter l'animation
-        if (hasCompletedForm) {
-            // Activer le toggle privacy
-            setToggleDisabled(false)
-
-            // Ajouter le halo pulse au toggle privacy après un délai pour s'assurer que le DOM est mis à jour
-            setTimeout(() => {
-                const toggleElement = document.querySelector('.toggle-switch')
-                if (toggleElement) {
-                    toggleElement.classList.add('privacy-toggle-halo')
-
-                    // Retirer la classe quand l'utilisateur clique sur le toggle
-                    const handleToggleClick = () => {
-                        toggleElement.classList.remove('privacy-toggle-halo')
-                        toggleElement.removeEventListener('click', handleToggleClick)
-                    }
-
-                    // Ajouter l'event listener pour retirer la classe au clic
-                    toggleElement.addEventListener('click', handleToggleClick, { once: true })
-                }
-            }, 100)
-
-            // Afficher le toast "Pssst!" après 2 secondes
-            setTimeout(() => {
-                showToast({
-                    title: 'Pssst! 👀',
-                    message: 'Active le mode public sur le bouton là en haut à droite pour découvrir d\'autres événements près de chez toi !',
-                    type: 'info',
-                    duration: 5000,
-                    className: 'toast-visitor'
-                })
-            }, 2000)
-        }
-    }, [showToast, setToggleDisabled])
+    // Étape 15: Clic sur bouton signup → ouvrir WelcomeScreen avec AuthModal
+    const handleSignUp = useCallback(() => {
+        hideToast() // Fermer le toast "Ces events te semblent FAKE ?"
+        setShowSignUpModal(false)
+        setShowWelcomeScreenFromSignUp(true)
+    }, [hideToast])
 
     // Gérer le flux d'intégration visitor
     const integrationFlow = useVisitorIntegrationFlow(
@@ -966,6 +1048,11 @@ const VisitorModeContent: React.FC<{
     }
 
 
+    // Afficher WelcomeScreen si demandé
+    if (showWelcomeScreenFromSignUp) {
+        return <WelcomeScreen />
+    }
+
     return (
         <div className={`app vmIntegrationFork ${isPublicMode ? 'public' : 'private'}`} data-fork="vmIntegrationFork">
             <Header />
@@ -975,11 +1062,11 @@ const VisitorModeContent: React.FC<{
                     visitorMode={{
                         enabled: true,
                         event: visitorEvent,
-                        onEventCardMount: handleEventCardMount,
                         fakePinsLogic,
                         onResponseClick: integrationFlow.handleVisitorResponseClick,
                         onEventCardClose: handleEventCardClose,
                         starsAnimation: integrationFlow.StarsAnimation,
+                        responseButtonsDisabled,
                     }}
                     onEventCentered={integrationFlow.handleEventCentered}
                 />
@@ -992,6 +1079,12 @@ const VisitorModeContent: React.FC<{
                             onConfirm={integrationFlow.handleVisitorModalConfirm}
                             organizerName={integrationFlow.organizerName}
                             responseType={integrationFlow.selectedResponseType || 'participe'}
+                        />
+                        <SignUpModal
+                            isOpen={showSignUpModal}
+                            onClose={() => setShowSignUpModal(false)}
+                            onSignUp={handleSignUp}
+                            showButtonDelay={signUpModalButtonDelay}
                         />
                         {/* Animation étoiles pour visitor (affichée dans DiscoverPage) */}
                     </>

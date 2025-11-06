@@ -4,9 +4,10 @@
  * Header global de l'application avec logo et actions
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Logo, BetaModal } from '@/components'
 import { usePrivacy } from '@/contexts/PrivacyContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface HeaderProps {
     // Props can be added here if needed
@@ -14,7 +15,17 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = React.memo(() => {
     const { isPublicMode, togglePrivacy, isToggleDisabled } = usePrivacy()
+    const { isAuthenticated } = useAuth()
     const [isBetaModalOpen, setIsBetaModalOpen] = useState(false)
+    const [hasToggled, setHasToggled] = useState(false)
+    const [isVisitorMode, setIsVisitorMode] = useState(false)
+
+    // Détecter si on est en mode visitor (parcours d'intégration)
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search)
+        const eventId = urlParams.get('event')
+        setIsVisitorMode(eventId !== null && !isAuthenticated)
+    }, [isAuthenticated])
 
     return (
         <>
@@ -26,7 +37,7 @@ export const Header: React.FC<HeaderProps> = React.memo(() => {
                     />
 
                     {/* 2. Bouton Beta centré */}
-                    <div style={{ display: 'flex', justifyContent: 'center', flex: 1, pointerEvents: 'auto' }}>
+                    <div className="header-beta-container" style={{ display: 'flex', justifyContent: 'center', flex: 1 }}>
                         <button
                             className="button secondary"
                             onClick={() => setIsBetaModalOpen(true)}
@@ -41,8 +52,11 @@ export const Header: React.FC<HeaderProps> = React.memo(() => {
                     {/* 3. Toggle button moderne */}
                     <div className="header-actions">
                         <div
-                            className={`toggle-switch ${isToggleDisabled ? 'toggle-switch--disabled' : ''}`}
-                            onClick={isToggleDisabled ? undefined : togglePrivacy}
+                            className={`toggle-switch ${isToggleDisabled ? 'toggle-switch--disabled' : ''} ${!hasToggled && !isToggleDisabled && isVisitorMode ? 'privacy-toggle-halo' : ''}`}
+                            onClick={isToggleDisabled ? undefined : () => {
+                                setHasToggled(true)
+                                togglePrivacy()
+                            }}
                             role="switch"
                             aria-checked={isPublicMode}
                             aria-disabled={isToggleDisabled}

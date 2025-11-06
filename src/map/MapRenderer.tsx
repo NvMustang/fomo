@@ -330,6 +330,50 @@ const createClusterLayers = (
 }
 
 /**
+ * Génère l'expression de couleur des pins avec logique de réponses utilisateur.
+ * Supporte les deux formats : ancien (not_interested) et nouveau (not_there)
+ */
+const getPinColorExpression = (basePinColor: string) => [
+  "case",
+  [
+    "any",
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"],
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"],
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"]
+  ],
+  getCSSVariable('--pin-color-seen', '#64748b'),
+  basePinColor
+]
+
+/**
+ * Génère l'expression d'opacité des pins avec logique de réponses utilisateur.
+ * Supporte les deux formats : ancien (going/interested/not_interested) et nouveau (participe/maybe/not_there)
+ */
+const getPinOpacityExpression = () => [
+  "case",
+  // Format nouveau : participe
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "participe"], 0.8,
+  // Format ancien : going
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "going"], 0.8,
+  // Format nouveau : maybe
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "maybe"], 0.6,
+  // Format ancien : interested
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "interested"], 0.6,
+  // seen et cleared
+  [
+    "any",
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
+    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"]
+  ], 0.8,
+  // Format nouveau : not_there
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"], 0.2,
+  // Format ancien : not_interested
+  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"], 0.2,
+  1.0
+]
+
+/**
  * Génère les couches pour les événements réels (avec gestion des réponses utilisateur)
  */
 const getEventLayers = (
@@ -337,77 +381,51 @@ const getEventLayers = (
 ): Layer[] => {
   const clusterColor = getPrivacyColor(isPublicMode)
   const basePinColor = getPrivacyColor(isPublicMode)
-
-  // Couleur des pins avec logique de réponses utilisateur
-  // Supporte les deux formats : ancien (not_interested) et nouveau (not_there)
-  const pinColor = [
-    "case",
-    [
-      "any",
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"],
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"],
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"]
-    ],
-    getCSSVariable('--pin-color-seen', '#64748b'),
-    basePinColor
-  ]
-
-  // Opacité des pins avec logique de réponses utilisateur
-  // Supporte les deux formats : ancien (going/interested/not_interested) et nouveau (participe/maybe/not_there)
-  const pinOpacity = [
-    "case",
-    // Format nouveau : participe
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "participe"], 0.8,
-    // Format ancien : going
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "going"], 0.8,
-    // Format nouveau : maybe
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "maybe"], 0.6,
-    // Format ancien : interested
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "interested"], 0.6,
-    // seen et cleared
-    [
-      "any",
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
-      ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"]
-    ], 0.8,
-    // Format nouveau : not_there
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"], 0.2,
-    // Format ancien : not_interested
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"], 0.2,
-    1.0
-  ]
+  const pinColor = getPinColorExpression(basePinColor)
+  const pinOpacity = getPinOpacityExpression()
 
   return createClusterLayers("events", "events", clusterColor, pinColor, pinOpacity, 1)
 }
 
 /**
- * Génère les couches pour les fake pins (sans logique de réponses utilisateur)
+ * Génère les couches pour les fake pins (avec logique de réponses utilisateur)
  * Utilise feature-state 'pop' pour l'animation de pulsation via icon-opacity
+ * et feature-state 'userResponse' pour la couleur et l'opacité selon les réponses
  */
 const getFakeEventLayers = (
   isPublicMode: boolean = true
 ): Layer[] => {
   const clusterColor = getPrivacyColor(isPublicMode)
-  const pinColor = getPrivacyColor(isPublicMode)
+  const basePinColor = getPrivacyColor(isPublicMode)
+  const pinColor = getPinColorExpression(basePinColor)
+  const basePinOpacity = getPinOpacityExpression()
 
-  // Pour les fake pins, utiliser createClusterLayers puis personnaliser le layer pins
-  const baseLayers = createClusterLayers("fake-events", "fake-events", clusterColor, pinColor, 1.0, 1.0)
+  // Pour les fake pins, utiliser createClusterLayers avec la logique de réponses
+  const baseLayers = createClusterLayers("fake-events", "fake-events", clusterColor, pinColor, basePinOpacity, 1.0)
 
-  // Modifier le layer pins pour utiliser feature-state 'pop' dans icon-opacity pour l'animation
-  // pop varie de 0 à 1 (cosinus), on l'utilise pour animer l'opacité avec un effet très marqué
+  // Modifier le layer pins pour combiner l'opacité basée sur userResponse avec l'animation 'pop'
+  // pop varie de 0 à 1 (cosinus), on l'utilise pour animer l'opacité avec un effet subtil
   const pinsLayer = baseLayers.find(l => l.id === 'fake-events-pins')
   if (pinsLayer && pinsLayer.paint) {
-    // Animation d'opacité très marquée : de 0.15 à 1.0 avec maintien de l'opacité max plus longtemps
+    // Combiner l'opacité de base (userResponse) avec l'animation pop
+    // Animation d'opacité réduite : de 0.7 à 1.0 avec maintien de l'opacité max plus longtemps
     // Plateau à 1.0 entre 0.3 et 0.7 (40% du cycle reste à opacité maximale)
-    pinsLayer.paint['icon-opacity'] = [
+    // Utiliser coalesce pour éviter null si pop n'est pas encore défini
+    const popMultiplier = [
       'interpolate',
       ['linear'],
-      ['feature-state', 'pop'],
-      0, 0.15,   // pop = 0 → opacity = 0.15 (très faible)
-      0.3, 1.0,  // pop = 0.3 → opacity = 1.0 (début du plateau)
-      0.7, 1.0,  // pop = 0.7 → opacity = 1.0 (fin du plateau - maintien à 1.0 pendant 40% du cycle)
-      1, 0.15    // pop = 1 → opacity = 0.15 (retour au minimum)
+      ['coalesce', ['feature-state', 'pop'], 0],
+      0, 0.7,    // pop = 0 → multiplier = 0.7 (réduit pour effet plus subtil)
+      0.3, 1.0,  // pop = 0.3 → multiplier = 1.0 (début du plateau)
+      0.7, 1.0,  // pop = 0.7 → multiplier = 1.0 (fin du plateau - maintien à 1.0 pendant 40% du cycle)
+      1, 0.7     // pop = 1 → multiplier = 0.7 (retour au minimum)
+    ]
+
+    // Multiplier l'opacité de base par le multiplicateur pop
+    pinsLayer.paint['icon-opacity'] = [
+      '*',
+      basePinOpacity,
+      popMultiplier
     ]
   }
 
@@ -470,16 +488,18 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
   // Fonction helper pour centrer sur un événement avec flyTo
   // flyTo crée une animation de "vol" avec arc qui gère automatiquement la séquence
-  const centerOnPin = useCallback((event: Event) => {
+  const centerOnPin = useCallback((event: Event, duration?: number) => {
     if (mapRef.current?.getMap && event.venue) {
       const map = mapRef.current.getMap()
       const targetZoom = 13
-      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 1200]
+      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 1400]
 
       map.flyTo({
         center: targetCenter,
         zoom: targetZoom,
-        duration: 2000,
+        pitch: 0, // Maintenir la vue zénithale
+        bearing: 0, // Maintenir l'orientation nord
+        duration: duration ?? 3000, // 3s par défaut pour visitor mode
       })
     }
   }, [])
@@ -495,6 +515,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
       const newZoom = targetZoom ?? Math.max(10, currentZoom - 1)
       map.easeTo({
         zoom: newZoom,
+        pitch: 0, // Maintenir la vue zénithale
+        bearing: 0, // Maintenir l'orientation nord
         duration: duration,
       })
     }
@@ -528,6 +550,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           id: e.id,
           isFake: true,
           score: (e.stats?.going || 0) + (e.stats?.interested || 0), // Score pour le clustering
+          userResponse: '', // Initialiser userResponse à vide (sera mis à jour via feature-state)
         },
         geometry: {
           type: "Point" as const,
@@ -679,19 +702,19 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     if (mapLoaded && mapRef.current) {
       const map = mapRef.current.getMap()
         // Exposer la fonction globalement pour que CreateEventModal puisse l'utiliser
-        ; (window as any).addTemporaryEventToMap = (event: Event, isPublicMode: boolean) => {
+        ; (window.addTemporaryEventToMap = (event: Event, isPublicMode: boolean) => {
           addTemporaryEvent(map, event, isPublicMode)
-        }
+        })
         // Exposer la fonction zoomOut pour DiscoverPage
-        ; (window as any).zoomOutMap = zoomOut
+        ; (window.zoomOutMap = zoomOut)
         // Exposer la fonction centerOnEvent pour LastActivities
-        ; (window as any).centerMapOnEvent = (event: Event) => {
-          centerOnPin(event)
-        }
+        ; (window.centerMapOnEvent = (event: Event, duration?: number) => {
+          centerOnPin(event, duration)
+        })
         // Exposer getMap pour DiscoverPage
-        ; (window as any).getMap = () => map
+        ; (window.getMap = () => map)
         // Exposer startPublicModeSequence pour DiscoverPage
-        ; (window as any).startPublicModeSequence = (targetZoom: number, duration: number) => {
+        ; (window.startPublicModeSequence = (targetZoom: number, duration: number) => {
           console.info('[Map] startPublicModeSequence called', { targetZoom, duration, mapAvailable: !!map })
           if (map) {
             const currentZoom = map.getZoom()
@@ -700,6 +723,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
             map.flyTo({
               zoom: targetZoom,
+              pitch: 0, // Maintenir la vue zénithale
+              bearing: 0, // Maintenir l'orientation nord
               duration: duration,
               easing: (t: number) => t * (2 - t) // Ease-out
             })
@@ -713,9 +738,9 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           } else {
             console.warn('[Map] startPublicModeSequence: map not available')
           }
-        }
+        })
         // Exposer fadeOutFakePins pour DiscoverPage
-        ; (window as any).fadeOutFakePins = () => {
+        ; (window.fadeOutFakePins = () => {
           if (map && map.getLayer('fake-events-pins')) {
             // Animation fade-out de l'opacity
             map.setPaintProperty('fake-events-pins', 'icon-opacity', [
@@ -790,7 +815,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
               }
             }, 50)
           }
-        }
+        })
     }
   }, [mapLoaded, zoomOut, centerOnPin, events])
 
@@ -833,6 +858,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
             map.easeTo({
               center: feature.geometry.coordinates as [number, number],
               zoom,
+              pitch: 0, // Maintenir la vue zénithale
+              bearing: 0, // Maintenir l'orientation nord
               duration: 500,
             });
           });
@@ -880,6 +907,23 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap()
     if (!map) return
+
+    // Désactiver la rotation et le pitch pour garder une vue zénithale
+    // Mais garder le zoom par pincement activé
+    try {
+      map.dragRotate?.disable()
+      map.touchPitch?.disable()
+      // Ne pas désactiver touchZoomRotate pour garder le zoom par pincement
+      // Mais empêcher la rotation en forçant le bearing à 0
+      map.on('rotate', () => {
+        map.setBearing(0)
+      })
+      // Forcer le pitch à 0 (vue zénithale)
+      map.setPitch(0)
+      map.setBearing(0)
+    } catch {
+      // Ignorer si les méthodes ne sont pas disponibles
+    }
 
     // Note: Les requêtes MapTiler sont interceptées automatiquement via httpInterceptor
     // qui est initialisé dans main.tsx. Pas besoin d'instrumentation supplémentaire ici.
@@ -1030,6 +1074,9 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           onClick={handleClick}
           onLoad={handleMapLoad}
           attributionControl={false}
+          /* Désactiver la rotation et le pitch pour garder une vue zénithale */
+          dragRotate={false}
+          pitch={0}
         >
           {eventsSource && eventsSource.data && eventsSource.data.features && eventsSource.data.features.length > 0 && (() => {
             // Nettoyer le tempLayer avant de créer les autres layers

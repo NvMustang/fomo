@@ -2,16 +2,6 @@
    LOADING & SPINNERS
 ======================== */
 
-/* Loading containers */
-.loading-container {
-    text-align: center;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--lg);
-}
-
 .loading-screen {
     position: fixed;
     top: 0;
@@ -47,20 +37,6 @@
     -webkit-backdrop-filter: none;
 }
 
-/* Variante transparente : fond transparent pour voir les animations derrière */
-.loading-screen-transparent {
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    pointer-events: none;
-    /* Permet les interactions avec les éléments en dessous */
-}
-
-.loading-screen-transparent .loading-content {
-    pointer-events: auto;
-    /* Mais garde les interactions pour le contenu lui-même */
-}
-
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -84,42 +60,6 @@
     font-size: var(--text-lg);
     margin: 0;
     opacity: 0.9;
-}
-
-/* Spinners */
-.loading-spinner {
-    position: relative;
-    width: 80px;
-    height: 80px;
-    margin: 0 auto var(--lg) auto;
-}
-
-.spinner-ring {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border: 3px solid transparent;
-    border-top: 3px solid rgba(255, 255, 255, 0.8);
-    border-radius: 50%;
-    animation: spin 1.5s linear infinite;
-}
-
-.spinner-ring:nth-child(2) {
-    width: 60px;
-    height: 60px;
-    top: 10px;
-    left: 10px;
-    border-top-color: rgba(255, 255, 255, 0.6);
-    animation-delay: -0.5s;
-}
-
-.spinner-ring:nth-child(3) {
-    width: 40px;
-    height: 40px;
-    top: 20px;
-    left: 20px;
-    border-top-color: rgba(255, 255, 255, 0.4);
-    animation-delay: -1s;
 }
 
 .loading {

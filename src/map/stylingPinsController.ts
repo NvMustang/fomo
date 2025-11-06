@@ -28,7 +28,10 @@ export function setUserResponseFeatureState(eventId: string, response: string | 
     if (!getMap) return
     const map = getMap()
     if (!map || !map.isStyleLoaded?.()) return
-    const src = map.getSource?.('events')
+    
+    // Déterminer la source selon l'ID : fake pins utilisent 'fake-events', vrais events utilisent 'events'
+    const sourceName = eventId.startsWith('fake-') ? 'fake-events' : 'events'
+    const src = map.getSource?.(sourceName)
     if (!src) return
 
     // null ou 'invited' -> supprimer la feature-state (retour à l'état initial via properties)
@@ -36,13 +39,13 @@ export function setUserResponseFeatureState(eventId: string, response: string | 
     const shouldRemove = !response || response === 'invited'
 
     try {
-        console.info('[Pins] setUserResponseFeatureState', { eventId, response })
+        console.info('[Pins] setUserResponseFeatureState', { eventId, response, sourceName })
         if (shouldRemove) {
-            map.removeFeatureState({ source: 'events', id: eventId }, 'userResponse')
-            console.info('[Pins] removeFeatureState done', { eventId })
+            map.removeFeatureState({ source: sourceName, id: eventId }, 'userResponse')
+            console.info('[Pins] removeFeatureState done', { eventId, sourceName })
         } else {
-            map.setFeatureState({ source: 'events', id: eventId }, { userResponse: response })
-            console.info('[Pins] setFeatureState done', { eventId, userResponse: response })
+            map.setFeatureState({ source: sourceName, id: eventId }, { userResponse: response })
+            console.info('[Pins] setFeatureState done', { eventId, userResponse: response, sourceName })
         }
     } catch {
         // ignore missing feature errors
@@ -57,5 +60,3 @@ export function setUserResponseFeatureState(eventId: string, response: string | 
 export function setStylingPin(eventId: string, response: string | null) {
     return setUserResponseFeatureState(eventId, response)
 }
-
-

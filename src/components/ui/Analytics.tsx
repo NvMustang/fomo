@@ -7,8 +7,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { analyticsTracker, type ApiProvider, type AnalyticsData } from '@/utils/analyticsTracker'
+import { analyticsTracker, type ApiProvider } from '@/utils/analyticsTracker'
 import { getApiBaseUrl } from '@/config/env'
+import { getSessionId, getUserName } from '@/utils/getSessionId'
 
 interface AnalyticsProps {
     onClose?: () => void
@@ -40,74 +41,46 @@ interface AggregatedData {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
-    const [data, setData] = useState<AnalyticsData | null>(null)
     const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
-    const [useGlobalData, setUseGlobalData] = useState<boolean>(true) // Par défaut, utiliser les données globales
     const [selectedProvider, setSelectedProvider] = useState<ApiProvider | 'all'>('all')
     const [maptilerInputValue, setMapTilerInputValue] = useState<string>('')
     const [maptilerNote, setMapTilerNote] = useState<string>('')
     const [loading, setLoading] = useState<boolean>(false)
 
     const loadData = useCallback(async () => {
-        if (useGlobalData) {
-            // Charger les données agrégées depuis Google Sheets
-            setLoading(true)
-            try {
-                const apiUrl = getApiBaseUrl()
-                const response = await fetch(`${apiUrl}/analytics/aggregated`)
-                const result = await response.json()
-                if (result.success) {
-                    setAggregatedData(result.data)
-                } else {
-                    console.warn('⚠️ Erreur chargement données agrégées:', result.error)
-                    // Fallback sur données locales
-                    const localStats = analyticsTracker.getStats()
-                    setData(localStats)
-                }
-            } catch (error) {
-                console.warn('⚠️ Erreur chargement données agrégées:', error)
-                // Fallback sur données locales
-                const localStats = analyticsTracker.getStats()
-                setData(localStats)
-            } finally {
-                setLoading(false)
+        // Charger les données agrégées depuis Google Sheets
+        setLoading(true)
+        try {
+            const apiUrl = getApiBaseUrl()
+            const response = await fetch(`${apiUrl}/analytics/aggregated`)
+            const result = await response.json()
+            if (result.success) {
+                setAggregatedData(result.data)
+            } else {
+                console.warn('⚠️ Erreur chargement données agrégées:', result.error)
             }
-        } else {
-            // Charger les données locales uniquement
-            const stats = analyticsTracker.getStats()
-            setData(stats)
+        } catch (error) {
+            console.warn('⚠️ Erreur chargement données agrégées:', error)
+        } finally {
+            setLoading(false)
         }
-    }, [useGlobalData])
+    }, [])
 
     useEffect(() => {
         loadData()
 
-        // Auto-refresh uniquement pour vue globale (toutes les heures)
-        // Vue locale : pas d'auto-refresh (données locales, utiliser le bouton "Actualiser" si besoin)
-        // Utiliser useGlobalData directement depuis la closure pour éviter les dépendances circulaires
-        const interval = useGlobalData
-            ? setInterval(() => {
-                loadData()
-            }, 60 * 60 * 1000) // 1 heure pour vue globale (bêta avec peu d'utilisateurs)
-            : null // Pas d'auto-refresh pour vue locale
+        // Auto-refresh toutes les heures
+        const interval = setInterval(() => {
+            loadData()
+        }, 60 * 60 * 1000) // 1 heure
 
         // Note: La sauvegarde automatique est gérée par autoSaveAnalytics dans main.tsx
         // Elle fonctionne même si le dashboard n'est pas ouvert
 
         return () => {
-            if (interval) {
-                clearInterval(interval)
-            }
+            clearInterval(interval)
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [useGlobalData]) // Seulement useGlobalData dans les dépendances, loadData sera mis à jour via la closure
-
-    const handleReset = () => {
-        if (confirm('Êtes-vous sûr de vouloir réinitialiser toutes les statistiques ?')) {
-            analyticsTracker.reset()
-            loadData()
-        }
-    }
+    }, [loadData])
 
     const handleAddMapTilerReference = async () => {
         const value = parseInt(maptilerInputValue, 10)
@@ -136,43 +109,68 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
             const apiUrl = getApiBaseUrl()
 
+            // Limiter la taille du payload pour éviter l'erreur 413 (Payload Too Large)
+            // Garder seulement les 500 dernières requêtes de l'historique
+            const MAX_HISTORY_TO_SEND = 500
+            const limitedHistory = stats.history.length > MAX_HISTORY_TO_SEND
+                ? stats.history.slice(-MAX_HISTORY_TO_SEND)
+                : stats.history
+
+            // Réduire aussi les requêtes détaillées dans les stats pour chaque provider
+            const limitedStats = { ...stats.stats }
+            Object.keys(limitedStats).forEach(provider => {
+                const providerStats = limitedStats[provider as keyof typeof limitedStats]
+                if (providerStats.requests && providerStats.requests.length > 50) {
+                    limitedStats[provider as keyof typeof limitedStats] = {
+                        ...providerStats,
+                        requests: providerStats.requests.slice(-50)
+                    }
+                }
+            })
+
+            const payload = {
+                sessionId: getSessionId(),
+                userName: getUserName(),
+                stats: limitedStats,
+                history: limitedHistory,
+                maptilerReferences: stats.maptilerReferences
+            }
+
+            // Vérifier la taille approximative du payload (en bytes)
+            const payloadSize = new Blob([JSON.stringify(payload)]).size
+            const MAX_PAYLOAD_SIZE = 500 * 1024 // 500 KB
+
+            if (payloadSize > MAX_PAYLOAD_SIZE) {
+                // Réduire encore plus l'historique si nécessaire
+                const targetHistorySize = Math.floor((MAX_PAYLOAD_SIZE * 0.7) / 200) // ~200 bytes par requête
+                const furtherLimitedHistory = limitedHistory.slice(-targetHistorySize)
+                payload.history = furtherLimitedHistory
+                console.warn(`⚠️ [Analytics] Payload trop volumineux (${Math.round(payloadSize / 1024)} KB), réduction à ${furtherLimitedHistory.length} requêtes`)
+            }
+
             const response = await fetch(`${apiUrl}/analytics/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    sessionId: (() => {
-                        try {
-                            const savedUser = localStorage.getItem('fomo-user')
-                            if (savedUser) {
-                                const userData = JSON.parse(savedUser)
-                                if (userData.id) return userData.id
-                            }
-                            const visitorId = sessionStorage.getItem('fomo-visit-user-id')
-                            if (visitorId) return visitorId
-                            return sessionStorage.getItem('fomo-analytics-session-id') || `session-${Date.now()}`
-                        } catch {
-                            return `session-${Date.now()}`
-                        }
-                    })(),
-                    userName: (() => {
-                        try {
-                            const savedUser = localStorage.getItem('fomo-user')
-                            if (savedUser) {
-                                const userData = JSON.parse(savedUser)
-                                if (userData.name) return userData.name
-                            }
-                            return sessionStorage.getItem('fomo-visit-name') || null
-                        } catch {
-                            return null
-                        }
-                    })(),
-                    stats: stats.stats,
-                    history: stats.history,
-                    maptilerReferences: stats.maptilerReferences
-                })
+                body: JSON.stringify(payload)
             })
+
+            if (!response.ok) {
+                if (response.status === 413) {
+                    console.warn('⚠️ [Analytics] Payload trop volumineux (413), données tronquées')
+                    return
+                }
+                const errorText = await response.text()
+                let errorData
+                try {
+                    errorData = JSON.parse(errorText)
+                } catch {
+                    errorData = { error: errorText }
+                }
+                console.warn('⚠️ [Analytics] Erreur sauvegarde:', errorData.error || `HTTP ${response.status}`)
+                return
+            }
 
             const result = await response.json()
             if (result.success) {
@@ -181,29 +179,16 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                 console.warn('⚠️ Erreur sauvegarde:', result.error)
             }
         } catch (error) {
-            console.warn('⚠️ Erreur sauvegarde analytics dans Google Sheets:', error)
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            if (errorMessage.includes('413') || errorMessage.includes('Payload Too Large')) {
+                console.warn('⚠️ [Analytics] Payload trop volumineux, données non sauvegardées')
+            } else {
+                console.warn('⚠️ Erreur sauvegarde analytics dans Google Sheets:', errorMessage)
+            }
         }
     }, [])
 
     // Note: La sauvegarde automatique avec debounce est gérée par autoSaveAnalytics dans main.tsx
-
-    const handleRemoveReference = (timestamp: number) => {
-        if (confirm('Supprimer cette valeur de référence ?')) {
-            try {
-                analyticsTracker.removeMapTilerReference(timestamp)
-                // Forcer le rechargement des données
-                const updatedStats = analyticsTracker.getStats()
-                setData(updatedStats)
-            } catch (error) {
-                console.error('❌ Erreur suppression référence:', error)
-                alert('Erreur lors de la suppression de la référence')
-            }
-        }
-    }
-
-    // Déterminer les données à utiliser
-    const isGlobal = useGlobalData && aggregatedData !== null
-    const displayData = isGlobal ? aggregatedData : data
 
     if (loading) {
         return (
@@ -213,7 +198,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         )
     }
 
-    if (!displayData) {
+    if (!aggregatedData) {
         return (
             <div className="analytics-container">
                 <div className="analytics-loading">Aucune donnée disponible</div>
@@ -237,77 +222,25 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
     }
 
     // Calculer les totaux
-    let totals: { total: number; success: number; errors: number }
-    if (isGlobal && aggregatedData) {
-        totals = aggregatedData.totals
-    } else if (data) {
-        totals = providers.reduce((acc, provider) => {
-            const stats = data.stats[provider]
-            acc.total += stats.total
-            acc.success += stats.success
-            acc.errors += stats.errors
-            return acc
-        }, { total: 0, success: 0, errors: 0 })
-    } else {
-        totals = { total: 0, success: 0, errors: 0 }
-    }
+    const totals = aggregatedData.totals
 
     // Filtrer l'historique
-    let history: any[] = []
-    if (isGlobal && aggregatedData) {
-        history = selectedProvider === 'all'
-            ? aggregatedData.history.slice(-50)
-            : aggregatedData.history.filter(r => r.provider === selectedProvider).slice(-50)
-    } else if (data) {
-        history = selectedProvider === 'all'
-            ? data.history.slice(-50)
-            : data.history.filter(r => r.provider === selectedProvider).slice(-50)
-    }
-
-    // Requêtes par période (seulement pour données locales)
-    const periodData = isGlobal ? [] : analyticsTracker.getRequestsByPeriod(60000).slice(-20)
-
-    // Calculer uptime (seulement pour données locales)
-    const uptimeMs = isGlobal ? 0 : analyticsTracker.getUptime()
-    const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60))
-    const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60))
+    const history = selectedProvider === 'all'
+        ? aggregatedData.history.slice(-50)
+        : aggregatedData.history.filter(r => r.provider === selectedProvider).slice(-50)
 
     // Stats par provider
     const getProviderStats = (provider: ApiProvider) => {
-        if (isGlobal && aggregatedData) {
-            return aggregatedData.stats[provider] || { total: 0, success: 0, errors: 0, requests: [] }
-        } else if (data) {
-            return data.stats[provider]
-        }
-        return { total: 0, success: 0, errors: 0, requests: [] }
+        return aggregatedData.stats[provider] || { total: 0, success: 0, errors: 0, requests: [] }
     }
-
-    // Références MapTiler (déclarée mais utilisée dans la section de comparaison)
-    // const maptilerRefs = isGlobal && aggregatedData
-    //     ? aggregatedData.maptilerReferences
-    //     : (data?.maptilerReferences || [])
 
     return (
         <div className="analytics-container">
             <div className="analytics-header">
                 <h2 className="analytics-title">
-                    📊 Analytics Dashboard {isGlobal ? '(Vue Globale)' : '(Vue Locale)'}
+                    📊 Analytics Dashboard
                 </h2>
                 <div className="analytics-header-actions">
-                    <button
-                        className={`analytics-btn-secondary ${useGlobalData ? 'analytics-btn-active' : ''}`}
-                        onClick={() => setUseGlobalData(true)}
-                        title="Vue globale (tous les utilisateurs)"
-                    >
-                        🌍 Globale
-                    </button>
-                    <button
-                        className={`analytics-btn-secondary ${!useGlobalData ? 'analytics-btn-active' : ''}`}
-                        onClick={() => setUseGlobalData(false)}
-                        title="Vue locale (cet appareil)"
-                    >
-                        📱 Locale
-                    </button>
                     <button
                         className="analytics-btn-secondary"
                         onClick={loadData}
@@ -321,13 +254,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                         title="Sauvegarder dans Google Sheets"
                     >
                         💾 Sauvegarder
-                    </button>
-                    <button
-                        className="analytics-btn-danger"
-                        onClick={handleReset}
-                        title="Réinitialiser"
-                    >
-                        🗑️ Réinitialiser
                     </button>
                     {onClose && (
                         <button
@@ -361,26 +287,14 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                         {totals.total > 0 ? ((totals.errors / totals.total) * 100).toFixed(1) : 0}%
                     </div>
                 </div>
-                {!isGlobal && (
-                    <div className="analytics-stat-card">
-                        <div className="analytics-stat-label">Uptime</div>
-                        <div className="analytics-stat-value">
-                            {uptimeHours}h {uptimeMinutes}m
-                        </div>
-                    </div>
-                )}
-                {isGlobal && aggregatedData && (
-                    <>
-                        <div className="analytics-stat-card">
-                            <div className="analytics-stat-label">Utilisateurs Uniques</div>
-                            <div className="analytics-stat-value">{aggregatedData.uniqueUsers}</div>
-                        </div>
-                        <div className="analytics-stat-card">
-                            <div className="analytics-stat-label">Sessions Uniques</div>
-                            <div className="analytics-stat-value">{aggregatedData.uniqueSessions}</div>
-                        </div>
-                    </>
-                )}
+                <div className="analytics-stat-card">
+                    <div className="analytics-stat-label">Utilisateurs Uniques</div>
+                    <div className="analytics-stat-value">{aggregatedData.uniqueUsers}</div>
+                </div>
+                <div className="analytics-stat-card">
+                    <div className="analytics-stat-label">Sessions Uniques</div>
+                    <div className="analytics-stat-value">{aggregatedData.uniqueSessions}</div>
+                </div>
             </div>
 
             {/* Stats par provider */}
@@ -440,40 +354,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                 </div>
             </div>
 
-            {/* Graphique temporel */}
-            <div className="analytics-section">
-                <h3 className="analytics-section-title">Évolution (20 dernières minutes)</h3>
-                <div className="analytics-chart-container">
-                    <div className="analytics-chart">
-                        {periodData.map((period, index) => {
-                            const maxCount = Math.max(...periodData.map(p => p.count), 1)
-                            const height = maxCount > 0 ? (period.count / maxCount) * 100 : 0
-
-                            // Déterminer la couleur dominante
-                            let dominantProvider: ApiProvider = 'backend'
-                            if (period.providers.maptiler > 0) dominantProvider = 'maptiler'
-                            else if (period.providers.mapbox > 0) dominantProvider = 'mapbox'
-                            else if (period.providers.googlesheets > 0) dominantProvider = 'googlesheets'
-
-                            return (
-                                <div key={index} className="analytics-chart-bar-container">
-                                    <div
-                                        className="analytics-chart-bar"
-                                        style={{
-                                            height: `${height}%`,
-                                            backgroundColor: providerColors[dominantProvider]
-                                        }}
-                                        title={`${new Date(period.time).toLocaleTimeString()}: ${period.count} requêtes`}
-                                    />
-                                    <div className="analytics-chart-label">
-                                        {period.count}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
-            </div>
 
             {/* Comparaison MapTiler */}
             <div className="analytics-section">
@@ -526,58 +406,50 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                 <div className="analytics-comparison-chart-container">
                     <div className="analytics-comparison-chart">
                         {(() => {
-                            // Utiliser les données globales ou locales selon le mode
-                            let comparisonData: any[] = []
-                            if (isGlobal && aggregatedData) {
-                                // Pour les données globales, on doit recalculer la comparaison
-                                // On utilise les références MapTiler globales et on compte les requêtes MapTiler globales
-                                const maptilerRequests = aggregatedData.history.filter(r => r.provider === 'maptiler')
-                                const sortedRefs = [...aggregatedData.maptilerReferences].sort((a, b) => a.timestamp - b.timestamp)
-                                const initialRef = sortedRefs[0]
-                                const initialValue = initialRef?.value || 104684
-                                const initialDate = initialRef
-                                    ? new Date(initialRef.timestamp).toISOString().split('T')[0]
-                                    : new Date().toISOString().split('T')[0]
+                            // Recalculer la comparaison avec les données globales
+                            const maptilerRequests = aggregatedData.history.filter(r => r.provider === 'maptiler')
+                            const sortedRefs = [...aggregatedData.maptilerReferences].sort((a, b) => a.timestamp - b.timestamp)
+                            const initialRef = sortedRefs[0]
+                            const initialValue = initialRef?.value || 104684
+                            const initialDate = initialRef
+                                ? new Date(initialRef.timestamp).toISOString().split('T')[0]
+                                : new Date().toISOString().split('T')[0]
 
-                                // Grouper par date
-                                const dailyData = new Map<string, { tracked: number; reference: number | null }>()
-                                maptilerRequests.forEach(req => {
-                                    const reqDate = new Date(req.timestamp).toISOString().split('T')[0]
-                                    if (reqDate >= initialDate) {
-                                        const existing = dailyData.get(reqDate) || { tracked: 0, reference: null }
-                                        existing.tracked++
-                                        dailyData.set(reqDate, existing)
+                            // Grouper par date
+                            const dailyData = new Map<string, { tracked: number; reference: number | null }>()
+                            maptilerRequests.forEach(req => {
+                                const reqDate = new Date(req.timestamp).toISOString().split('T')[0]
+                                if (reqDate >= initialDate) {
+                                    const existing = dailyData.get(reqDate) || { tracked: 0, reference: null }
+                                    existing.tracked++
+                                    dailyData.set(reqDate, existing)
+                                }
+                            })
+
+                            sortedRefs.forEach(ref => {
+                                const date = new Date(ref.timestamp).toISOString().split('T')[0]
+                                const existing = dailyData.get(date) || { tracked: 0, reference: null }
+                                existing.reference = ref.value
+                                dailyData.set(date, existing)
+                            })
+
+                            let cumulativeTracked = 0
+                            const comparisonData = Array.from(dailyData.entries())
+                                .map(([date, data]) => {
+                                    cumulativeTracked += data.tracked
+                                    const trackedCumulative = initialValue + cumulativeTracked
+                                    const referenceCumulative = data.reference !== null ? data.reference : null
+
+                                    return {
+                                        date,
+                                        dateTime: new Date(date).getTime(),
+                                        tracked: data.tracked,
+                                        reference: data.reference,
+                                        trackedCumulative,
+                                        referenceCumulative
                                     }
                                 })
-
-                                sortedRefs.forEach(ref => {
-                                    const date = new Date(ref.timestamp).toISOString().split('T')[0]
-                                    const existing = dailyData.get(date) || { tracked: 0, reference: null }
-                                    existing.reference = ref.value
-                                    dailyData.set(date, existing)
-                                })
-
-                                let cumulativeTracked = 0
-                                comparisonData = Array.from(dailyData.entries())
-                                    .map(([date, data]) => {
-                                        cumulativeTracked += data.tracked
-                                        const trackedCumulative = initialValue + cumulativeTracked
-                                        const referenceCumulative = data.reference !== null ? data.reference : null
-
-                                        return {
-                                            date,
-                                            dateTime: new Date(date).getTime(),
-                                            tracked: data.tracked,
-                                            reference: data.reference,
-                                            trackedCumulative,
-                                            referenceCumulative
-                                        }
-                                    })
-                                    .sort((a, b) => a.dateTime - b.dateTime)
-                            } else {
-                                // Utiliser les données locales
-                                comparisonData = analyticsTracker.getComparisonData()
-                            }
+                                .sort((a, b) => a.dateTime - b.dateTime)
 
                             if (comparisonData.length === 0) {
                                 return (
@@ -691,9 +563,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
                 {/* Liste des valeurs de référence */}
                 {(() => {
-                    const references = isGlobal && aggregatedData
-                        ? aggregatedData.maptilerReferences
-                        : analyticsTracker.getMapTilerReferences()
+                    const references = aggregatedData.maptilerReferences
 
                     if (references.length === 0) return null
 
@@ -708,8 +578,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                                         <th>Notre compteur</th>
                                         <th>Différence</th>
                                         <th>Note</th>
-                                        {isGlobal && <th>Utilisateur</th>}
-                                        {!isGlobal && <th>Action</th>}
+                                        <th>Utilisateur</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -726,10 +595,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
                                         // Compter les requêtes depuis la date initiale jusqu'à cette référence
                                         const refDate = new Date(ref.timestamp).toISOString().split('T')[0]
-                                        const historyToUse = isGlobal && aggregatedData
-                                            ? aggregatedData.history
-                                            : (data?.history || [])
-                                        const trackedSinceStart = historyToUse.filter(r => {
+                                        const trackedSinceStart = aggregatedData.history.filter(r => {
                                             if (r.provider !== 'maptiler') return false
                                             const reqDate = new Date(r.timestamp).toISOString().split('T')[0]
                                             return reqDate >= initialDate && reqDate <= refDate
@@ -750,31 +616,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                                                     {diff > 0 ? '+' : ''}{diff.toLocaleString()}
                                                 </td>
                                                 <td className="analytics-reference-note">{ref.note || '-'}</td>
-                                                {isGlobal && (
-                                                    <td className="analytics-reference-user">
-                                                        {(ref as any).userName || (ref as any).sessionId || '-'}
-                                                    </td>
-                                                )}
-                                                {!isGlobal && (
-                                                    <td>
-                                                        {ref.timestamp !== initialRef?.timestamp ? (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleRemoveReference(ref.timestamp)
-                                                                }}
-                                                                className="analytics-btn-danger analytics-btn-small"
-                                                                title="Supprimer"
-                                                            >
-                                                                🗑️
-                                                            </button>
-                                                        ) : (
-                                                            <span className="analytics-reference-protected" title="Valeur initiale - ne peut pas être supprimée">
-                                                                🔒
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                )}
+                                                <td className="analytics-reference-user">
+                                                    {(ref as any).userName || (ref as any).sessionId || '-'}
+                                                </td>
                                             </tr>
                                         )
                                     })}

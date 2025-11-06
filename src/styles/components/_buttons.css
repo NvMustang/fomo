@@ -83,18 +83,6 @@
 }
 
 /* Tailles pour boutons circulaires */
-.circular-button--md {
-    width: var(--button-size-md);
-    height: var(--button-size-md);
-    border-radius: var(--button-radius-md);
-}
-
-.circular-button--sm {
-    width: var(--button-size-sm);
-    height: var(--button-size-sm);
-    border-radius: var(--button-radius-sm);
-}
-
 .circular-button--xs {
     width: var(--button-size-xs);
     height: var(--button-size-xs);

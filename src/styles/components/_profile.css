@@ -11,39 +11,6 @@
     box-shadow: var(--shadow);
 }
 
-.profile-main {
-    display: flex;
-    align-items: center;
-    gap: var(--md);
-}
-
-.profile-icon {
-    width: 80px;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--text-muted);
-}
-
-.profile-details {
-    flex: 1;
-}
-
-.profile-name {
-    font-size: var(--text-xl);
-    font-weight: 700;
-    color: var(--text);
-    margin: 0 0 var(--xs) 0;
-}
-
-.profile-location {
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-    margin: 0;
-}
-
 /* Stats */
 .stats-section {
     background: var(--surface);

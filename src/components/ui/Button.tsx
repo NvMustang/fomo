@@ -31,7 +31,7 @@ export function Button(props: ButtonProps) {
         children,
         className = 'primary',
         ...rest
-    } = props as any
+    } = props
 
     const baseClasses = 'button'
     const variantClasses = {
@@ -52,8 +52,8 @@ export function Button(props: ButtonProps) {
         className
     ].filter(Boolean).join(' ')
 
-    if ((props as ButtonAsAnchor).as === 'a') {
-        const { href, ...anchorProps } = rest as any
+    if ('as' in props && props.as === 'a') {
+        const { href, ...anchorProps } = rest as ButtonAsAnchor
         return (
             <a href={href} className={classes} {...anchorProps}>
                 {children}
@@ -62,7 +62,7 @@ export function Button(props: ButtonProps) {
     }
 
     return (
-        <button className={classes} {...(rest as any)}>
+        <button className={classes} {...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>)}>
             {children}
         </button>
     )

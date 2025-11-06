@@ -10,6 +10,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { Button } from '@/components'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
+import { useModalScrollHint } from '@/hooks'
+import { getCity } from '@/utils/getSessionId'
+import { VALID_TLDS } from '@/types/fomoTypes'
 
 interface AuthModalProps {
   useVisitorStyle?: boolean // Si true, applique le style visitor-modal-dynamic
@@ -26,6 +29,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
   const [city, setCity] = useState('')
   const [error, setError] = useState('')
   const [isCityValid, setIsCityValid] = useState(true)
+
+  // Animation de scroll à l'ouverture du modal
+  const modalContentRef = useModalScrollHint(currentStep === 'email' || currentStep === 'new-user')
 
   const isValidEmail = (email: string): boolean => {
     // Validation : vérifier la structure de l'email
@@ -54,18 +60,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
     
     // Vérifier que le TLD (domaine principal) est valide
     const tld = email.substring(dotIndex + 1).toLowerCase()
-    const validTlds = [
-      // Top TLD génériques
-      'com', 'net', 'org', 'info', 'io', 'app', 'dev', 'online', 'club',
-      // TLD nationaux principaux
-      'fr', 'be', 'ch', 'uk', 'de', 'nl', 'es', 'it', 'pt', 'at', 'dk', 'se', 'no', 'fi',
-      'pl', 'cz', 'ro', 'hu', 'gr', 'ie', 'bg', 'sk', 'lt', 'lv', 'ee',
-      'ca', 'us', 'mx', 'br', 'ar', 'cl', 'co', 'pe', 'uy',
-      'au', 'nz', 'sg', 'hk', 'my', 'id', 'th', 'vn', 'tw', 'jp', 'kr', 'cn', 'in',
-      'za', 'ru', 'tr', 'il'
-    ]
     
-    if (!validTlds.includes(tld)) {
+    if (!VALID_TLDS.includes(tld as typeof VALID_TLDS[number])) {
       return false
     }
     
@@ -138,13 +134,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
     }
   }, [matchByEmail, login, checkUserByEmail])
 
-  // Charger l'email, le nom et la ville du visitor depuis sessionStorage si disponible
+  // Charger l'email, le nom et la ville du visitor depuis sessionStorage et localStorage si disponible
   useEffect(() => {
     if (!isAuthenticated) {
       try {
         const visitorEmail = sessionStorage.getItem('fomo-visit-email')
         const visitorName = sessionStorage.getItem('fomo-visit-name')
-        const visitorCity = sessionStorage.getItem('fomo-visit-city')
+        
+        // Récupérer la ville depuis toutes les sources possibles
+        const visitorCity = getCity() || ''
 
         if (visitorEmail && visitorEmail.trim()) {
           setEmail(visitorEmail.trim())
@@ -160,9 +158,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
           setName('')
         }
 
-        if (visitorCity && visitorCity.trim()) {
-          setCity(visitorCity.trim())
-          console.log('✅ [AuthModal] Ville du visitor pré-remplie:', visitorCity.trim())
+        if (visitorCity) {
+          setCity(visitorCity)
+          console.log('✅ [AuthModal] Ville du visitor pré-remplie:', visitorCity)
         } else {
           setCity('')
         }
@@ -177,6 +175,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
       setIsCityValid(true)
     }
   }, [isAuthenticated])
+
+  // Recharger la ville depuis toutes les sources quand on passe à l'étape new-user
+  // pour s'assurer d'utiliser la valeur la plus récente (par exemple si ajoutée par SignUpModal ou modalname)
+  useEffect(() => {
+    if (currentStep === 'new-user' && !isAuthenticated) {
+      try {
+        const visitorCity = getCity()
+        if (visitorCity) {
+          setCity(visitorCity)
+          console.log('✅ [AuthModal] Ville rechargée depuis storage:', visitorCity)
+        }
+      } catch {
+        // Ignorer si storage indisponible
+      }
+    }
+  }, [currentStep, isAuthenticated])
 
   // Fonction appelée uniquement lors du clic sur "Continuer"
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -225,7 +239,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
     return (
       <div className={`modal_container ${isInWelcomeScreen ? 'modal-no-backdrop' : ''}`}>
         <div className={modalClass} onClick={e => e.stopPropagation()}>
-          <div className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
+          <div ref={modalContentRef} className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
             <h2 style={{ margin: 0, marginBottom: 'var(--md)', fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Bienvenue sur FOMO</h2>
             <p className="auth-subtitle">Renseignez votre email</p>
             <br />
@@ -258,7 +272,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
                     disabled={isLoading || !email.trim()}
                     variant="primary"
                   >
-                    {isLoading ? 'Vérification...' : 'Continuer'}
+                    Continuer
                   </Button>
                 </div>
               </div>
@@ -275,7 +289,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
     return (
       <div className="modal_container modal-no-backdrop">
         <div className={modalClass} onClick={e => e.stopPropagation()}>
-          <div className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
+          <div ref={modalContentRef} className={`modal-content ${useVisitorStyle ? 'visitor-form-dynamic' : ''}`}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
               <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>Créer votre profil</h2>
               <button
@@ -343,7 +357,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ useVisitorStyle = false })
                     disabled={isLoading || !name.trim() || !city.trim() || !isCityValid}
                     variant="primary"
                   >
-                    {isLoading ? 'Création...' : 'Créer mon profil'}
+                    Créer mon profil
                   </Button>
                 </div>
               </div>

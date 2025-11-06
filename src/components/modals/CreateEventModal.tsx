@@ -12,7 +12,7 @@ import type { Event } from '@/types/fomoTypes'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import type { Tag } from '@/types/fomoTypes'
-import { useToast } from '@/hooks'
+import { useToast, useModalScrollHint } from '@/hooks'
 import { useAuth } from '@/contexts/AuthContext'
 import { getUser } from '@/utils/filterTools'
 import { StockImagePicker } from '@/components/ui/StockImagePicker'
@@ -33,6 +33,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
   const { user, isPublicUser } = useAuth()
   const { createEvent, updateEvent, getTags, addEventResponse, users } = useFomoDataContext()
   const { showToast } = useToast()
+
+  // Animation de scroll à l'ouverture du modal
+  const modalContentRef = useModalScrollHint(isOpen)
 
   // Fonctions pour gérer les toasts avec le système unifié
   const showError = (message: string) => {
@@ -419,8 +422,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
 
       // Ajouter l'événement temporaire à la map immédiatement
       const tempEvent = { ...eventData, id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` }
-      if ((window as any).addTemporaryEventToMap) {
-        (window as any).addTemporaryEventToMap(tempEvent, isPublicMode)
+      if (window.addTemporaryEventToMap) {
+        window.addTemporaryEventToMap(tempEvent, isPublicMode)
       }
 
       if (editMode && initialEvent) {
@@ -485,7 +488,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
           onClick={e => e.stopPropagation()}
         >
           {/* Contenu */}
-          <div className="modal-content">
+          <div ref={modalContentRef} className="modal-content">
             {/* Message de restriction pour les profils privés */}
             {!isPublicUser && isPublicMode && (
               <div

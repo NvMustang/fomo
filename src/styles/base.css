@@ -133,8 +133,10 @@
     --border-white-30: var(--color-white-30);
     --border-white-40: var(--color-white-40);
 
-    /* Z-index */
-    --z-index-modal: 1000;
+    /* Z-index mutualisés */
+    --z-index-event-card: 1004;
+    --z-index-modal: 1010;
+    --z-index-toast: 1020;
 
     /* Map colors */
     --pin-color-public: var(--color-public);

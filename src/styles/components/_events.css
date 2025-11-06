@@ -10,7 +10,7 @@
     bottom: calc(var(--navbar-height) + var(--button-radius) + var(--sm));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1004;
+    z-index: var(--z-index-event-card);
 
     /* Initialement invisible pour le fade in */
 
@@ -85,115 +85,10 @@
     max-height: 70vh;
 }
 
-.fake-event-card-overlay {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
 .fake-event-card-content {
     position: relative;
     width: 100%;
     flex: 1;
-    pointer-events: none;
-}
-
-.fake-event-card-content .event-card-body {
-    opacity: 0.6;
-}
-
-.fake-event-card-content .event-cover-image {
-    opacity: 0.6;
-}
-
-.fake-event-card-teaser {
-    position: absolute;
-    top: 60%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10;
-    text-align: center;
-    /* Style identique au toast */
-    padding: var(--lg) var(--xl);
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(var(--glass-blur-strong));
-    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
-    border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
-        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
-    border: none;
-    max-width: 360px;
-    width: 100%;
-    min-width: 280px;
-    overflow: hidden;
-    pointer-events: auto;
-    /* Ne pas affecter le layout de la carte parente */
-    margin: 0;
-    box-sizing: border-box;
-}
-
-/* Lueur subtile sur les bords (comme le toast) */
-.fake-event-card-teaser::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: var(--radius-lg);
-    padding: 4px;
-    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%);
-    opacity: 0.7;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
-    z-index: 1;
-}
-
-.fake-event-card-message {
-    margin: 0 0 var(--md) 0;
-    padding: 0;
-    font-size: var(--text-md);
-    font-weight: 600;
-    color: var(--text);
-    position: relative;
-    z-index: 2;
-    line-height: 1.4;
-}
-
-.fake-event-card-cta {
-    width: 100%;
-    /* Styles identiques au map-teaser-cta - inversés */
-    font-weight: var(--font-weight-semibold);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xs);
-    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%) !important;
-    border: var(--border-width) solid rgb(172, 131, 182) !important;
-    box-shadow: 0 6px 20px rgb(58, 38, 56);
-    transition: all var(--transition-fast);
-    transform: translateY(-2px);
-    position: relative;
-    z-index: 2;
-}
-
-.fake-event-card-cta:hover {
-    background: linear-gradient(-135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
-    box-shadow: var(--shadow-lg), 0 0 0 2px rgba(255, 255, 255, 0.1);
-    transform: translateY(0);
-    border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.fake-event-card-cta:active {
-    background: linear-gradient(-135deg, rgba(242, 61, 61, 0.8) 0%, rgba(59, 130, 246, 0.8) 100%) !important;
-    transform: translateY(0);
-    box-shadow: var(--shadow), 0 0 0 3px rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* Wrapper d'item de liste pour animer la suppression (calendar/list) */
@@ -238,19 +133,6 @@
 
 
 
-/* Container pour la page liste */
-.event-card-list-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--lg);
-    flex-direction: column;
-    width: 100%;
-    margin: 80px auto 0;
-    padding: 0 var(--md) var(--xl);
-    min-height: calc(100vh - 80px);
-}
-
 .event-card-header {
     display: flex;
     align-items: center;
@@ -258,15 +140,6 @@
     padding: var(--sm) var(--sm) 0;
     border-top-left-radius: var(--radius-lg);
     border-top-right-radius: var(--radius-lg);
-}
-
-.event-card-body {
-    background: transparent;
-    padding: var(--sm);
-    display: flex;
-    flex-direction: column;
-    gap: var(--xs);
-    border-radius: var(--radius);
 }
 
 .event-card-title {
@@ -329,7 +202,7 @@
 /* Event edit buttons */
 /* Zone expandable de partage dans EventCard (page profile) */
 .event-share-section {
-    border-top: 1px solid var(--border);
+    border-top: 2px solid var(--border);
     margin-top: var(--sm);
     flex: 0;
     min-height: 0;
@@ -386,10 +259,6 @@
     transform: rotate(-180deg);
 }
 
-/* Utilise maintenant la classe générique .icon-container */
-
-/* Utilise les classes .plus-bar existantes */
-
 .arrow-bar-left {
     position: absolute;
     transform: translateX(-3px) rotate(-50deg);
@@ -408,7 +277,7 @@
 .event-details-section {
     margin-top: var(--sm);
     padding-top: var(--sm);
-    border-top: 1px solid var(--border);
+    border-top: 2px solid var(--border);
     animation: slideUpWithHeight 0.3s ease-out;
 }
 
@@ -447,264 +316,6 @@
     color: var(--text);
     font-weight: 500;
 }
-
-.participation-stats {
-    margin-top: var(--md);
-}
-
-.participation-stats h4 {
-    margin: 0 0 var(--sm) 0;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--text);
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--sm);
-}
-
-.stat-item {
-    text-align: center;
-    padding: var(--sm);
-    background: var(--bg);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-}
-
-.stat-number {
-    display: block;
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--text);
-}
-
-.stat-label {
-    display: block;
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    margin-top: var(--xs);
-}
-
-.stat-item.going .stat-number {
-    color: var(--success);
-}
-
-.stat-item.interested .stat-number {
-    color: var(--warning);
-}
-
-.stat-item.total .stat-number {
-    color: var(--primary);
-}
-
-
-
-/* Event details */
-.event-details {
-    display: flex;
-    flex-direction: column;
-    gap: var(--md);
-}
-
-.event-details-content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--md);
-}
-
-.modal-banner {
-    width: 100%;
-    height: 180px;
-    background-size: cover;
-    background-position: center;
-    border-radius: var(--radius);
-    margin-bottom: var(--md);
-}
-
-.event-info {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sm);
-}
-
-.info-item {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--sm);
-    padding: var(--xs) 0;
-}
-
-.info-item strong {
-    min-width: 100px;
-    color: var(--text-muted);
-    font-weight: 600;
-}
-
-.event-description {
-    color: var(--text);
-    line-height: 1.6;
-    margin: var(--sm) 0;
-}
-
-/* Participation stats */
-.participation-stats {
-    background: var(--bg);
-    border-radius: var(--radius);
-    padding: var(--md);
-}
-
-.participation-stats h4 {
-    margin: 0 0 var(--sm) 0;
-    font-size: var(--text-md);
-    color: var(--text);
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--sm);
-}
-
-.stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xs);
-    padding: var(--sm);
-    background: var(--surface);
-    border-radius: var(--radius);
-}
-
-.stat-number {
-    font-size: var(--text-xl);
-    font-weight: 700;
-    color: var(--text);
-}
-
-.stat-label {
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    text-align: center;
-}
-
-/* Friends participation */
-.friends-participation {
-    background: var(--bg);
-    border-radius: var(--radius);
-    padding: var(--md);
-}
-
-.friends-participation h4 {
-    margin: 0 0 var(--sm) 0;
-    font-size: var(--text-md);
-    color: var(--text);
-}
-
-.friends-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xs);
-}
-
-.friend-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--sm);
-    background: var(--surface);
-    border-radius: var(--radius);
-}
-
-.friend-names {
-    font-size: var(--text-sm);
-    color: var(--text);
-    font-weight: 500;
-}
-
-.friend-status {
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-}
-
-/* Event states */
-.event-not-found {
-    text-align: center;
-    padding: var(--xl);
-    color: var(--text-muted);
-}
-
-.event-not-found p {
-    margin: 0;
-    font-size: var(--text-md);
-}
-
-.event-item {
-    padding: var(--md);
-    background: var(--background-secondary);
-    border-radius: var(--radius);
-    border-left: 3px solid var(--primary);
-}
-
-.event-date {
-    font-size: var(--text-xs);
-    color: var(--primary);
-    font-weight: var(--font-weight-semibold);
-    margin-bottom: var(--xs);
-}
-
-.event-title {
-    font-size: var(--text-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text);
-    margin-bottom: var(--xs);
-}
-
-.event-location {
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: var(--xs);
-}
-
-.more-events {
-    padding: var(--sm);
-    text-align: center;
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    background: var(--background-secondary);
-    border-radius: var(--radius);
-    border: 1px dashed var(--border);
-}
-
-.no-events {
-    text-align: center;
-    padding: var(--lg);
-    background: var(--background-secondary);
-    border-radius: var(--radius);
-    border: 1px dashed var(--border);
-}
-
-.no-events-icon {
-    font-size: var(--text-2xl);
-    margin-bottom: var(--sm);
-}
-
-.no-events-text {
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-}
-
-/* Events lists */
-.events-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sm);
-}
-
-/* Classes events-nav, events-nav-button, events-content, events-list supprimées (non utilisées) */
 
 /* Animation de suppression pour EventCard */
 .event-card.fading-out {

@@ -245,51 +245,6 @@
     color: var(--text-secondary);
 }
 
-/* Chart */
-.analytics-chart-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: var(--md);
-    box-shadow: var(--shadow);
-}
-
-.analytics-chart {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--xs);
-    height: 200px;
-    padding: var(--md);
-}
-
-.analytics-chart-bar-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    height: 100%;
-    justify-content: flex-end;
-}
-
-.analytics-chart-bar {
-    width: 100%;
-    min-height: 2px;
-    background: var(--primary);
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    transition: all 0.2s;
-}
-
-.analytics-chart-bar:hover {
-    opacity: 0.8;
-}
-
-.analytics-chart-label {
-    font-size: var(--text-xs);
-    color: var(--text-secondary);
-    margin-top: var(--xs);
-    text-align: center;
-}
-
 /* History */
 .analytics-history-container {
     background: var(--surface);
@@ -440,11 +395,6 @@
     cursor: not-allowed;
 }
 
-.analytics-btn-small {
-    padding: var(--xs) var(--sm);
-    font-size: var(--text-xs);
-}
-
 .analytics-comparison-chart-container {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -487,14 +437,6 @@
     min-height: 2px;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
     transition: all 0.2s;
-}
-
-.analytics-comparison-bar-tracked {
-    background: var(--primary);
-}
-
-.analytics-comparison-bar-reference {
-    background: var(--success);
 }
 
 .analytics-comparison-bar-positive {
@@ -540,10 +482,6 @@
     font-weight: var(--font-weight-semibold);
 }
 
-.analytics-comparison-separator {
-    color: var(--text-tertiary);
-}
-
 .analytics-comparison-value-reference {
     color: var(--success);
     font-weight: var(--font-weight-semibold);
@@ -567,12 +505,6 @@
 .analytics-comparison-value-no-data {
     color: var(--text-tertiary);
     font-style: italic;
-}
-
-.analytics-reference-protected {
-    color: var(--text-tertiary);
-    font-size: var(--text-md);
-    cursor: not-allowed;
 }
 
 .analytics-comparison-legend {
@@ -609,14 +541,6 @@
     width: 16px;
     height: 16px;
     border-radius: var(--radius-sm);
-}
-
-.analytics-legend-tracked {
-    background: var(--primary);
-}
-
-.analytics-legend-reference {
-    background: var(--success);
 }
 
 .analytics-legend-positive {

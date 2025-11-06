@@ -10,13 +10,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import type { Event, UserResponseValue } from '@/types/fomoTypes'
 
-declare global {
-    interface Window {
-        setSelectedEventFromProfile?: (event: Event) => void
-        navigateToMapPage?: () => void
-    }
-}
-
 interface ActivityItem {
     event: Event
     response: 'going' | 'interested' | 'cleared' | 'not_interested'

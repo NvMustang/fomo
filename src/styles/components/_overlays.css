@@ -64,9 +64,9 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 15vh;
+    padding-top: 12vh;
     /* Positionner à 85% de la hauteur (15vh depuis le haut = 85% du viewport) */
-    z-index: 99999;
+    z-index: var(--z-index-toast);
     background: transparent;
     backdrop-filter: none;
     animation: overlayFadeIn 0.3s ease-out;
@@ -88,12 +88,18 @@
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
         0 0 0 1px rgba(255, 255, 255, 0.2) inset;
     text-align: center;
-    animation: toastSlideUpBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+    animation: toastSlideUpBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+        toastPulse 4s cubic-bezier(0.33, 0, 0.67, 1) 0.6s infinite;
     border: none;
-    max-width: 360px;
-    width: 100%;
+    max-width: 300px;
+    width: auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     position: relative;
     overflow: hidden;
+    box-sizing: border-box;
     /* Le toast lui-même doit être cliquable même si l'overlay ne l'est pas */
     pointer-events: auto;
 }
@@ -136,12 +142,18 @@
     font-size: var(--text-lg);
     font-weight: 600;
     color: var(--text);
+    max-width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .toast-message p {
     margin: 0;
     font-size: var(--text-sm);
     color: var(--text-muted);
+    max-width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 /* Animations */
@@ -162,18 +174,6 @@
 
     to {
         opacity: 0;
-    }
-}
-
-@keyframes messageSlideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.9);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
     }
 }
 
@@ -198,6 +198,7 @@
         transform: translateY(0) scale(1) rotate(0deg);
     }
 }
+
 
 /* Animation de sortie pour toast */
 @keyframes toastSlideDown {
@@ -232,4 +233,86 @@
 
 .toast-message.error h3 {
     color: var(--danger);
+}
+
+/* Animation rebondissante pour toast impatience */
+@keyframes toastBounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    25% {
+        transform: translateY(-8px);
+    }
+
+    50% {
+        transform: translateY(0);
+    }
+
+    75% {
+        transform: translateY(-4px);
+    }
+}
+
+/* Animation de scale continu pour toasts - respiration naturelle */
+/* Inspiration lente (0-60%) puis expiration plus rapide (60-100%) */
+@keyframes toastPulse {
+    0% {
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+
+    15% {
+        transform: translateY(0) scale(1.008) rotate(0deg);
+    }
+
+    30% {
+        transform: translateY(0) scale(1.018) rotate(0deg);
+    }
+
+    45% {
+        transform: translateY(0) scale(1.025) rotate(0deg);
+    }
+
+    60% {
+        transform: translateY(0) scale(1.03) rotate(0deg);
+    }
+
+    70% {
+        transform: translateY(0) scale(1.02) rotate(0deg);
+    }
+
+    80% {
+        transform: translateY(0) scale(1.01) rotate(0deg);
+    }
+
+    90% {
+        transform: translateY(0) scale(1.003) rotate(0deg);
+    }
+
+    100% {
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+/* Toast qui rebondit : uniquement bounce (pas de pulse) */
+.toast-bounce .toast-message {
+    animation: toastSlideUpBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+        toastBounce 1.5s ease-in-out infinite;
+}
+
+/* Overlay pour permettre le scroll et réduire les barres du navigateur */
+.viewport-scroll-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-index-toast) - 1);
+    /* Transparent pour permettre le scroll sans bloquer la vue */
+    background: transparent;
+    /* Permettre tous les événements de passer à travers (scroll, touch, etc.) */
+    pointer-events: none;
+    /* Animation d'entrée subtile */
+    animation: overlayFadeIn 0.3s ease-out;
+    /* Permettre tous les gestes tactiles de passer à travers */
+    touch-action: auto;
 }

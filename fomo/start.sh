@@ -148,6 +148,7 @@ if [ "$USE_LOCALHOST" = "true" ]; then
 else
     echo "📱 Frontend: http://$LOCAL_IP:3000 (PID: $FRONTEND_PID)"
     echo "🔧 Backend:  http://$LOCAL_IP:3001 (PID: $BACKEND_PID)"
+    echo "🎉 Welcome Event: http://$LOCAL_IP:3000/?event=evt_welcome_000000"
     echo ""
 
 fi

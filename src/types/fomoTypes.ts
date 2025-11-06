@@ -184,3 +184,37 @@ export interface BatchProcessResult {
         toUserId?: string
     }>
 }
+
+// ===== API PAYLOADS =====
+export interface UserCreatePayload {
+    id?: string
+    name: string
+    email: string
+    city: string
+    lat: number | null
+    lng: number | null
+    friendsCount: number
+    showAttendanceToFriends: boolean
+    privacy: { showAttendanceToFriends: boolean }
+    isPublicProfile: boolean
+    isActive: boolean
+    isAmbassador: boolean
+    allowRequests: boolean
+    modifiedAt: string
+    lastConnexion: string
+}
+
+// ===== EMAIL VALIDATION =====
+export const VALID_TLDS = [
+    // Top TLD génériques
+    'com', 'net', 'org', 'info', 'io', 'app', 'dev', 'online', 'club',
+    // TLD nationaux principaux - Europe
+    'fr', 'be', 'ch', 'uk', 'de', 'nl', 'es', 'it', 'pt', 'at', 'dk', 'se', 'no', 'fi',
+    'pl', 'cz', 'ro', 'hu', 'gr', 'ie', 'lu', 'bg', 'sk', 'lt', 'lv', 'ee',
+    // TLD nationaux principaux - Amériques
+    'ca', 'us', 'mx', 'br', 'ar', 'cl', 'co', 'pe', 'uy',
+    // TLD nationaux principaux - Asie/Pacifique
+    'au', 'nz', 'sg', 'hk', 'my', 'id', 'th', 'vn', 'tw', 'jp', 'kr', 'cn', 'in',
+    // TLD nationaux principaux - Autres
+    'za', 'ru', 'tr', 'il'
+] as const

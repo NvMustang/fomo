@@ -94,7 +94,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    hmr: false,
+    hmr: true,
   },
   preview: {
     port: 3000,

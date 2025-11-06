@@ -11,7 +11,7 @@
  * @version 1.0.0
  */
 
-import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction, BatchProcessResult, AddressSuggestion } from '@/types/fomoTypes'
+import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction, BatchProcessResult, AddressSuggestion, UserCreatePayload } from '@/types/fomoTypes'
 import { isFriendshipActionData } from '@/types/fomoTypes'
 import { getApiBaseUrl } from '@/config/env'
 import { format } from 'date-fns'
@@ -642,7 +642,7 @@ export class FomoDataManager {
     async updateUser(userId: string, userData: Partial<User>, newId?: string): Promise<User | null> {
         try {
             // Préparer le payload avec uniquement les champs fournis (mise à jour partielle)
-            const payload: any = {
+            const payload: Partial<User> & { id: string } = {
                 id: newId || userId, // Utiliser newId si fourni, sinon userId
                 ...userData // Inclure tous les champs fournis dans userData (isVisitor, name, city, etc.)
             }
@@ -677,7 +677,7 @@ export class FomoDataManager {
         let lng = null
 
         // Préparer le payload avec tous les champs explicites (valeurs par défaut comme pour events)
-        const payload: any = {
+        const payload: UserCreatePayload = {
             ...(userData.id && userData.id.trim() ? { id: userData.id } : {}), // Envoyer l'ID seulement s'il existe vraiment
             name: userData.name,
             email: userData.email,

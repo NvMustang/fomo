@@ -8,7 +8,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components'
 import { getApiBaseUrl } from '@/config/env'
-import { useToast } from '@/hooks'
+import { useToast, useModalScrollHint } from '@/hooks'
 
 interface BetaModalProps {
     isOpen: boolean
@@ -22,6 +22,9 @@ export const BetaModal: React.FC<BetaModalProps> = ({ isOpen, onClose }) => {
     const [message, setMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState('')
+
+    // Animation de scroll à l'ouverture du modal
+    const modalContentRef = useModalScrollHint(isOpen)
 
     // Reset form when modal opens/closes
     useEffect(() => {
@@ -121,7 +124,7 @@ export const BetaModal: React.FC<BetaModalProps> = ({ isOpen, onClose }) => {
         <div className="modal_overlay" onClick={handleOverlayClick}>
             <div className="modal_container">
                 <div className="modal" onClick={(e) => e.stopPropagation()}>
-                    <div className="modal-content">
+                    <div ref={modalContentRef} className="modal-content">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
                             <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-semibold)' }}>
                                 Retour Beta
@@ -160,9 +163,9 @@ export const BetaModal: React.FC<BetaModalProps> = ({ isOpen, onClose }) => {
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
                                     disabled={isLoading}
-                                    rows={20}
+                                    rows={10}
                                     required
-                                    style={{ minHeight: '300px' }}
+                                    style={{ minHeight: '150px' }}
                                 />
                             </div>
 

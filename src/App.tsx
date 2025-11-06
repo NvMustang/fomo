@@ -288,7 +288,7 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
         }
 
         // Réinitialiser l'événement sélectionné lors d'un changement de page manuel
-        if (page !== 'map' && (window as any).setSelectedEventFromProfile) {
+        if (page !== 'map' && window.setSelectedEventFromProfile) {
             // La sélection est gérée par DiscoverPage via window.setSelectedEventFromProfile
         }
     }
@@ -299,7 +299,7 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
             setCurrentPage('map')
         }
         return () => {
-            delete (window as any).navigateToMapPage
+            delete window.navigateToMapPage
         }
     }, [])
 

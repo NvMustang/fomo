@@ -22,6 +22,7 @@ interface EventCardProps {
     isMyEventsPage?: boolean // Pour distinguer le comportement sur My Events
     onEdit?: (event: Event) => void // Callback pour éditer l'événement
     onResponseClick?: (response: UserResponseValue) => void // Callback quand une réponse est cliquée (pour déclencher les étoiles)
+    responseButtonsDisabled?: boolean // Désactive les boutons réponse (visuellement et animations)
 }
 
 export const EventCard = React.memo<EventCardProps>(({
@@ -30,6 +31,7 @@ export const EventCard = React.memo<EventCardProps>(({
     isProfilePage = false,
     onEdit,
     onResponseClick,
+    responseButtonsDisabled = false,
 }: EventCardProps) => {
     // État pour l'expansion des détails
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
@@ -84,6 +86,10 @@ export const EventCard = React.memo<EventCardProps>(({
 
     const toggleExpanded = () => {
         setIsDetailsExpanded(!isDetailsExpanded)
+        // Appeler la fonction d'activation des boutons visitor si disponible
+        if (window.__activateVisitorButtons) {
+            window.__activateVisitorButtons()
+        }
     }
 
     // Handler pour confirmer le nom visitor
@@ -366,27 +372,40 @@ export const EventCard = React.memo<EventCardProps>(({
 
                 return (
                     <>
-                        <ButtonGroup
-                            items={RESPONSE_OPTIONS.map(({ type, label }) => ({ value: type, label }))}
-                            defaultValue={groupValue}
-                            onChange={(next) => {
-                                const nextFinal: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' =
-                                    next === null ? 'cleared' : next
-                                localFinalResponseRef.current = nextFinal
-                                // Mettre à jour le style du pin instantanément (UI)
-                                setStylingPin(event.id, nextFinal)
+                        <div 
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
+                            <ButtonGroup
+                                items={RESPONSE_OPTIONS.map(({ type, label }) => ({ 
+                                    value: type, 
+                                    label,
+                                    disabled: responseButtonsDisabled
+                                }))}
+                                defaultValue={groupValue}
+                                onChange={(next) => {
+                                    // Si les boutons sont désactivés, ne rien faire (pas d'animation stars)
+                                    if (responseButtonsDisabled) {
+                                        return
+                                    }
+                                    const nextFinal: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' =
+                                        next === null ? 'cleared' : next
+                                    localFinalResponseRef.current = nextFinal
+                                    // Mettre à jour le style du pin instantanément (UI)
+                                    setStylingPin(event.id, nextFinal)
 
-                                // Si une réponse est sélectionnée (pas cleared)
-                                if (next !== null) {
-                                    // Notifier le parent pour afficher les étoiles (si callback fourni)
-                                    onResponseClick?.(next)
-                                }
-                                // Ne pas envoyer ici. L'envoi est géré dans handleClose (au démontage)
-                            }}
-                            className="event-response-buttons-container"
-                            buttonClassName="response-button"
-                            ariaLabel="Choix de réponse"
-                        />
+                                    // Si une réponse est sélectionnée (pas cleared)
+                                    if (next !== null) {
+                                        // Notifier le parent pour afficher les étoiles (si callback fourni)
+                                        onResponseClick?.(next)
+                                    }
+                                    // Ne pas envoyer ici. L'envoi est géré dans handleClose (au démontage)
+                                }}
+                                className="event-response-buttons-container"
+                                buttonClassName="response-button"
+                                ariaLabel="Choix de réponse"
+                            />
+                        </div>
                     </>
                 )
             })()}

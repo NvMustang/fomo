@@ -99,19 +99,68 @@ class AutoSaveAnalyticsService {
             const sessionId = getSessionId()
             const userName = getUserName()
 
+            // Limiter la taille du payload pour éviter l'erreur 413 (Payload Too Large)
+            // Garder seulement les 500 dernières requêtes de l'historique
+            const MAX_HISTORY_TO_SEND = 500
+            const limitedHistory = stats.history.length > MAX_HISTORY_TO_SEND
+                ? stats.history.slice(-MAX_HISTORY_TO_SEND)
+                : stats.history
+
+            // Réduire aussi les requêtes détaillées dans les stats pour chaque provider
+            const limitedStats = { ...stats.stats }
+            Object.keys(limitedStats).forEach(provider => {
+                const providerStats = limitedStats[provider as keyof typeof limitedStats]
+                if (providerStats.requests && providerStats.requests.length > 50) {
+                    limitedStats[provider as keyof typeof limitedStats] = {
+                        ...providerStats,
+                        requests: providerStats.requests.slice(-50)
+                    }
+                }
+            })
+
+            const payload = {
+                sessionId,
+                userName,
+                stats: limitedStats,
+                history: limitedHistory,
+                maptilerReferences: stats.maptilerReferences
+            }
+
+            // Vérifier la taille approximative du payload (en bytes)
+            const payloadSize = new Blob([JSON.stringify(payload)]).size
+            const MAX_PAYLOAD_SIZE = 500 * 1024 // 500 KB
+
+            if (payloadSize > MAX_PAYLOAD_SIZE) {
+                // Réduire encore plus l'historique si nécessaire
+                const targetHistorySize = Math.floor((MAX_PAYLOAD_SIZE * 0.7) / 200) // ~200 bytes par requête
+                const furtherLimitedHistory = limitedHistory.slice(-targetHistorySize)
+                payload.history = furtherLimitedHistory
+                console.warn(`⚠️ [AutoSave] Payload trop volumineux (${Math.round(payloadSize / 1024)} KB), réduction à ${furtherLimitedHistory.length} requêtes`)
+            }
+
             const response = await fetch(`${apiUrl}/analytics/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    sessionId,
-                    userName,
-                    stats: stats.stats,
-                    history: stats.history,
-                    maptilerReferences: stats.maptilerReferences
-                })
+                body: JSON.stringify(payload)
             })
+
+            if (!response.ok) {
+                if (response.status === 413) {
+                    console.warn('⚠️ [AutoSave] Payload trop volumineux (413), données tronquées')
+                    return
+                }
+                const errorText = await response.text()
+                let errorData
+                try {
+                    errorData = JSON.parse(errorText)
+                } catch {
+                    errorData = { error: errorText }
+                }
+                console.warn('⚠️ [AutoSave] Erreur sauvegarde:', errorData.error || `HTTP ${response.status}`)
+                return
+            }
 
             const result = await response.json()
             if (result.success) {
@@ -126,7 +175,12 @@ class AutoSaveAnalyticsService {
         } catch (error) {
             // Ne pas logger en cas d'erreur réseau (page qui se ferme)
             if (!immediate) {
-                console.warn('⚠️ [AutoSave] Erreur sauvegarde analytics:', error)
+                const errorMessage = error instanceof Error ? error.message : String(error)
+                if (errorMessage.includes('413') || errorMessage.includes('Payload Too Large')) {
+                    console.warn('⚠️ [AutoSave] Payload trop volumineux, données non sauvegardées')
+                } else {
+                    console.warn('⚠️ [AutoSave] Erreur sauvegarde analytics:', errorMessage)
+                }
             }
         }
     }

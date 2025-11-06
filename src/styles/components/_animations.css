@@ -73,58 +73,9 @@
 }
 
 
-/* ========================
-   TRANSITION UTILITIES
-======================== */
-
-.transition-fast {
-    transition: all var(--transition-fast);
-}
-
-.transition-medium {
-    transition: all var(--transition-medium);
-}
-
 /* Fade out animation for rejected events */
 .fade-out-2s {
     animation: fadeOut 2s ease-in-out forwards;
-}
-
-/* Animation pour la zone expandable de partage */
-@keyframes shareSectionExpand {
-    from {
-        opacity: 0;
-        max-height: 0;
-        transform: translateY(-10px);
-    }
-
-    to {
-        opacity: 1;
-        max-height: 70vh;
-        transform: translateY(0);
-    }
-}
-
-@keyframes shareSectionCollapse {
-    from {
-        opacity: 1;
-        max-height: 70vh;
-        transform: translateY(0);
-    }
-
-    to {
-        opacity: 0;
-        max-height: 0;
-        transform: translateY(-10px);
-    }
-}
-
-.share-section-expanding {
-    animation: shareSectionExpand 0.3s ease-out forwards;
-}
-
-.share-section-collapsing {
-    animation: shareSectionCollapse 0.3s ease-out forwards;
 }
 
 /* ========================
@@ -195,8 +146,8 @@
     position: relative;
     /* S'assurer que le halo n'est pas coupé */
     overflow: visible;
-    /* Animation sur le toggle lui-même */
-    animation: togglePulse 1s ease-out infinite;
+    /* Animation sur le toggle lui-même - ralentie à 2.5s */
+    animation: togglePulse 2.5s ease-out infinite;
     /* Optimisation pour mobile */
     will-change: transform;
     -webkit-backface-visibility: hidden;
@@ -217,9 +168,10 @@
     margin-top: calc(var(--toggle-height) / -2);
     margin-left: calc(var(--toggle-width) / -2);
     border-radius: var(--toggle-radius);
-    background: rgba(59, 130, 246, 0.3);
-    border: 2px solid rgba(59, 130, 246, 0.6);
-    animation: haloPulse 1s ease-out infinite;
+    background: color-mix(in srgb, var(--current-color) 30%, transparent);
+    border: 2px solid color-mix(in srgb, var(--current-color) 60%, transparent);
+    /* Animation ralentie à 2.5s */
+    animation: haloPulse 2.5s ease-out infinite;
     pointer-events: none;
     /* z-index pour rester derrière le toggle-track mais visible */
     z-index: 0;
@@ -229,4 +181,20 @@
     backface-visibility: hidden;
     /* Forcer l'accélération matérielle sur mobile */
     transform: translateZ(0);
+}
+
+/* ========================
+   BUTTON PULSE (pour bouton signup)
+======================== */
+
+@keyframes buttonPulse {
+
+    0%,
+    100% {
+        transform: translateX(-50%) scale(1);
+    }
+
+    50% {
+        transform: translateX(-50%) scale(1.05);
+    }
 }

@@ -16,16 +16,18 @@ import { FilterBar } from '@/components/ui/FilterBar'
 
 import { WelcomeScreen } from '@/components/modals/WelcomeScreen'
 import { useStarsAnimation } from '@/components/visitorIntegration'
+import { useDevice } from '@/contexts/DeviceContext'
+import { useToast } from '@/hooks'
 
 // ===== TYPES =====
 interface VisitorModeProps {
   enabled: boolean
   event?: Event | null
-  onEventCardMount?: () => void
   fakePinsLogic?: import('@/components/visitorIntegration').FakePinsLogic
   onResponseClick?: (responseType: import('@/types/fomoTypes').UserResponseValue) => void
   onEventCardClose?: () => void
   starsAnimation?: React.ReactNode
+  responseButtonsDisabled?: boolean
 }
 
 interface DiscoverPageProps {
@@ -45,6 +47,8 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   // ===== HOOKS CONTEXTUELS =====
   const { getMapEvents } = useFilters()
   const { isPublicMode } = usePrivacy()
+  const { platformInfo } = useDevice()
+  const { showToast, hideToast } = useToast()
 
   // ===== ÉTATS LOCAUX =====
   // Unifier les sources visitor via visitorMode si fourni
@@ -52,13 +56,11 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const vmEvent = visitorMode?.event || null
   const vmFakePins = visitorMode?.fakePinsLogic
   const vmOnResponseClick = visitorMode?.onResponseClick
-  const vmOnEventCardMount = visitorMode?.onEventCardMount
   const vmStarsAnimation = visitorMode?.starsAnimation
+  const vmResponseButtonsDisabled = visitorMode?.responseButtonsDisabled ?? false
 
-  // En mode visitor, définir selectedEvent immédiatement pour afficher l'EventCard et masquer l'écran de chargement
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(
-    vmEnabled && vmEvent ? vmEvent : null
-  )
+  // En mode visitor, ne pas ouvrir EventCard automatiquement au démarrage
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
 
   // La logique de clic sur les événements est unifiée dans handleEventClick (mode normal et visitor)
 
@@ -84,15 +86,15 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         // Si on est sur la page Discover, centrer sur l'événement
         if (event.venue) {
           setTimeout(() => {
-            if ((window as any).centerMapOnEvent) {
-              (window as any).centerMapOnEvent(event)
+            if (window.centerMapOnEvent) {
+              window.centerMapOnEvent(event)
             }
           }, 100)
         }
       }
     }
     return () => {
-      delete (window as any).setSelectedEventFromProfile
+      delete window.setSelectedEventFromProfile
     }
   }, [vmEnabled])
 
@@ -112,11 +114,11 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
     // En mode visitor, synchroniser selectedEventRef et fermer via la fonction globale
     if (vmEnabled) {
-      if ((window as any).__updateVisitorSelectedEventRef) {
-        (window as any).__updateVisitorSelectedEventRef(null)
+      if (window.__updateVisitorSelectedEventRef) {
+        window.__updateVisitorSelectedEventRef(null)
       }
-      if ((window as any).__closeEventCard) {
-        (window as any).__closeEventCard()
+      if (window.__closeEventCard) {
+        window.__closeEventCard()
       }
     }
   }, [vmEnabled, vmFakePins])
@@ -132,12 +134,16 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     // Utiliser un seul état selectedEvent pour tous les événements (vrais et fake)
     // La synchronisation avec fakePinsLogic se fait via useEffect
     if (vmEnabled) {
-      // Mode visitor : synchroniser selectedEventRef et utiliser setSelectedEvent via __openEventCard
-      if ((window as any).__updateVisitorSelectedEventRef) {
-        (window as any).__updateVisitorSelectedEventRef(event)
+      // Mode visitor : fermer le toast invitation immédiatement lors du clic sur le pin
+      if (window.__onVisitorPinClick) {
+        window.__onVisitorPinClick()
       }
-      if ((window as any).__openEventCard) {
-        (window as any).__openEventCard(event)
+      // Mode visitor : synchroniser selectedEventRef et utiliser setSelectedEvent via __openEventCard
+      if (window.__updateVisitorSelectedEventRef) {
+        window.__updateVisitorSelectedEventRef(event)
+      }
+      if (window.__openEventCard) {
+        window.__openEventCard(event)
       }
     } else {
       // Mode normal : utiliser setSelectedEvent directement
@@ -154,8 +160,8 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     if (vmEnabled && vmEvent && vmEvent.venue) {
       // Petit délai pour laisser la carte se stabiliser
       setTimeout(() => {
-        if ((window as any).centerMapOnEvent) {
-          (window as any).centerMapOnEvent(vmEvent)
+        if (window.centerMapOnEvent) {
+          window.centerMapOnEvent(vmEvent)
           // Appeler onEventCentered après le centrage
           onEventCentered?.()
         }
@@ -209,13 +215,23 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       }
     }
   }, [selectedEvent, vmEnabled, vmFakePins, selectedFakeEventFromLogic])
-  // Notifier le parent que l'EventCard est monté (mode visitor)
-  // Appel immédiat pour masquer l'écran de chargement - l'animation flyTo attendra 2 secondes
+  // Notifier l'ouverture de l'EventCard (visitor mode) - une seule fois par événement
+  const lastNotifiedEventRef = useRef<string | null>(null)
   useEffect(() => {
-    if (vmEnabled && selectedEvent && vmOnEventCardMount) {
-      vmOnEventCardMount()
+    if (vmEnabled && selectedEvent && selectedEvent.id !== lastNotifiedEventRef.current) {
+      lastNotifiedEventRef.current = selectedEvent.id
+      const isFake = (selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake
+      if (isFake && window.__onVisitorFakeEventCardOpened) {
+        window.__onVisitorFakeEventCardOpened(selectedEvent)
+      } else if (!isFake && window.__onVisitorEventCardOpened) {
+        window.__onVisitorEventCardOpened(selectedEvent)
+      }
     }
-  }, [vmEnabled, selectedEvent, vmOnEventCardMount])
+    // Reset quand selectedEvent devient null
+    if (!selectedEvent) {
+      lastNotifiedEventRef.current = null
+    }
+  }, [vmEnabled, selectedEvent])
 
   // Fermer l'EventCard lors de l'ouverture du modal CreateEvent
   useEffect(() => {
@@ -252,11 +268,11 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           setSelectedEvent(event)
         }
       }
-        ; (window as any).__closeEventCard = closeEventCard
-        ; (window as any).__openEventCard = openEventCard
+        ; (window.__closeEventCard = closeEventCard)
+        ; (window.__openEventCard = openEventCard)
       return () => {
-        delete (window as any).__closeEventCard
-        delete (window as any).__openEventCard
+        delete window.__closeEventCard
+        delete window.__openEventCard
       }
     }
   }, [vmEnabled])
@@ -287,6 +303,148 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       // Ignorer si sessionStorage indisponible
     }
   }, [vmEnabled]) // Se déclenche au montage (vmEnabled initial) et lors des changements
+
+  // ===== SURVEILLANCE DU VIEWPORT (MOBILE UNIQUEMENT) =====
+  // Timer de 30s au montage, puis affichage toast si viewport < seuil
+  // Le seuil est défini une fois (viewportHeight * 0.95) quand le viewport augmente
+  const viewportThresholdRef = useRef<number | null>(null)
+  const initialTimerRef = useRef<number | null>(null)
+  const monitoringTimerRef = useRef<number | null>(null)
+  const autoHideTimerRef = useRef<number | null>(null)
+  const lastViewportHeightRef = useRef<number | null>(null)
+  const isToastVisibleRef = useRef(false)
+  const [showScrollOverlay, setShowScrollOverlay] = useState(false)
+
+  useEffect(() => {
+    // Ne surveiller que sur mobile avec visualViewport disponible
+    if (!platformInfo?.isMobile || !window.visualViewport) {
+      return
+    }
+
+    // Réinitialiser le seuil et les timers au montage
+    viewportThresholdRef.current = null
+    lastViewportHeightRef.current = null
+    isToastVisibleRef.current = false
+    setShowScrollOverlay(false)
+
+    // Fonction pour masquer le toast proprement
+    const hideToastSafely = () => {
+      if (isToastVisibleRef.current) {
+        hideToast()
+        isToastVisibleRef.current = false
+        setShowScrollOverlay(false)
+      }
+      if (autoHideTimerRef.current !== null) {
+        clearTimeout(autoHideTimerRef.current)
+        autoHideTimerRef.current = null
+      }
+    }
+
+    // Fonction pour afficher le toast
+    const displayToast = () => {
+      if (isToastVisibleRef.current) return // Éviter les doublons
+
+      isToastVisibleRef.current = true
+      setShowScrollOverlay(true)
+      
+      // Faire remonter la page tout en haut pour permettre le scroll et masquer les barres
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      
+      showToast({
+        title: '💡 Conseil',
+        message: 'Scroll légèrement vers le haut pour agrandir l\'interface',
+        type: 'info',
+        position: 'top',
+        className: 'toast-visitor',
+        duration: 5000 // Auto-masquage après 5 secondes
+      })
+
+      // Masquer le toast après 5 secondes
+      autoHideTimerRef.current = window.setTimeout(() => {
+        hideToastSafely()
+      }, 5000)
+    }
+
+    // Fonction pour vérifier le viewport et gérer le seuil
+    const checkViewport = () => {
+      const vp = window.visualViewport
+      if (!vp) return
+
+      const currentHeight = vp.height
+      const previousHeight = lastViewportHeightRef.current
+
+      // Si le viewport a augmenté
+      if (previousHeight !== null && currentHeight > previousHeight) {
+        // Si on n'a pas encore de seuil, l'enregistrer
+        if (viewportThresholdRef.current === null) {
+          viewportThresholdRef.current = currentHeight * 0.95
+        }
+        // Annuler le timer initial si encore actif
+        if (initialTimerRef.current !== null) {
+          clearTimeout(initialTimerRef.current)
+          initialTimerRef.current = null
+        }
+        // Masquer le toast si visible (même pendant les 5 secondes)
+        hideToastSafely()
+      }
+
+      // Mettre à jour la dernière hauteur
+      lastViewportHeightRef.current = currentHeight
+
+      // Si le seuil est défini, vérifier si on est en dessous
+      if (viewportThresholdRef.current !== null) {
+        if (currentHeight < viewportThresholdRef.current) {
+          // Viewport en dessous du seuil : relancer le timer de 30s si pas déjà lancé
+          if (monitoringTimerRef.current === null && !isToastVisibleRef.current) {
+            monitoringTimerRef.current = window.setTimeout(() => {
+              monitoringTimerRef.current = null
+              displayToast()
+            }, 30000)
+          }
+        } else {
+          // Viewport au-dessus du seuil : annuler le timer et masquer le toast
+          if (monitoringTimerRef.current !== null) {
+            clearTimeout(monitoringTimerRef.current)
+            monitoringTimerRef.current = null
+          }
+          hideToastSafely()
+        }
+      }
+    }
+
+    // Lancer le timer initial de 30 secondes au montage
+    initialTimerRef.current = window.setTimeout(() => {
+      initialTimerRef.current = null
+      displayToast()
+    }, 30000)
+
+    // Écouter les changements du viewport
+    const vp = window.visualViewport
+    vp.addEventListener('resize', checkViewport)
+
+    // Vérifier immédiatement pour initialiser lastViewportHeightRef
+    checkViewport()
+
+    // Nettoyage au démontage
+    return () => {
+      if (initialTimerRef.current !== null) {
+        clearTimeout(initialTimerRef.current)
+        initialTimerRef.current = null
+      }
+      if (monitoringTimerRef.current !== null) {
+        clearTimeout(monitoringTimerRef.current)
+        monitoringTimerRef.current = null
+      }
+      if (autoHideTimerRef.current !== null) {
+        clearTimeout(autoHideTimerRef.current)
+        autoHideTimerRef.current = null
+      }
+      if (vp) {
+        vp.removeEventListener('resize', checkViewport)
+      }
+      hideToastSafely()
+    }
+  }, [platformInfo?.isMobile, showToast, hideToast])
 
   return (
     <>
@@ -325,7 +483,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
             <div className="event-card-container fade-in-500ms">
               <FakeEventCard
                 event={selectedEvent}
-                variantIndex={vmFakePins?.fakeEventVariantIndex ?? 0}
                 onJoinClick={() => {
                   // En mode visitor, fermer la FakeEventCard et déclencher le flux visitor
                   if (vmEnabled && vmOnResponseClick) {
@@ -346,11 +503,15 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
         } else {
           // Afficher EventCard pour les vrais events
           return (
-            <div className="event-card-container">
+            <div
+              className="event-card-container"
+              style={vmEnabled ? { bottom: '5%' } : undefined}
+            >
               <EventCard
                 key={selectedEvent.id}
                 event={selectedEvent}
                 showToggleResponse={true}
+                responseButtonsDisabled={vmEnabled ? vmResponseButtonsDisabled : false}
                 onResponseClick={(responseType) => {
                   // En mode visitor, utiliser le handler visitor
                   if (vmEnabled && vmOnResponseClick) {
@@ -376,6 +537,11 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       })()}
       {/* Animation étoiles scintillantes - rendue dans un portail */}
       {StarsAnimation}
+
+      {/* Overlay pour permettre le scroll et réduire les barres du navigateur */}
+      {showScrollOverlay && (
+        <div className="viewport-scroll-overlay" />
+      )}
     </>
   )
 }

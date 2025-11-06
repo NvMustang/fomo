@@ -7,6 +7,8 @@
 import React, { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components'
+import { useModalScrollHint } from '@/hooks'
+import { VALID_TLDS } from '@/types/fomoTypes'
 
 interface VisitorNameModalProps {
     isOpen: boolean
@@ -83,48 +85,38 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
     const isValidEmail = (emailValue: string): boolean => {
         // Email optionnel, donc vide = valide
         if (!emailValue.trim()) return true
-        
+
         // Validation : vérifier la structure de l'email
         const atIndex = emailValue.indexOf('@')
         const dotIndex = emailValue.lastIndexOf('.')
-        
+
         // Vérifier qu'il y a un @ et un point après le @
         if (atIndex === -1 || dotIndex === -1 || dotIndex <= atIndex) {
             return false
         }
-        
+
         // Vérifier qu'il y a des caractères avant le @
         if (atIndex === 0) {
             return false
         }
-        
+
         // Vérifier qu'il y a des caractères entre le @ et le point
         if (dotIndex - atIndex <= 1) {
             return false
         }
-        
+
         // Vérifier qu'il y a des caractères après le point
         if (dotIndex === emailValue.length - 1) {
             return false
         }
-        
+
         // Vérifier que le TLD (domaine principal) est valide
         const tld = emailValue.substring(dotIndex + 1).toLowerCase()
-        const validTlds = [
-            // Top TLD génériques
-            'com', 'net', 'org', 'info', 'io', 'app', 'dev', 'online', 'club',
-            // TLD nationaux principaux
-            'fr', 'be', 'ch', 'uk', 'de', 'nl', 'es', 'it', 'pt', 'at', 'dk', 'se', 'no', 'fi',
-            'pl', 'cz', 'ro', 'hu', 'gr', 'ie', 'bg', 'sk', 'lt', 'lv', 'ee',
-            'ca', 'us', 'mx', 'br', 'ar', 'cl', 'co', 'pe', 'uy',
-            'au', 'nz', 'sg', 'hk', 'my', 'id', 'th', 'vn', 'tw', 'jp', 'kr', 'cn', 'in',
-            'za', 'ru', 'tr', 'il'
-        ]
-        
-        if (!validTlds.includes(tld)) {
+
+        if (!VALID_TLDS.includes(tld as typeof VALID_TLDS[number])) {
             return false
         }
-        
+
         return true
     }
 
@@ -148,6 +140,9 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
         }
     }
 
+    // Animation de scroll à l'ouverture du modal pour indiquer qu'il y a du contenu scrollable
+    const modalContentRef = useModalScrollHint(isOpen)
+
     if (!isOpen) return null
 
     // Utiliser directement le type de réponse sans normalisation
@@ -160,7 +155,10 @@ export const VisitorNameModal: React.FC<VisitorNameModalProps> = ({
                     className="modal visitor-modal-dynamic"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="modal-content modal-form visitor-form-dynamic">
+                    <div
+                        ref={modalContentRef}
+                        className="modal-content modal-form visitor-form-dynamic"
+                    >
                         {/* Header avec emoji et titre */}
                         <div className="form-section visitor-form-header">
                             <div style={{ fontSize: '48px', marginBottom: 'var(--sm)' }}>

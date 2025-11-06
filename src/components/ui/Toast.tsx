@@ -8,11 +8,13 @@ import React, { useState, useEffect, useRef } from 'react'
 export type ToastType = 'success' | 'error' | 'info'
 
 export interface ToastMessage {
-    title: string
-    message: string
+    title: string | React.ReactNode
+    message: string | React.ReactNode
     type: ToastType
     duration?: number
     className?: string
+    position?: 'top' | 'bottom'
+    bounceAnimation?: boolean
 }
 
 interface ToastProps {
@@ -36,17 +38,21 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
             setIsVisible(true)
             setIsClosing(false)
 
-            // Auto-fermeture après la durée spécifiée
-            const timer = setTimeout(() => {
-                setIsClosing(true)
-                // Attendre la fin de l'animation CSS avant de fermer
-                setTimeout(() => {
-                    setIsVisible(false)
-                    onClose()
-                }, 200) // Durée de l'animation de sortie
-            }, toast.duration || 2000)
+            // Auto-fermeture après la durée spécifiée (si duration est définie et > 0)
+            // Si duration est undefined ou 0, le toast attend l'action utilisateur
+            if (toast.duration !== undefined && toast.duration > 0) {
+                const timer = setTimeout(() => {
+                    setIsClosing(true)
+                    // Attendre la fin de l'animation CSS avant de fermer
+                    setTimeout(() => {
+                        setIsVisible(false)
+                        onClose()
+                    }, 200) // Durée de l'animation de sortie
+                }, toast.duration)
 
-            return () => clearTimeout(timer)
+                return () => clearTimeout(timer)
+            }
+            // Pas de timer si duration est undefined ou 0
         } else if (isVisibleRef.current) {
             // Fermeture immédiate avec animation quand toast devient null
             setIsClosing(true)
@@ -63,8 +69,21 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
         return null
     }
 
+    const position = toast.position || 'top'
+    const isBottom = position === 'bottom'
+    const overlayStyle: React.CSSProperties = isBottom
+        ? {
+            alignItems: 'flex-end',
+            paddingTop: 0,
+            paddingBottom: '15vh'
+        }
+        : {}
+
     return (
-        <div className={`toast-overlay ${isClosing ? 'closing' : ''}`}>
+        <div 
+            className={`toast-overlay ${isClosing ? 'closing' : ''} ${toast.bounceAnimation ? 'toast-bounce' : ''}`}
+            style={overlayStyle}
+        >
             <div className={`toast-message ${toast.type} ${toast.className || ''}`}>
                 <h3>{toast.title}</h3>
                 {toast.message && <p>{toast.message}</p>}
