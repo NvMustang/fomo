@@ -4,6 +4,11 @@ import path from 'path'
 import fs from 'fs'
 
 export default defineConfig({
+  define: {
+    // Exposer le commit SHA de Vercel pour le tracking de déploiement
+    // Vercel fournit VERCEL_GIT_COMMIT_SHA automatiquement
+    'import.meta.env.VITE_GIT_COMMIT_SHA': JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || ''),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -94,7 +99,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    hmr: true,
+    hmr: false,
   },
   preview: {
     port: 3000,

@@ -225,6 +225,16 @@ class ApiClient {
 
             const result = await response.json()
 
+            // Si la réponse est directement un tableau (ex: géocodage), le retourner tel quel
+            if (Array.isArray(result)) {
+                console.log(`✅ [API SUCCESS] ${endpoint} - Data received`)
+                analyticsTracker.trackRequest('backend', endpoint, true, {
+                    method: options?.method || 'GET'
+                })
+                return result as T
+            }
+
+            // Sinon, vérifier le format { success, data } ou { success, error }
             if (result.success) {
                 console.log(`✅ [API SUCCESS] ${endpoint} - Data received`)
                 analyticsTracker.trackRequest('backend', endpoint, true, {
@@ -672,9 +682,9 @@ export class FomoDataManager {
     }
 
     async saveUserToBackend(userData: User, lastConnexion?: string): Promise<User | null> {
-        // Géocoder la ville avant de sauvegarder
-        let lat = null
-        let lng = null
+        // Utiliser les coordonnées fournies dans userData (capturées depuis Mapbox via AddressAutocomplete)
+        const lat = userData.lat ?? null
+        const lng = userData.lng ?? null
 
         // Préparer le payload avec tous les champs explicites (valeurs par défaut comme pour events)
         const payload: UserCreatePayload = {

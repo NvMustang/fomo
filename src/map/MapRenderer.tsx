@@ -4,9 +4,10 @@
  * Composant de rendu de carte utilisant MapLibre GL JS + react-map-gl
  */
 
-import {
+import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -205,15 +206,13 @@ const addTemporaryEvent = (map: any, event: Event, isPublicMode: boolean = true)
     source: `temp-${event.id}`,
     layout: {
       "icon-image": "pin",
-      "icon-size": 1,
+      "icon-anchor": "bottom",
       "icon-allow-overlap": true,
       "icon-ignore-placement": true
     },
     paint: {
       "icon-color": getPrivacyColor(isPublicMode),
-      "icon-opacity": 1.0,
-      "icon-halo-color": "#ffffff",
-      "icon-halo-width": 5
+      "icon-opacity": 1.0
     }
   })
 
@@ -228,8 +227,8 @@ const CLUSTER_CONFIG = {
   // Configuration de la source GeoJSON
   source: {
     enabled: true,
-    radius: 60,      // Rayon réduit : les pins doivent être très proches pour se clusteriser
-    maxZoom: 12,      // Zoom maximum : les clusters disparaissent plus tôt, les pins individuels apparaissent plus vite
+    radius: 30,      // Rayon très réduit : les pins doivent être très proches pour se clusteriser
+    maxZoom: 10,      // Zoom maximum augmenté : les clusters disparaissent plus tard pour moins d'agrégation
     properties: {
       scoreSum: ["+", ["get", "score"]], // Cumule un indicateur d'intérêt
     },
@@ -261,7 +260,6 @@ const CLUSTER_CONFIG = {
  * @param clusterColor - Couleur pour les clusters
  * @param pinColor - Expression MapLibre pour la couleur des pins (ou couleur simple)
  * @param pinOpacity - Expression MapLibre pour l'opacité des pins (ou valeur simple)
- * @param pinIconSize - Taille de l'icône des pins (défaut: 1)
  * @returns Tableau de 3 layers : [cluster, cluster-count, unclustered]
  */
 const createClusterLayers = (
@@ -269,8 +267,7 @@ const createClusterLayers = (
   layerPrefix: string,
   clusterColor: string,
   pinColor: any,
-  pinOpacity: any,
-  pinIconSize: number = 1
+  pinOpacity: any
 ): Layer[] => {
   return [
     // CLUSTERS (cercles)
@@ -316,14 +313,13 @@ const createClusterLayers = (
       filter: ["!", ["has", "point_count"]],
       layout: {
         "icon-image": "pin",
-        "icon-size": pinIconSize,
-        "icon-anchor": layerPrefix === "fake-events" ? "bottom" : undefined,
+        "icon-anchor": "bottom",
         "icon-allow-overlap": true,
         "icon-ignore-placement": true
       },
       paint: {
         "icon-color": pinColor,
-        "icon-opacity": pinOpacity,
+        "icon-opacity": pinOpacity
       }
     },
   ]
@@ -372,7 +368,6 @@ const getPinOpacityExpression = () => [
   ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"], 0.2,
   1.0
 ]
-
 /**
  * Génère les couches pour les événements réels (avec gestion des réponses utilisateur)
  */
@@ -384,7 +379,7 @@ const getEventLayers = (
   const pinColor = getPinColorExpression(basePinColor)
   const pinOpacity = getPinOpacityExpression()
 
-  return createClusterLayers("events", "events", clusterColor, pinColor, pinOpacity, 1)
+  return createClusterLayers("events", "events", clusterColor, pinColor, pinOpacity)
 }
 
 /**
@@ -401,7 +396,7 @@ const getFakeEventLayers = (
   const basePinOpacity = getPinOpacityExpression()
 
   // Pour les fake pins, utiliser createClusterLayers avec la logique de réponses
-  const baseLayers = createClusterLayers("fake-events", "fake-events", clusterColor, pinColor, basePinOpacity, 1.0)
+  const baseLayers = createClusterLayers("fake-events", "fake-events", clusterColor, pinColor, basePinOpacity)
 
   // Modifier le layer pins pour combiner l'opacité basée sur userResponse avec l'animation 'pop'
   // pop varie de 0 à 1 (cosinus), on l'utilise pour animer l'opacité avec un effet subtil
@@ -451,8 +446,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   const { isPublicMode } = usePrivacy()
   const { getMapFilterIds } = useFilters()
 
-  // Récupérer les réponses utilisateur pour mapper les réponses initiales dans les properties
-  // (seulement pour les valeurs initiales au montage, les mises à jour sont gérées par stylingPinsController)
+  // Récupérer les réponses utilisateur UNIQUEMENT pour la ref initiale (pas pour le render)
+  // Les mises à jour sont gérées par stylingPinsController via feature-state
   const { responses, currentUserId } = useFomoDataContext()
 
   // Récupérer l'utilisateur pour la position par défaut de la carte
@@ -467,31 +462,56 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   // Ref pour capturer les réponses initiales une seule fois (quand events ou currentUserId change)
   // La source ne sera recréée que si events ou currentUserId change, pas si responses change
   const initialResponsesRef = useRef<typeof responses>(responses)
-  const prevEventsRef = useRef(events)
+  const prevEventsIdsRef = useRef<string>('')
   const prevUserIdRef = useRef(currentUserId)
 
-  if (events !== prevEventsRef.current || currentUserId !== prevUserIdRef.current) {
-    initialResponsesRef.current = responses
-    prevEventsRef.current = events
-    prevUserIdRef.current = currentUserId
-  }
+  // Comparer events par IDs (pas par référence) pour éviter les recréations inutiles
+  const eventsIds = useMemo(() => {
+    return events?.map(e => e.id).sort().join(',') || ''
+  }, [events])
+
+  // Ref pour stocker events et ne recréer la source que si les IDs changent
+  const eventsRef = useRef(events)
+  eventsRef.current = events
+
+  // Mettre à jour les refs uniquement quand events (par IDs) ou currentUserId change vraiment
+  // Utiliser useEffect pour éviter que cela déclenche un re-render
+  useEffect(() => {
+    if (eventsIds !== prevEventsIdsRef.current || currentUserId !== prevUserIdRef.current) {
+      initialResponsesRef.current = responses
+      prevEventsIdsRef.current = eventsIds
+      prevUserIdRef.current = currentUserId
+    }
+  }, [eventsIds, currentUserId, responses])
 
   // Source stable : créer une fois avec TOUS les événements de getDiscoverEvents() et leurs réponses initiales
   // Le filtrage se fait uniquement via setFilter() sur les layers, pas via setData()
   // Exclure les fake events de la source principale (ils ont leur propre source)
-  const realEventsOnly = events?.filter((e: Event) => !(e as any).isFake && !e.id.startsWith('fake-')) || []
-  const userResponsesMapForSource = userResponsesMapper(realEventsOnly, initialResponsesRef.current, currentUserId || undefined)
+  // MÉMORISER avec useMemo en comparant par IDs (pas par référence) pour éviter la recréation à chaque render
+  const realEventsOnly = useMemo(() => {
+    return eventsRef.current?.filter((e: Event) => !(e as any).isFake && !e.id.startsWith('fake-')) || []
+  }, [eventsIds]) // Utiliser uniquement eventsIds : si les IDs sont les mêmes, réutiliser le résultat précédent
+
+  const userResponsesMapForSource = useMemo(() => {
+    return userResponsesMapper(realEventsOnly, initialResponsesRef.current, currentUserId || undefined)
+  }, [realEventsOnly, currentUserId]) // Dépendre de realEventsOnly qui est déjà mémorisé
 
   // Désactiver le clustering en mode visitor (un seul événement réel)
-  const isVisitorMode = realEventsOnly.length === 1
-  const eventsSource = realEventsOnly && realEventsOnly.length > 0 ? createEventsSource(realEventsOnly, userResponsesMapForSource, isVisitorMode) : null
+  const isVisitorMode = useMemo(() => realEventsOnly.length === 1, [realEventsOnly.length])
+  const eventsSource = useMemo(() => {
+    return realEventsOnly && realEventsOnly.length > 0
+      ? createEventsSource(realEventsOnly, userResponsesMapForSource, isVisitorMode)
+      : null
+  }, [realEventsOnly, userResponsesMapForSource, isVisitorMode]) // Dépendre des valeurs mémorisées
 
   // Fonction helper pour centrer sur un événement avec flyTo
   // flyTo crée une animation de "vol" avec arc qui gère automatiquement la séquence
+  // Zoom à 12 pour éviter les conflits avec le clustering (maxZoom: 10)
+  // Une marge de 2 niveaux de zoom évite les instabilités visuelles pendant l'animation
   const centerOnPin = useCallback((event: Event, duration?: number) => {
     if (mapRef.current?.getMap && event.venue) {
       const map = mapRef.current.getMap()
-      const targetZoom = 13
+      const targetZoom = 12 // Marge de 2 niveaux par rapport au maxZoom du clustering (10) pour stabilité
       const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 1400]
 
       map.flyTo({
@@ -925,6 +945,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
       // Ignorer si les méthodes ne sont pas disponibles
     }
 
+
     // Note: Les requêtes MapTiler sont interceptées automatiquement via httpInterceptor
     // qui est initialisé dans main.tsx. Pas besoin d'instrumentation supplémentaire ici.
 
@@ -1033,10 +1054,11 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   // Les mises à jour instantanées utilisent feature-state via setUserResponseFeatureState()
 
   // Attacher/détacher le contrôleur de styling des pins
+  // Mettre à jour le getter quand la carte est chargée pour s'assurer qu'il fonctionne
   useEffect(() => {
     attachStylingPinsController(() => mapRef.current?.getMap())
     return () => detachStylingPinsController()
-  }, [])
+  }, [mapLoaded]) // Re-attacher quand la carte est chargée
 
 
   // Note: Les filtres sont appliqués via setData() (mise à jour des données) ET setFilter() (filtrage des layers)
@@ -1146,5 +1168,24 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
 MapRendererComponent.displayName = 'MapRendererComponent'
 
-export const MapRenderer = MapRendererComponent
+// Mémoriser le composant pour éviter les re-renders inutiles
+// Ne re-render que si events (par IDs), currentUserId, ou les callbacks changent
+export const MapRenderer = React.memo(MapRendererComponent, (prevProps, nextProps) => {
+  // Comparer events par IDs (pas par référence)
+  const prevEventsIds = prevProps.events?.map(e => e.id).sort().join(',') || ''
+  const nextEventsIds = nextProps.events?.map(e => e.id).sort().join(',') || ''
+
+  // Re-render seulement si :
+  // - Les IDs d'événements changent
+  // - Les callbacks changent (référence)
+  // - Le style change (référence)
+  return (
+    prevEventsIds === nextEventsIds &&
+    prevProps.onPinClick === nextProps.onPinClick &&
+    prevProps.onClusterClick === nextProps.onClusterClick &&
+    prevProps.onMapReady === nextProps.onMapReady &&
+    prevProps.style === nextProps.style
+  )
+})
+
 export { addTemporaryEvent }

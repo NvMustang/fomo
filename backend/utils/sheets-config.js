@@ -59,13 +59,17 @@ const drive = google.drive({ version: 'v3', auth })
 // Détection automatique de l'environnement :
 // - Local (développement) : utilise toujours la DB de test si GOOGLE_SPREADSHEET_ID_TEST est défini
 // - Vercel (production) : utilise GOOGLE_SPREADSHEET_ID (production)
+// - Force production : si FORCE_PRODUCTION=true, utilise toujours GOOGLE_SPREADSHEET_ID
 const isLocal = !process.env.VERCEL
+const forceProduction = process.env.FORCE_PRODUCTION === 'true'
 const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
 const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
 
-const SPREADSHEET_ID = isLocal && testSpreadsheetId
-    ? testSpreadsheetId  // Local : toujours utiliser la DB de test si disponible
-    : productionSpreadsheetId  // Vercel/Production : utiliser la DB de production
+const SPREADSHEET_ID = forceProduction
+    ? productionSpreadsheetId  // Force production
+    : (isLocal && testSpreadsheetId
+        ? testSpreadsheetId  // Local : toujours utiliser la DB de test si disponible
+        : productionSpreadsheetId)  // Vercel/Production : utiliser la DB de production
 
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
@@ -151,6 +155,103 @@ async function appendData(sheetName, data, startRow = 2) {
         console.log(`📤 ${data.length} lignes ajoutées à l'onglet "${sheetName}"`)
     } catch (error) {
         throw new Error(`Erreur lors de l'ajout de données à l'onglet "${sheetName}": ${error.message}`)
+    }
+}
+
+/**
+ * Ajouter des données à un onglet avec déduplication
+ * 
+ * @param {string} sheetName - Nom de l'onglet
+ * @param {Array<Array>} data - Données à sauvegarder (array de lignes)
+ * @param {Array<number>} keyColumns - Indices des colonnes formant la clé unique (0-based, ex: [0] pour Session ID, [0,1,2] pour Session+Step+Timestamp)
+ * @param {number} startRow - Ligne de départ (par défaut 2, après les headers)
+ * @param {number} maxReadRows - Nombre maximum de lignes à lire pour la déduplication (par défaut 10000)
+ * @param {string} requestId - ID de requête pour les logs (optionnel)
+ * @returns {Object} { saved: number, duplicates: number, total: number }
+ */
+async function appendDataWithDeduplication(sheetName, data, keyColumns, startRow = 2, maxReadRows = 10000, requestId = '') {
+    validateConfig()
+
+    if (!data || data.length === 0) {
+        return { saved: 0, duplicates: 0, total: 0 }
+    }
+
+    if (!keyColumns || keyColumns.length === 0) {
+        throw new Error('keyColumns est requis pour la déduplication')
+    }
+
+    const logPrefix = requestId ? `[${requestId}] ` : ''
+
+    try {
+        // Lire les données existantes pour les colonnes de clé
+        let existingKeys = new Set()
+        try {
+            // Construire le range pour lire les colonnes de clé (ex: A2:A10000 ou A2:C10000)
+            const lastColumn = String.fromCharCode(65 + Math.max(...keyColumns)) // A=65, B=66, etc.
+            const readRange = `${String.fromCharCode(65 + keyColumns[0])}${startRow}:${lastColumn}${startRow + maxReadRows - 1}`
+            const existingData = await readData(sheetName, readRange)
+            
+            existingKeys = new Set(
+                existingData
+                    .filter(row => {
+                        // Vérifier que toutes les colonnes de clé sont présentes
+                        return keyColumns.every(colIndex => row && row[colIndex] && row[colIndex].toString().trim())
+                    })
+                    .map(row => {
+                        // Créer une clé composite en joignant les valeurs des colonnes de clé
+                        return keyColumns.map(colIndex => row[colIndex].toString().trim()).join('|')
+                    })
+            )
+            
+            if (requestId) {
+                console.log(`📊 ${logPrefix}${existingKeys.size} entrées existantes trouvées dans "${sheetName}"`)
+            }
+        } catch (readError) {
+            // Si la lecture échoue (feuille vide ou première sauvegarde), continuer
+            if (requestId) {
+                console.warn(`⚠️ ${logPrefix}Erreur lecture données existantes (première sauvegarde?):`, readError.message)
+            }
+            // Continuer avec un Set vide
+        }
+
+        // Filtrer les données pour ne garder que les nouvelles
+        const newDataToSave = data.filter(row => {
+            // Vérifier que toutes les colonnes de clé sont présentes dans la ligne
+            if (!keyColumns.every(colIndex => row && row[colIndex] !== undefined && row[colIndex] !== null)) {
+                return false // Ignorer les lignes incomplètes
+            }
+            
+            // Créer la clé composite pour cette ligne
+            const rowKey = keyColumns.map(colIndex => {
+                const value = row[colIndex]
+                return value ? value.toString().trim() : ''
+            }).join('|')
+            
+            // Ne garder que si la clé n'existe pas déjà
+            return !existingKeys.has(rowKey)
+        })
+
+        const duplicatesCount = data.length - newDataToSave.length
+
+        // Sauvegarder seulement les nouvelles données
+        if (newDataToSave.length > 0) {
+            await appendData(sheetName, newDataToSave, startRow)
+            if (requestId) {
+                console.log(`✅ ${logPrefix}${newDataToSave.length} nouvelles lignes sauvegardées dans "${sheetName}" (${duplicatesCount} doublons ignorés)`)
+            }
+        } else {
+            if (requestId) {
+                console.log(`ℹ️ ${logPrefix}Toutes les lignes existent déjà dans "${sheetName}", aucune nouvelle ligne à sauvegarder`)
+            }
+        }
+
+        return {
+            saved: newDataToSave.length,
+            duplicates: duplicatesCount,
+            total: data.length
+        }
+    } catch (error) {
+        throw new Error(`Erreur lors de l'ajout de données avec déduplication à l'onglet "${sheetName}": ${error.message}`)
     }
 }
 
@@ -268,6 +369,7 @@ module.exports = {
     // Opérations sur les données
     clearSheet,
     appendData,
+    appendDataWithDeduplication,
     updateData,
     readData,
     insertColumn,

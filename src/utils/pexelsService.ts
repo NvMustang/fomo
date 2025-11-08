@@ -2,7 +2,7 @@
  * Service Pexels pour récupérer des images en fonction d'un titre d'événement
  */
 
-const PEXELS_API_KEY = 'h1mxKSN4dnwZaR4XTLfAZTAcjlzzJkNgnAkWjeQmBQrknFdg5NVr21sX'
+const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY
 const PEXELS_API_URL = 'https://api.pexels.com/v1/search'
 
 /**
@@ -12,6 +12,11 @@ const PEXELS_API_URL = 'https://api.pexels.com/v1/search'
  */
 export async function getPexelsImage(query: string): Promise<string | null> {
     try {
+        if (!PEXELS_API_KEY) {
+            console.warn('[Pexels] Clé API non configurée. Veuillez définir VITE_PEXELS_API_KEY dans .env.local')
+            return null
+        }
+
         // Nettoyer la query : extraire les mots-clés principaux
         const cleanQuery = query
             .toLowerCase()
@@ -55,6 +60,102 @@ export async function getPexelsImage(query: string): Promise<string | null> {
         console.error(`[Pexels] Erreur lors de la récupération d'image pour "${query}":`, error)
         return null
     }
+}
+
+/**
+ * Mapping de tags français vers queries Pexels en anglais
+ */
+const TAG_MAPPING: Record<string, string> = {
+    'musique': 'music',
+    'jazz': 'jazz music',
+    'rock': 'rock music',
+    'pop': 'pop music',
+    'classique': 'classical music',
+    'cuisine': 'cooking food',
+    'italienne': 'italian food',
+    'française': 'french food',
+    'sport': 'sport',
+    'football': 'football sport',
+    'basketball': 'basketball',
+    'randonnée': 'hiking nature',
+    'vtt': 'mountain biking',
+    'art': 'art',
+    'exposition': 'art exhibition',
+    'peinture': 'painting art',
+    'photographie': 'photography',
+    'cinéma': 'cinema movie',
+    'théâtre': 'theater',
+    'danse': 'dance',
+    'festival': 'festival',
+    'concert': 'concert music',
+    'conférence': 'conference',
+    'formation': 'training education',
+    'tech': 'technology',
+    'développement': 'programming code',
+    'startup': 'startup business',
+    'networking': 'networking business',
+    'nature': 'nature',
+    'forêt': 'forest nature',
+    'plage': 'beach',
+    'montagne': 'mountain',
+    'culture': 'culture',
+    'histoire': 'history',
+    'patrimoine': 'heritage',
+    'famille': 'family',
+    'enfants': 'children',
+    'seniors': 'elderly',
+    'bien-être': 'wellness',
+    'yoga': 'yoga',
+    'méditation': 'meditation',
+    'santé': 'health',
+    'environnement': 'environment',
+    'écologie': 'ecology',
+    'développement durable': 'sustainability'
+}
+
+/**
+ * Génère une query contextuelle à partir du titre et des tags pour Pexels
+ * @param title - Titre de l'événement
+ * @param tags - Tags de l'événement
+ * @returns Query optimisée pour Pexels
+ */
+export function generateContextualQuery(title: string, tags: string[] = []): string {
+    // Extraire les mots-clés du titre
+    const titleWords = title
+        .toLowerCase()
+        .replace(/[àáâãäå]/g, 'a')
+        .replace(/[èéêë]/g, 'e')
+        .replace(/[ìíîï]/g, 'i')
+        .replace(/[òóôõö]/g, 'o')
+        .replace(/[ùúûü]/g, 'u')
+        .replace(/[ç]/g, 'c')
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(' ')
+        .filter(word => word.length > 2)
+        .slice(0, 2) // Prendre les 2 premiers mots du titre
+
+    // Mapper les tags vers des queries en anglais
+    const tagQueries = tags
+        .map(tag => TAG_MAPPING[tag.toLowerCase()] || tag.toLowerCase())
+        .filter(Boolean)
+        .slice(0, 2) // Prendre les 2 premiers tags
+
+    // Combiner titre + tags
+    const allKeywords = [...titleWords, ...tagQueries]
+    const query = allKeywords.slice(0, 3).join(' ') // Max 3 mots-clés
+
+    return query || 'event'
+}
+
+/**
+ * Récupère une image contextuelle depuis Pexels basée sur le titre et les tags d'un événement
+ * @param title - Titre de l'événement
+ * @param tags - Tags de l'événement
+ * @returns URL de l'image ou null en cas d'erreur
+ */
+export async function getContextualPexelsImage(title: string, tags: string[] = []): Promise<string | null> {
+    const query = generateContextualQuery(title, tags)
+    return await getPexelsImage(query)
 }
 
 /**

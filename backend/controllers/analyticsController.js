@@ -107,17 +107,20 @@ class AnalyticsController {
                 ])
             })
 
-            // Sauvegarder dans Google Sheets (append en batch)
+            // Sauvegarder dans Google Sheets avec déduplication (append en batch)
+            let savedCount = 0
             if (rowsToSave.length > 0) {
-                const { appendData } = require('../utils/sheets-config')
-                await appendData('Analytics', rowsToSave, 2)
-                console.log(`✅ [${requestId}] ${rowsToSave.length} lignes analytics sauvegardées (${history.length} requêtes + ${maptilerReferences.length} références MapTiler)`)
+                const { appendDataWithDeduplication } = require('../utils/sheets-config')
+                // Déduplication par Timestamp + Provider + Endpoint + Method (colonnes A, B, C, D, indices 0, 1, 2, 3)
+                const result = await appendDataWithDeduplication('Analytics', rowsToSave, [0, 1, 2, 3], 2, 50000, requestId)
+                savedCount = result.saved
+                console.log(`✅ [${requestId}] ${result.saved} nouvelles lignes analytics sauvegardées (${result.duplicates} doublons ignorés, ${history.length} requêtes + ${maptilerReferences.length} références MapTiler)`)
             } else {
                 console.log(`⚠️ [${requestId}] Aucune donnée à sauvegarder`)
             }
             res.json({
                 success: true,
-                message: `${rowsToSave.length} lignes sauvegardées`
+                message: `${savedCount} nouvelles lignes sauvegardées`
             })
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur sauvegarde analytics:`, error)

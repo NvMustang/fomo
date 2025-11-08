@@ -44,6 +44,44 @@ function animateScroll(
 }
 
 /**
+ * Animation de scroll de la fenêtre vers une position Y avec durée personnalisable
+ * Utilise la même fonction d'easing que animateScroll pour un mouvement naturel
+ * @param targetY - Position Y cible en pixels
+ * @param duration - Durée de l'animation en millisecondes (défaut: 1200ms)
+ * @returns ID de l'animation frame initiale pour permettre l'annulation si nécessaire
+ * Note: L'annulation avec cancelAnimationFrame peut ne pas arrêter immédiatement toutes les frames
+ */
+export function animateWindowScrollTo(
+    targetY: number,
+    duration: number = 1200
+): number {
+    const startY = window.scrollY
+    const distance = targetY - startY
+    const startTime = performance.now()
+    let animationFrameId: number | null = null
+
+    function step(currentTime: number) {
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / duration, 1)
+
+        // Easing ease-in-out pour un mouvement naturel
+        const ease = progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2
+
+        const currentY = startY + distance * ease
+        window.scrollTo(0, currentY)
+
+        if (progress < 1) {
+            animationFrameId = requestAnimationFrame(step)
+        }
+    }
+
+    animationFrameId = requestAnimationFrame(step)
+    return animationFrameId
+}
+
+/**
  * Hook qui anime un scroll vers le bas puis revient au top à l'ouverture d'un modal
  * Animation naturelle imitant un scroll humain
  * @param isOpen - Si le modal est ouvert

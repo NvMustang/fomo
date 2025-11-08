@@ -83,6 +83,12 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
         if (isToggleDisabled) {
             return
         }
+
+        // Fermer l'EventCard avant de toggle (pour envoyer la réponse si elle est ouverte)
+        if (window.__closeEventCard) {
+            window.__closeEventCard()
+        }
+
         const newIsPublicMode = !isPublicMode
         console.log('🎬 [PrivacyContext] Toggle privacy:', {
             from: isPublicMode,

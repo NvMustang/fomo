@@ -4,17 +4,28 @@
  * Version web du ProfileScreen React Native
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { Button, UserCard, EventCard, CreateEventModal, ToggleLabelsWithExpendableList, AddFriendModal } from '@/components'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Button } from '@/components/ui/Button'
+import { UserCard } from '@/components/ui/UserCard'
+import { EventCard } from '@/components/ui/EventCard'
+import { CreateEventModal } from '@/components/modals/CreateEventModal'
+import { ToggleLabelsWithExpendableList } from '@/components/ui/ToggleLabelsWithExpendableList'
+import { AddFriendModal } from '@/components/modals/AddFriendModal'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 import { LastActivities } from '@/components/ui/LastActivities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { useFilters } from '@/contexts/FiltersContext'
 import { filterQuery } from '@/utils/filterTools'
+import { animateWindowScrollTo } from '@/hooks/useModalScrollHint'
 import type { Event } from '@/types/fomoTypes'
 
 export const ProfilePageWeb: React.FC = () => {
+  // 🔄 RÉFÉRENCES POUR LE SCROLL VERS LES PÉRIODES DANS "MES ÉVÉNEMENTS CRÉÉS"
+  const periodRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+  const myEventsSectionRef = useRef<HTMLDivElement | null>(null)
+  const hasScrolledToTodayRef = useRef(false)
+
   const { user, logout, updateUser } = useAuth()
   const { getLatestResponsesByEvent } = useFomoDataContext()
   const { getFriendsGroupedByFrienship } = useFilters()
@@ -104,6 +115,91 @@ export const ProfilePageWeb: React.FC = () => {
       setNewCity(user.city || '')
     }
   }, [user])
+
+  // 🔄 SCROLL AUTOMATIQUE VERS LA PÉRIODE "AUJOURD'HUI" QUAND LA SECTION DEVIENT VISIBLE
+  // Ne s'exécute qu'une seule fois lors de la première visibilité de la section
+  useEffect(() => {
+    // Ne jouer l'animation qu'une seule fois
+    if (hasScrolledToTodayRef.current) {
+      return
+    }
+
+    if (!myEventsSectionRef.current || profileEventsGrouped.periods.length === 0 || isLoadingUserEvents) {
+      return
+    }
+
+    const sectionElement = myEventsSectionRef.current
+
+    // Timer pour le scroll (déclaré dans le scope du useEffect pour le cleanup)
+    let scrollTimer: NodeJS.Timeout | null = null
+    let animationFrameId: number | null = null
+
+    // Fonction pour scroller vers "aujourd'hui" (ou la première période non-passée avec événements)
+    const scrollToToday = () => {
+      if (hasScrolledToTodayRef.current) {
+        return
+      }
+
+      // Attendre un peu pour que le DOM soit rendu
+      scrollTimer = setTimeout(() => {
+        let targetPeriod = null
+
+        // Chercher le prochain événement par rapport à l'heure actuelle
+        // Si "aujourd'hui" est vide, prend la section suivante
+        for (const period of profileEventsGrouped.periods) {
+          if (period.key === 'past') {
+            continue
+          }
+          if (period.events.length > 0) {
+            targetPeriod = period
+            break
+          }
+        }
+
+        // Scroll vers la période cible
+        if (targetPeriod) {
+          const targetElement = periodRefs.current[targetPeriod.key]
+          if (targetElement) {
+            // Marquer que l'animation a été jouée
+            hasScrolledToTodayRef.current = true
+            
+            // Calculer la position cible (top de l'élément)
+            const targetRect = targetElement.getBoundingClientRect()
+            const targetY = window.scrollY + targetRect.top
+
+            // Animation avec durée personnalisable (1200ms) - fonction unifiée depuis useModalScrollHint
+            animationFrameId = animateWindowScrollTo(targetY, 1200)
+          }
+        }
+      }, 100)
+    }
+
+    // Observer pour détecter quand la section devient visible
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !hasScrolledToTodayRef.current) {
+            scrollToToday()
+          }
+        })
+      },
+      {
+        threshold: 0.1 // Déclenche quand 10% de la section est visible
+      }
+    )
+
+    observer.observe(sectionElement)
+
+    return () => {
+      observer.disconnect()
+      if (scrollTimer) {
+        clearTimeout(scrollTimer)
+      }
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId)
+      }
+    }
+  }, [profileEventsGrouped.periods, isLoadingUserEvents])
 
   // Gestion du toggle showAttendanceToFriends
   const handleToggleShowAttendance = async () => {
@@ -197,6 +293,15 @@ export const ProfilePageWeb: React.FC = () => {
             user={user}
             showEditButton={false}
           />
+        </div>
+      </div>
+
+      {/* Bouton de déconnexion */}
+      <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+        <div style={{ width: '100%', maxWidth: '600px' }}>
+          <Button variant="secondary" onClick={handleSignOut} style={{ width: '100%' }}>
+            Se déconnecter
+          </Button>
         </div>
       </div>
 
@@ -576,21 +681,14 @@ export const ProfilePageWeb: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Boutons d'action */}
-        <div style={{
-          padding: 'var(--sm) 0',
-          borderTop: '1px solid var(--border)',
-          marginTop: 'var(--sm)',
-        }}>
-          <Button variant="secondary" onClick={handleSignOut} style={{ width: '100%' }}>
-            Se déconnecter
-          </Button>
-        </div>
       </div>
 
       {/* Section Mes événements créés */}
-      <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
+      <div 
+        ref={myEventsSectionRef}
+        className="profile-section" 
+        style={{ marginBottom: 'var(--md)' }}
+      >
         <h3 style={{
           fontSize: 'var(--text-lg)',
           fontWeight: 'var(--font-weight-bold)',
@@ -626,6 +724,9 @@ export const ProfilePageWeb: React.FC = () => {
               <div
                 key={period.key}
                 className="calendar-period"
+                ref={(el) => {
+                  periodRefs.current[period.key] = el
+                }}
               >
                 {/* Barre de division */}
                 <div className="calendar-period-divider"></div>

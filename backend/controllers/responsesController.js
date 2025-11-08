@@ -5,6 +5,7 @@
  */
 
 const DataServiceV2 = require('../utils/dataService')
+const { sheets, SPREADSHEET_ID } = require('../utils/sheets-config')
 
 // Plage Google Sheets pour les réponses (NOUVEAU SCHÉMA: A-G)
 // Structure: A=ID, B=CreatedAt, C=UserId, D=InvitedByUserId, E=EventId, F=InitialResponse, G=FinalResponse
@@ -254,6 +255,67 @@ class ResponsesController {
         } catch (error) {
             console.error('❌ Erreur récupération réponses événement:', error)
             res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
+    /**
+     * Mettre à jour le userId de toutes les réponses d'un utilisateur source vers un utilisateur cible
+     * Utilisé pour migrer les réponses d'un visitor temporaire vers un utilisateur existant
+     */
+    static async migrateResponses(sourceUserId, targetUserId) {
+        try {
+            console.log(`🔄 Migration réponses: ${sourceUserId} -> ${targetUserId}`)
+
+            // Récupérer toutes les réponses brutes (sans mapper) pour avoir les indices
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: RESPONSES_RANGE
+            })
+
+            const rows = response.data.values || []
+            const responsesToUpdate = []
+
+            // Trouver toutes les réponses du sourceUserId
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i]
+                if (row && row[2] === sourceUserId) { // Colonne C = userId (index 2)
+                    responsesToUpdate.push({ rowIndex: i, row })
+                }
+            }
+
+            if (responsesToUpdate.length === 0) {
+                console.log(`ℹ️ Aucune réponse à migrer pour ${sourceUserId}`)
+                return { migrated: 0 }
+            }
+
+            console.log(`📝 ${responsesToUpdate.length} réponse(s) à migrer`)
+
+            // Mettre à jour chaque réponse (remplacer userId dans colonne C)
+            const sheetName = RESPONSES_RANGE.split('!')[0]
+            const updateRequests = responsesToUpdate.map(({ rowIndex, row }) => {
+                const actualRowIndex = rowIndex + 2 // +2 car on commence à la ligne 2
+                const range = `${sheetName}!C${actualRowIndex}` // Colonne C = userId
+
+                return {
+                    range,
+                    values: [[targetUserId]]
+                }
+            })
+
+            // Mettre à jour toutes les réponses en une seule requête batch
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: SPREADSHEET_ID,
+                resource: {
+                    valueInputOption: 'RAW',
+                    data: updateRequests
+                }
+            })
+
+            console.log(`✅ ${responsesToUpdate.length} réponse(s) migrée(s) de ${sourceUserId} vers ${targetUserId}`)
+            return { migrated: responsesToUpdate.length }
+        } catch (error) {
+            console.error('❌ Erreur migration réponses:', error)
+            throw error
         }
     }
 

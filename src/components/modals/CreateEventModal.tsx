@@ -17,9 +17,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getUser } from '@/utils/filterTools'
 import { StockImagePicker } from '@/components/ui/StockImagePicker'
 import { FomoDatePicker } from '@/components/ui/DatePicker'
-import { format, addHours } from 'date-fns'
+import { format, addHours, setMinutes, setSeconds } from 'date-fns'
 import CreatableSelect from 'react-select/creatable'
 import { toZonedTime } from 'date-fns-tz'
+import { getContextualPexelsImage } from '@/utils/pexelsService'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -63,10 +64,13 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
   }, [isOpen])
 
   // Fonction pour obtenir la date/heure actuelle au format datetime-local
+  // Arrondit à l'heure suivante (ex: 20:04 → 21:00)
   const getCurrentDateTime = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const now = toZonedTime(new Date(), userTimezone)
-    return format(now, "yyyy-MM-dd'T'HH:mm")
+    // Ajouter 1 heure puis mettre minutes et secondes à 0
+    const nextHour = setSeconds(setMinutes(addHours(now, 1), 0), 0)
+    return format(nextHour, "yyyy-MM-dd'T'HH:mm")
   }
 
   // Obtenir la date et l'heure actuelles (logique du CreateEventScreen React Native)
@@ -151,6 +155,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
     latitude: 50.005,
     longitude: 5.74,
     address: '',
+    name: '', // Nom du lieu (ex: "Rue de la Paix")
   })
 
   // Validation en temps réel
@@ -177,6 +182,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         latitude: initialEvent.venue.lat || 50.005,
         longitude: initialEvent.venue.lng || 5.74,
         address: initialEvent.venue.address || '',
+        name: initialEvent.venue.name || '',
       })
       if (user?.isAmbassador) {
         // Récupérer le nom depuis users, sinon fallback sur organizerName (pour compatibilité avec anciens événements)
@@ -199,6 +205,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         latitude: 50.005,
         longitude: 5.74,
         address: '',
+        name: '',
       })
       setExternalOrganizerName('')
     }
@@ -323,12 +330,14 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
 
 
   // Gestion de la sélection d'adresse
-  const handleAddressSelect = (addressData: { address: string; lat: number; lng: number }) => {
+  const handleAddressSelect = (addressData: { name?: string; address: string; lat: number; lng: number }) => {
     setSelectedLocation({
       latitude: addressData.lat,
       longitude: addressData.lng,
-      address: addressData.address
+      address: addressData.address,
+      name: addressData.name || '' // Nom du lieu (ex: "Rue de la Paix")
     })
+    // Utiliser l'adresse complète pour l'affichage dans l'input
     setVenue(addressData.address)
   }
 
@@ -384,21 +393,27 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         ? new Date(endDateTime)
         : new Date(startDate.getTime() + 6 * 60 * 60 * 1000) // 6 heures par défaut
 
+      // Générer un banner contextuel via Pexels si l'utilisateur n'en a pas fourni
+      let finalCoverUrl = coverImageUrl || coverImage
+      if (!finalCoverUrl) {
+        const tags = selectedTagOptions.map(t => t.value)
+        const contextualImage = await getContextualPexelsImage(title.trim(), tags)
+        finalCoverUrl = contextualImage || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=400&h=300&fit=crop&crop=center'
+      }
+
       const eventData = {
         title: title.trim(),
         // Conversion en UTC pour le stockage (toISOString() gère automatiquement le fuseau horaire)
         startsAt: startDate.toISOString(),
         endsAt: endDate.toISOString(),
         venue: {
-          name: venue.trim(),
-          address: venue.trim(),
+          name: selectedLocation.name || venue.trim().split(',')[0].trim(), // Nom du lieu ou première partie de l'adresse
+          address: venue.trim(), // Adresse complète
           lat: selectedLocation.latitude,
           lng: selectedLocation.longitude,
         },
         tags: selectedTagOptions.map(t => t.value),
-        coverUrl:
-          coverImageUrl || coverImage ||
-          'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=400&h=300&fit=crop&crop=center',
+        coverUrl: finalCoverUrl,
         coverImagePosition: imagePosition,
         description: description.trim(),
         organizerId: user?.isAmbassador ? `amb_${user.id}` : (user?.id || 'user-unknown'),

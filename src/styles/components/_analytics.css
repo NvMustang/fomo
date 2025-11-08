@@ -405,11 +405,8 @@
 }
 
 .analytics-comparison-chart {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--sm);
-    height: 300px;
-    padding: var(--md);
+    width: 100%;
+    height: 400px;
     margin-bottom: var(--md);
 }
 

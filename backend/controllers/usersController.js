@@ -297,11 +297,7 @@ class UsersController {
             const userId = req.params.id
             console.log(`🗑️ Suppression utilisateur: ${userId}`)
 
-            const result = await DataServiceV2.softDelete(
-                UsersController.USERS_RANGE,
-                0, // key column (ID)
-                userId
-            )
+            const result = await UsersController.softDeleteUser(userId)
 
             console.log(`✅ Utilisateur supprimé: ${userId}`)
             res.json({
@@ -311,6 +307,98 @@ class UsersController {
             })
         } catch (error) {
             console.error('❌ Erreur suppression utilisateur:', error)
+            res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
+    /**
+     * Soft delete d'un utilisateur : isActive = false, deletedAt = date actuelle
+     * Structure Users: L=isActive (index 11), P=deletedAt (index 15)
+     */
+    static async softDeleteUser(userId) {
+        try {
+            // Récupérer la donnée actuelle
+            const currentData = await DataServiceV2.getByKey(
+                UsersController.USERS_RANGE,
+                (row) => row,
+                0, // key column (ID)
+                userId
+            )
+
+            if (!currentData) {
+                throw new Error(`Utilisateur non trouvé: ${userId}`)
+            }
+
+            const deletedAt = new Date().toISOString()
+            const modifiedAt = new Date().toISOString()
+
+            // Mettre à jour isActive (L, index 11) et deletedAt (P, index 15)
+            // S'assurer que le tableau a assez d'éléments
+            while (currentData.length < 17) {
+                currentData.push('')
+            }
+
+            currentData[11] = false // L: isActive
+            currentData[14] = modifiedAt // O: modifiedAt
+            currentData[15] = deletedAt // P: deletedAt
+
+            await DataServiceV2.updateRow(
+                UsersController.USERS_RANGE,
+                currentData,
+                0, // key column (ID)
+                userId
+            )
+
+            return { action: 'deleted', deletedAt }
+        } catch (error) {
+            console.error('❌ Erreur soft delete utilisateur:', error)
+            throw error
+        }
+    }
+
+    /**
+     * Migrer les réponses d'un visitor temporaire vers un utilisateur existant
+     * Puis supprimer le visitor temporaire (soft delete)
+     */
+    static async migrateVisitorResponses(req, res) {
+        try {
+            const { sourceUserId, targetUserId } = req.body
+
+            if (!sourceUserId || !targetUserId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'sourceUserId et targetUserId sont requis'
+                })
+            }
+
+            if (sourceUserId === targetUserId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'sourceUserId et targetUserId ne peuvent pas être identiques'
+                })
+            }
+
+            console.log(`🔄 Migration visitor: ${sourceUserId} -> ${targetUserId}`)
+
+            // 1. Migrer les réponses
+            const migrationResult = await ResponsesController.migrateResponses(sourceUserId, targetUserId)
+            console.log(`✅ ${migrationResult.migrated} réponse(s) migrée(s)`)
+
+            // 2. Soft delete le visitor temporaire
+            const deleteResult = await UsersController.softDeleteUser(sourceUserId)
+            console.log(`✅ Visitor supprimé: ${sourceUserId}`)
+
+            res.json({
+                success: true,
+                message: 'Migration réussie',
+                data: {
+                    responsesMigrated: migrationResult.migrated,
+                    visitorDeleted: true,
+                    deletedAt: deleteResult.deletedAt
+                }
+            })
+        } catch (error) {
+            console.error('❌ Erreur migration visitor:', error)
             res.status(500).json({ success: false, error: error.message })
         }
     }

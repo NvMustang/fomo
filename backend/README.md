@@ -56,6 +56,10 @@ CORS_ORIGIN=http://localhost:5173
 
 # DB de test (pour développement local - détection automatique)
 GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
+
+# MapTiler API Key (pour le géocodage et les cartes)
+# Obtenez votre clé sur https://cloud.maptiler.com/
+MAPLIBRE_ACCESS_TOKEN=your_maptiler_api_key
 ```
 
 ### 🧪 Détection automatique de l'environnement

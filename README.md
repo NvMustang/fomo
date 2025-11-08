@@ -28,14 +28,18 @@ npm install
    PORT=3001
    CORS_ORIGIN=http://localhost:5173
    IMGBB_API_KEY=your_imgbb_api_key
-   MAPBOX_ACCESS_TOKEN=your_mapbox_token
+   # MapTiler (utilisé pour tiles + géocodage)
+   MAPLIBRE_ACCESS_TOKEN=your_maptiler_token
+   # Note: Mapbox n'est plus utilisé (migré vers MapTiler)
    ```
 
-2. **Frontend** : Créer `.env` (optionnel)
+2. **Frontend** : Créer `.env.local` (optionnel, mais recommandé pour Pexels)
    ```env
    VITE_PEXELS_API_KEY=your_pexels_key
    VITE_MAPLIBRE_ACCESS_TOKEN=your_maplibre_token
    ```
+   
+   **Note** : `.env.local` est ignoré par git (voir `.gitignore`). Pour obtenir une clé Pexels gratuite : https://www.pexels.com/api/
 
 ### Démarrage
 

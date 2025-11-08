@@ -93,6 +93,22 @@
     margin: 0 0 var(--sm) 0;
 }
 
+/* Bouton cliquable pour le header de subsection */
+.friends-subsection > button {
+    outline: none;
+    transition: opacity var(--transition-fast);
+}
+
+.friends-subsection > button:hover {
+    opacity: 0.8;
+}
+
+.friends-subsection > button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+}
+
 /* Container pour le toggle */
 .friends-toggle-container {
     display: flex;

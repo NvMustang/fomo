@@ -11,7 +11,13 @@
         "migrate:responses": "node -e \"require('./migrate-all.js').migrateResponses().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\"",
         "add-images": "node add-event-images.js",
         "setup-drive": "node scripts/setup-google-drive.js",
-        "check:sheets": "node scripts/check-sheets-references.js"
+        "check:sheets": "node scripts/check-sheets-references.js",
+        "analyze:onboarding": "node scripts/analyze-onboarding-data.js",
+        "analyze:onboarding:prod": "node scripts/analyze-onboarding-data.js --prod",
+        "analyze:analytics": "node scripts/analyze-analytics-data.js",
+        "analyze:analytics:prod": "node scripts/analyze-analytics-data.js --prod",
+        "cleanup:analytics": "node scripts/cleanup-test-data.js",
+        "test:geocoding": "node scripts/test-geocoding.js"
     },
     "dependencies": {
         "axios": "^1.12.2",

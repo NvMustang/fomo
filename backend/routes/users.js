@@ -31,4 +31,7 @@ router.get('/search', UsersController.searchUsers)
 // GET /api/users/:id/friends - Récupérer les amis d'un utilisateur
 router.get('/:id/friends', UsersController.getUserFriends)
 
+// POST /api/users/migrate-responses - Migrer les réponses d'un visitor temporaire vers un utilisateur existant
+router.post('/migrate-responses', UsersController.migrateVisitorResponses)
+
 module.exports = router

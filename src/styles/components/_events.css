@@ -273,17 +273,36 @@
     height: var(--bar-thickness);
 }
 
-/* Section des détails expandable */
+/* Section des détails expandable - Animation unifiée smooth pour ouverture/fermeture */
 .event-details-section {
-    margin-top: var(--sm);
-    padding-top: var(--sm);
-    border-top: 2px solid var(--border);
-    animation: slideUpWithHeight 0.3s ease-out;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 2px solid transparent;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transform: translateY(-10px);
+    flex: 0;
+    pointer-events: none;
+    transition: 
+        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        padding-top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        border-top-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        flex 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.event-details-section.closing {
-    opacity: 0;
-    max-height: 0;
+.event-details-section.expanded {
+    margin-top: var(--sm);
+    padding-top: var(--sm);
+    border-top-color: var(--border);
+    max-height: 1000px; /* Valeur suffisamment grande pour contenir le contenu */
+    opacity: 1;
+    transform: translateY(0);
+    flex: 1;
+    pointer-events: auto;
 }
 
 .event-description {

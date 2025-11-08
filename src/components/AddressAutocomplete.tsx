@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import type { AddressSuggestion } from '@/types/fomoTypes'
 
 interface AddressAutocompleteProps {
     value: string
     onChange: (value: string) => void
-    onAddressSelect?: (address: { address: string; lat: number; lng: number }) => void
+    onAddressSelect?: (address: { name?: string; address: string; lat: number; lng: number }) => void
     onValidationChange?: (isValid: boolean) => void
     placeholder?: string
     className?: string
     disabled?: boolean
     minLength?: number
+    debounceDelay?: number // Délai de debounce en millisecondes (défaut: 600ms)
 }
 
 export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
@@ -22,7 +22,8 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     placeholder = "Saisissez une ville ou adresse...",
     className = "",
     disabled = false,
-    minLength = 3
+    minLength = 3,
+    debounceDelay = 600
 }) => {
     const { searchAddresses } = useFomoDataContext()
     const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([])
@@ -33,7 +34,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     const inputRef = useRef<HTMLInputElement>(null)
     const suggestionsRef = useRef<HTMLDivElement>(null)
     const debounceRef = useRef<NodeJS.Timeout>()
-    const isFocusedRef = useRef<boolean>(false)
+    const [isFocused, setIsFocused] = useState<boolean>(false)
     const suppressNextSearchRef = useRef<boolean>(false)
     const hasSelectedRef = useRef<boolean>(false)
     const clickingSuggestionRef = useRef<boolean>(false)
@@ -70,7 +71,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     // Gestion du focus
     const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
         e.target.select()
-        isFocusedRef.current = true
+        setIsFocused(true)
         // Afficher les suggestions si on a déjà du texte
         if (value.trim().length >= minLength) {
             setShowSuggestions(true)
@@ -78,7 +79,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     }
 
     const handleBlur = () => {
-        isFocusedRef.current = false
+        setIsFocused(false)
 
         // Auto-sélection de la première suggestion si rien n'a été choisi
         const tryAutoselect = async () => {
@@ -106,14 +107,16 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     const handleSuggestionSelect = (suggestion: AddressSuggestion) => {
         const lat = parseFloat(suggestion.lat)
         const lng = parseFloat(suggestion.lon)
-        const address = suggestion.display_name
+        // Utiliser l'adresse complète pour l'affichage dans l'input
+        const address = suggestion.address || suggestion.display_name
+        const name = suggestion.name || suggestion.display_name.split(',')[0].trim()
 
         // Mettre à jour la valeur sans déclencher de nouvelle recherche
         suppressNextSearchRef.current = true
         hasSelectedRef.current = true
         clickingSuggestionRef.current = false
         onChange(address)
-        onAddressSelect?.({ address, lat, lng })
+        onAddressSelect?.({ name, address, lat, lng })
 
         // Fermer les suggestions et vider la liste
         setShowSuggestions(false)
@@ -168,8 +171,8 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         }
 
         // Rechercher seulement si l'input est focus et la valeur assez longue
-        if (isFocusedRef.current && value.trim().length >= minLength) {
-            console.log('⏰ Déclenchement de la recherche dans 300ms...')
+        if (isFocused && value.trim().length >= minLength) {
+            console.log(`⏰ Déclenchement de la recherche dans ${debounceDelay}ms...`)
             debounceRef.current = setTimeout(async () => {
                 console.log('🚀 Recherche lancée pour:', value)
                 const results = await searchAddressesLocal(value)
@@ -177,7 +180,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 setSuggestions(results)
                 setShowSuggestions(true)
                 setSelectedIndex(-1)
-            }, 300)
+            }, debounceDelay)
         } else if (value.trim().length < minLength) {
             console.log('🧹 Nettoyage des suggestions (trop court)')
             setSuggestions([])
@@ -189,12 +192,13 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 clearTimeout(debounceRef.current)
             }
         }
-    }, [value, minLength])
+    }, [value, minLength, debounceDelay, isFocused])
 
     // Remonter un état de validation basique si demandé
     useEffect(() => {
         onValidationChange?.(value.trim().length >= minLength)
     }, [value, minLength, onValidationChange])
+
 
     // Fermer les suggestions quand on clique ailleurs
     useEffect(() => {
@@ -215,7 +219,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     }, [])
 
     return (
-        <div className="address-autocomplete" style={{ position: 'relative' }}>
+        <div className="address-autocomplete">
             <input
                 ref={inputRef}
                 type="text"
@@ -229,21 +233,54 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 disabled={disabled}
                 autoComplete="off"
             />
-            {showSuggestions && suggestions.length > 0 && createPortal(
+            {showSuggestions && suggestions.length > 0 && (
                 <div
                     ref={suggestionsRef}
                     className="autocomplete-suggestions"
-                    style={{
-                        position: 'fixed',
-                        top: inputRef.current ? inputRef.current.getBoundingClientRect().bottom : 0,
-                        left: inputRef.current ? inputRef.current.getBoundingClientRect().left : 0,
-                        width: inputRef.current ? inputRef.current.getBoundingClientRect().width : 'auto'
-                    }}
                 >
                     {suggestions.map((suggestion, index) => {
-                        const parts = suggestion.display_name.split(',')
-                        const mainLocation = parts[0].trim()
-                        const details = parts.slice(1).join(',').trim()
+                        // Extraire les informations de localisation depuis components
+                        const components = suggestion.components || {}
+                        // La ville peut être dans 'place' (ville principale) ou 'locality' (localité)
+                        const city = components.place || components.locality || ''
+                        const region = components.region || ''
+                        const country = components.country || ''
+                        
+                        // Le display_name de MapTiler contient souvent "Nom, Ville, Région, Pays"
+                        // On extrait le nom principal (première partie)
+                        const displayParts = suggestion.display_name.split(',').map(p => p.trim())
+                        const mainLocation = displayParts[0] || suggestion.display_name
+                        
+                        // Construire les détails de localisation
+                        let locationDetails = ''
+                        const locationParts: string[] = []
+                        
+                        // Si on a des components, les utiliser en priorité
+                        if (city && city !== mainLocation && !mainLocation.includes(city)) {
+                            locationParts.push(city)
+                        }
+                        if (region && region !== city && !locationParts.includes(region)) {
+                            locationParts.push(region)
+                        }
+                        if (country && country !== region && !locationParts.includes(country)) {
+                            locationParts.push(country)
+                        }
+                        
+                        // Si pas de components mais qu'on a place_name, l'utiliser
+                        if (locationParts.length === 0 && suggestion.place_name) {
+                            const placeNameParts = suggestion.place_name.split(',').map(p => p.trim())
+                            if (placeNameParts.length > 1) {
+                                // Prendre toutes les parties sauf la première (déjà affichée)
+                                locationParts.push(...placeNameParts.slice(1))
+                            }
+                        }
+                        
+                        // Fallback final : utiliser les parties du display_name
+                        if (locationParts.length === 0 && displayParts.length > 1) {
+                            locationParts.push(...displayParts.slice(1))
+                        }
+                        
+                        locationDetails = locationParts.join(', ')
 
                         return (
                             <div
@@ -252,23 +289,19 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                                 onClick={() => handleSuggestionSelect(suggestion)}
                                 onMouseDown={() => { clickingSuggestionRef.current = true }}
                                 onTouchStart={() => { clickingSuggestionRef.current = true }}
-                                style={{
-                                    borderBottom: index < suggestions.length - 1 ? '1px solid #f0f0f0' : 'none'
-                                }}
                             >
-                                <div style={{ fontWeight: '500', marginBottom: '4px' }}>
+                                <div className="suggestion-item-main">
                                     {mainLocation}
                                 </div>
-                                {details && (
-                                    <div style={{ fontSize: '12px', color: '#666' }}>
-                                        {details}
+                                {locationDetails && (
+                                    <div className="suggestion-item-details">
+                                        {locationDetails}
                                     </div>
                                 )}
                             </div>
                         )
                     })}
-                </div>,
-                document.body
+                </div>
             )}
 
         </div>

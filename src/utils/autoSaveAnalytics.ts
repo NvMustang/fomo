@@ -164,10 +164,12 @@ class AutoSaveAnalyticsService {
 
             const result = await response.json()
             if (result.success) {
+                // Vider le cache après sauvegarde réussie
+                analyticsTracker.clearSavedHistory()
                 if (immediate) {
-                    console.log('✅ [AutoSave] Analytics sauvegardées (avant fermeture)')
+                    console.log('✅ [AutoSave] Analytics sauvegardées (avant fermeture) et cache vidé')
                 } else {
-                    console.log('✅ [AutoSave] Analytics sauvegardées automatiquement')
+                    console.log('✅ [AutoSave] Analytics sauvegardées automatiquement et cache vidé')
                 }
             } else {
                 console.warn('⚠️ [AutoSave] Erreur sauvegarde:', result.error)

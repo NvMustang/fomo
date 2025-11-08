@@ -14,8 +14,11 @@
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, var(--color-private), var(--color-public));
-    z-index: 9999;
-    animation: fadeIn 0.5s ease-in;
+    z-index: 2100;
+    /* Au-dessus du header (2000) et du bouton create (2001) */
+    /* État initial pour l'animation */
+    opacity: 0;
+    animation: fadeIn 0.5s ease-in forwards;
     pointer-events: auto;
 }
 
@@ -24,17 +27,17 @@
     pointer-events: none;
 }
 
-/* Variante partielle : prend seulement 70% de la hauteur pour laisser voir le FakeEventCard */
+/* Variante partielle : couvre tout l'écran pour le WelcomeScreen avec UserConnexionModal */
 .loading-screen-partial {
-    height: 70vh;
-    bottom: auto;
+    height: 100vh;
+    bottom: 0;
     top: 0;
-    z-index: 1003;
-    /* Au-dessus de la carte mais sous event-card-container (1004) */
-    /* Fond transparent pour laisser voir la carte en dessous */
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    z-index: 2100;
+    /* Au-dessus du header (2000) et du bouton create (2001) pour être visible lors du clic sur "S'inscrire sur FOMO" */
+    /* Fond semi-transparent avec dégradé pour rendre visible le WelcomeScreen */
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(242, 61, 61, 0.95));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 @keyframes fadeIn {
@@ -48,12 +51,21 @@
 }
 
 .loading-content {
-    text-align: center;
+    position: absolute;
+    top: 10vh;
+    left: 0;
+    right: 0;
     color: white;
+    text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: var(--lg);
+
+
+
+
 }
 
 .loading-text {
@@ -83,41 +95,4 @@
 /* Logo dans loading-screen : icônes blanches sur fond dégradé */
 .loading-screen .logo-container img {
     filter: brightness(0) invert(1);
-}
-
-/* Overlay transparent pour AuthModal dans WelcomeScreen */
-.welcome-auth-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 10%;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-
-    opacity: 0;
-    transform: translateY(20px);
-    animation: welcomeAuthFadeIn 1s ease-out 1.5s forwards;
-}
-
-/* Ajustement pour mode partiel : centrer le modal verticalement dans les 70% */
-.loading-screen-partial .welcome-auth-overlay {
-    align-items: center;
-    bottom: 0;
-}
-
-@keyframes welcomeAuthFadeIn {
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Override le positionnement fixed du modal_container dans WelcomeScreen */
-.welcome-auth-overlay .modal_container {
-    position: relative !important;
-    bottom: auto !important;
-    left: auto !important;
-    transform: none !important;
 }

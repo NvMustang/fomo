@@ -8,7 +8,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, React
 import { useFomoData } from '@/utils/dataManager'
 import type { Event, UserResponse, UserResponseValue } from '@/types/fomoTypes'
 import type { FomoDataContextType } from './UserDataContext'
-import { addEventResponseShared, getLatestResponse, getCurrentResponse as getCurrentResponseShared, getLatestResponsesByEvent as getLatestResponsesByEventShared, getLatestResponsesByUser as getLatestResponsesByUserShared } from '@/utils/eventResponseUtils'
+import { addEventResponseShared, getLatestResponse as getLatestResponseShared, getCurrentResponse as getCurrentResponseShared, getLatestResponsesByEvent as getLatestResponsesByEventShared, getLatestResponsesByUser as getLatestResponsesByUserShared } from '@/utils/eventResponseUtils'
 import { useAuth } from './AuthContext'
 import { getCity } from '@/utils/getSessionId'
 
@@ -80,19 +80,50 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                     setCurrentUserId(savedUserId)
                     setCurrentUserName(visitorNameRef.current)
                 } else {
-                    // Créer un nouveau user ID (avec préfixe user- même pour les visiteurs)
-                    visitorUserIdRef.current = `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+                    // Créer un nouveau user ID (avec préfixe usr- même pour les visiteurs)
+                    visitorUserIdRef.current = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
                     sessionStorage.setItem('fomo-visit-user-id', visitorUserIdRef.current)
                     // Exposer dans l'état
                     setCurrentUserId(visitorUserIdRef.current)
                 }
             } catch {
                 // Si sessionStorage indisponible, créer quand même un ID
-                visitorUserIdRef.current = `user-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+                visitorUserIdRef.current = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
                 setCurrentUserId(visitorUserIdRef.current)
             }
         }
     }, [])
+
+    // Charger les réponses du visitor depuis le backend au démarrage
+    React.useEffect(() => {
+        const loadVisitorResponses = async () => {
+            // Attendre que le visitorUserId soit défini
+            if (!currentUserId || !visitorEvent) {
+                return
+            }
+
+            try {
+                // Charger toutes les réponses depuis le backend
+                const allResponses = await fomoData.getResponses()
+                
+                // Filtrer pour ne garder que les réponses du visitor pour l'événement visitor
+                const visitorResponses = allResponses.filter(
+                    response => 
+                        response.userId === currentUserId && 
+                        response.eventId === visitorEvent.id
+                )
+
+                if (visitorResponses.length > 0) {
+                    setResponses(visitorResponses)
+                    console.log(`✅ [VisitorDataContext] ${visitorResponses.length} réponse(s) chargée(s) pour le visitor`)
+                }
+            } catch (error) {
+                console.error('❌ [VisitorDataContext] Erreur lors du chargement des réponses visitor:', error)
+            }
+        }
+
+        loadVisitorResponses()
+    }, [currentUserId, visitorEvent, fomoData])
 
     // Synchroniser les changements de nom depuis sessionStorage
     React.useEffect(() => {
@@ -130,15 +161,16 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                 visitorUserIdRef.current = savedUserId
                 visitorNameRef.current = savedName
                 visitorEmailRef.current = savedEmail || undefined
-                // Exposer dans l'état
                 setCurrentUserId(savedUserId)
                 setCurrentUserName(savedName)
             }
         } catch {
-            // Ignore si sessionStorage indisponible
+            // Ignorer si sessionStorage indisponible
         }
 
-        if (!visitorUserIdRef.current) {
+        // Utiliser targetUserId si fourni, sinon visitorUserId
+        const userId = options?.targetUserId || visitorUserIdRef.current
+        if (!userId) {
             console.warn('⚠️ [VisitorDataContext] Visitor user ID not set')
             return
         }
@@ -163,66 +195,69 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
                     if (matchedId) {
                         // User existant trouvé (peut être un visiteur ou un user authentifié)
                         console.log(`✅ [VisitorDataContext] User existant trouvé: ${matchedId}`)
-                        if (visitorEmailRef.current) {
-                            const user = await fomoData.checkUserByEmail(visitorEmailRef.current)
-                            if (user) {
-                                // Si isVisitor est false, c'est un user authentifié -> connexion automatique
-                                if (!user.isVisitor) {
-                                    console.log(`✅ [VisitorDataContext] User authentifié trouvé, connexion automatique...`)
-                                    await authLogin(user.name, user.city, user.email, user)
-                                } else {
-                                    // C'est un visiteur existant -> réutiliser cet ID
-                                    console.log(`✅ [VisitorDataContext] Visiteur existant trouvé, réutilisation...`)
-                                    visitorUserIdRef.current = matchedId
-                                    sessionStorage.setItem('fomo-visit-user-id', matchedId)
-                                }
-                            }
-                        }
-                        return
-                    }
 
-                    // Aucun utilisateur trouvé -> créer nouveau visitor (avec isVisitor: true)
+                        if (matchedId.startsWith('usr-')) {
+                            // User authentifié trouvé → connexion automatique SEULEMENT si ce n'est PAS un visitor
+                            try {
+                                const user = await fomoData.checkUserByEmail(visitorEmailRef.current!)
+                                if (user) {
+                                    // Ne JAMAIS connecter un visitor
+                                    if (user.isVisitor === true) {
+                                        console.warn('⚠️ [VisitorDataContext] Visitor détecté (isVisitor: true), refus de connexion automatique')
+                                        // Réutiliser le visitor existant au lieu de se connecter
+                                        visitorUserIdRef.current = matchedId
+                                        setCurrentUserId(matchedId)
+                                        try {
+                                            sessionStorage.setItem('fomo-visit-user-id', matchedId)
+                                        } catch { }
+                                    } else {
+                                        console.log(`✅ [VisitorDataContext] User authentifié trouvé, connexion automatique...`)
+                                        await authLogin(user.name, user.city, user.email, user)
+                                        console.log('✅ [VisitorDataContext] Connexion réussie')
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('❌ [VisitorDataContext] Erreur lors de la connexion:', error)
+                            }
+                        } else {
+                            // Visiteur existant trouvé → réutiliser
+                            console.log(`✅ [VisitorDataContext] Visiteur existant trouvé, réutilisation...`)
+                            visitorUserIdRef.current = matchedId
+                            setCurrentUserId(matchedId)
+                            try {
+                                sessionStorage.setItem('fomo-visit-user-id', matchedId)
+                            } catch { }
+                        }
+                    } else {
+                    // Créer un nouveau visitor
                     console.log(`📝 [VisitorDataContext] Création nouveau visitor: ${visitorUserIdRef.current}`)
-                    
-                    // Récupérer la ville depuis toutes les sources possibles
-                    const visitorCity = getCity() || ''
-                    
-                    const userData = {
-                        id: visitorUserIdRef.current,
-                        name: visitorNameRef.current,
-                        email: visitorEmailRef.current,
-                        city: visitorCity,
+                    const city = getCity() || ''
+                    await fomoData.saveUserToBackend({
+                        id: visitorUserIdRef.current!,
+                        name: visitorNameRef.current!,
+                        email: visitorEmailRef.current!,
+                        city: city,
                         friendsCount: 0,
                         showAttendanceToFriends: false,
-                        privacy: { showAttendanceToFriends: false },
+                        isVisitor: true,
                         isPublicProfile: false,
-                        isActive: true,
                         isAmbassador: false,
-                        allowRequests: false,
-                        isVisitor: true, // Marquer comme visiteur
-                        createdAt: new Date().toISOString()
-                    }
-
-                    // Utiliser l'API directement pour créer le user
-                    const explicit = import.meta.env.VITE_API_URL?.trim()
-                    const apiUrl = explicit || (import.meta.env.PROD ? '/api' : `http://${window.location.hostname}:${import.meta.env.VITE_API_PORT || '3001'}/api`)
-                    await fetch(`${apiUrl}/users`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(userData)
+                        allowRequests: false
                     })
+                    }
                 } catch (error) {
-                    console.error('Erreur lors de la création du user visitor:', error)
+                    console.error('❌ [VisitorDataContext] Erreur lors de la création du visitor:', error)
+                } finally {
+                    visitorCreatePromiseRef.current = null
                 }
             })()
+
+            // Ne pas attendre la création, continuer avec l'ajout de la réponse
         }
 
-        // Lancer la création en arrière-plan (non bloquant, mais une seule fois grâce à visitorCreatePromiseRef)
-        visitorCreatePromiseRef.current?.catch(() => { })
-
-        // 2. Utiliser la fonction partagée (optimiste + batch) - exactement comme UserDataContext
+        // 2. Ajouter la réponse (optimiste + batch)
         addEventResponseShared({
-            userId: visitorUserIdRef.current,
+            userId,
             eventId,
             finalResponse: response,
             invitedByUserId: options?.invitedByUserId,
@@ -230,90 +265,91 @@ export const VisitorDataProvider: React.FC<VisitorDataProviderProps> = ({ childr
             fomoData,
             contextName: 'VisitorDataContext'
         })
-    }, [visitorEvent, fomoData])
+    }, [visitorEvent, fomoData, authLogin])
 
-    // Stubs pour fonctions non disponibles en mode visitor (optionnelles)
-    const notAvailableStub = async () => {
-        throw new Error('Cette fonctionnalité n\'est pas disponible en mode visiteur')
-    }
-
-    // Helpers pour réponses (partagés avec UserDataContext)
-    const getLatestResponseHelper = useCallback((userId: string, eventId: string): UserResponse | null => {
-        return getLatestResponse(responses, userId, eventId)
+    // Helpers pour réponses (utiliser les fonctions partagées)
+    const getLatestResponse = useCallback((userId: string, eventId: string): UserResponse | null => {
+        return getLatestResponseShared(responses, userId, eventId)
     }, [responses])
 
-    const getCurrentResponseHelper = useCallback((userId: string, eventId: string): UserResponseValue => {
+    const getCurrentResponse = useCallback((userId: string, eventId: string): UserResponseValue => {
         return getCurrentResponseShared(responses, userId, eventId)
     }, [responses])
 
-    const getLatestResponsesByEventHelper = useCallback((userId: string): Map<string, UserResponse> => {
+    const getLatestResponsesByEvent = useCallback((userId: string): Map<string, UserResponse> => {
         return getLatestResponsesByEventShared(responses, userId)
     }, [responses])
 
-    const getLatestResponsesByUserHelper = useCallback((eventId: string): Map<string, UserResponse> => {
+    const getLatestResponsesByUser = useCallback((eventId: string): Map<string, UserResponse> => {
         return getLatestResponsesByUserShared(responses, eventId)
     }, [responses])
 
+    // Invalider le cache (stub pour compatibilité)
+    const invalidateCache = useCallback(() => {
+        // Visitor n'a pas de cache à invalider
+    }, [])
+
+    // Value du contexte
     const value = useMemo((): VisitorDataContextType => ({
-        // Données (requises)
+        // Données
         events,
         responses,
+        users: undefined, // Visitor n'a pas besoin de users
+        userRelations: undefined, // Visitor n'a pas besoin de relations
 
-        // Actions (requises)
+        // Erreurs
+        eventsError: null,
+        usersError: undefined,
+        responsesError: null,
+        relationsError: undefined,
+
+        // Helpers pour réponses
+        getLatestResponse,
+        getCurrentResponse,
+        getLatestResponsesByEvent,
+        getLatestResponsesByUser,
+
+        // Actions
         addEventResponse,
-        invalidateCache: fomoData.invalidateCache,
+        invalidateCache,
 
-        // Helpers pour réponses (requis - partagés avec UserDataContext)
-        getLatestResponse: getLatestResponseHelper,
-        getCurrentResponse: getCurrentResponseHelper,
-        getLatestResponsesByEvent: getLatestResponsesByEventHelper,
-        getLatestResponsesByUser: getLatestResponsesByUserHelper,
+        // Refresh (stubs pour compatibilité - fonctions qui lancent une erreur)
+        refreshEvents: async () => { throw new Error('refreshEvents n\'est pas disponible en mode visitor') },
+        refreshUsers: async () => { throw new Error('refreshUsers n\'est pas disponible en mode visitor') },
+        refreshResponses: async () => { throw new Error('refreshResponses n\'est pas disponible en mode visitor') },
+        refreshUserRelations: async () => { throw new Error('refreshUserRelations n\'est pas disponible en mode visitor') },
+        refreshAll: async () => { throw new Error('refreshAll n\'est pas disponible en mode visitor') },
 
-        // États globaux (requis - valeurs constantes pour Visitor)
-        isLoading: false,
-        hasError: false,
-        dataReady: !!visitorEvent,
+        // Actions utilisateur (stubs pour compatibilité - fonctions qui lancent une erreur)
+        createEvent: async () => { throw new Error('createEvent n\'est pas disponible en mode visitor'); return null },
+        updateEvent: async () => { throw new Error('updateEvent n\'est pas disponible en mode visitor'); return null },
+        sendFriendshipRequest: async () => { throw new Error('sendFriendshipRequest n\'est pas disponible en mode visitor'); return false },
+        addFriendshipAction: async () => { throw new Error('addFriendshipAction n\'est pas disponible en mode visitor') },
+        searchUsers: async () => { throw new Error('searchUsers n\'est pas disponible en mode visitor'); return [] },
+        getTags: async () => { throw new Error('getTags n\'est pas disponible en mode visitor'); return [] },
+        checkUserByEmail: async () => { throw new Error('checkUserByEmail n\'est pas disponible en mode visitor'); return null },
+        matchByEmail: (email: string) => fomoData.matchByEmail(email),
+        saveUserToBackend: async () => { throw new Error('saveUserToBackend n\'est pas disponible en mode visitor'); return null },
+        getUserEvents: async () => { throw new Error('getUserEvents n\'est pas disponible en mode visitor'); return [] },
+        searchAddresses: async () => { throw new Error('searchAddresses n\'est pas disponible en mode visitor'); return [] },
 
-        // Propriétés spécifiques au visitor (exposées pour accès unifié)
+        // Identité
         currentUserId,
         currentUserName,
 
-        // Propriétés optionnelles (stubs)
-        users: [],
-        userRelations: [],
-        usersError: null,
-        eventsError: null,
-        responsesError: null,
-        relationsError: null,
-
-        // Actions optionnelles (stubs)
-        refreshEvents: notAvailableStub,
-        refreshUsers: notAvailableStub,
-        refreshResponses: notAvailableStub,
-        refreshUserRelations: notAvailableStub,
-        refreshAll: notAvailableStub,
-        createEvent: notAvailableStub,
-        updateEvent: notAvailableStub,
-        sendFriendshipRequest: notAvailableStub,
-        addFriendshipAction: notAvailableStub,
-        searchUsers: notAvailableStub,
-        getTags: notAvailableStub,
-        checkUserByEmail: notAvailableStub,
-        matchByEmail: (email: string) => fomoData.matchByEmail(email),
-        saveUserToBackend: notAvailableStub,
-        getUserEvents: notAvailableStub,
-        searchAddresses: notAvailableStub,
+        // États globaux
+        isLoading: false,
+        hasError: false,
+        dataReady: true // Visitor est toujours prêt (pas de chargement asynchrone)
     }), [
         events,
         responses,
-        visitorEvent,
+        getLatestResponse,
+        getCurrentResponse,
+        getLatestResponsesByEvent,
+        getLatestResponsesByUser,
         addEventResponse,
-        fomoData.invalidateCache,
-        authLogin,
-        getLatestResponseHelper,
-        getCurrentResponseHelper,
-        getLatestResponsesByEventHelper,
-        getLatestResponsesByUserHelper,
+        invalidateCache,
         currentUserId,
         currentUserName
     ])

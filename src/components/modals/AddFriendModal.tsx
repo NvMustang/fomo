@@ -78,6 +78,7 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                     title: 'Erreur',
                     message: 'Impossible de rechercher des utilisateurs',
                     type: 'error',
+                    position: 'top',
                     duration: 2000
                 })
                 setSearchResults([])
@@ -107,6 +108,7 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                     title: 'Demande envoyée',
                     message: 'Votre demande d\'amitié a été envoyée',
                     type: 'success',
+                    position: 'top',
                     duration: 2000
                 })
                 onFriendAdded?.()
@@ -115,6 +117,7 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                     title: 'Erreur',
                     message: 'Impossible d\'envoyer la demande d\'amitié',
                     type: 'error',
+                    position: 'top',
                     duration: 2000
                 })
             }

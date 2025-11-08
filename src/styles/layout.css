@@ -31,7 +31,7 @@
 }
 
 /* Barre teaser en bas de page (mode visiteur après toggle privacy) */
-/* Teaser modal - même structure que AuthModal pour transition fluide */
+/* Teaser modal - même structure que UserConnexionModal pour transition fluide */
 .modal-teaser {
    width: 360px;
    text-align: center;

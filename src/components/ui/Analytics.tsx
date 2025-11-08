@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { analyticsTracker, type ApiProvider } from '@/utils/analyticsTracker'
 import { getApiBaseUrl } from '@/config/env'
 import { getSessionId, getUserName } from '@/utils/getSessionId'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 interface AnalyticsProps {
     onClose?: () => void
@@ -40,12 +41,42 @@ interface AggregatedData {
     totalRequests: number
 }
 
+interface OnboardingStats {
+    totalSessions: number
+    completedSessions: number
+    abandonedSessions: number
+    averageDuration: number | null
+    averageSteps: number
+    abandonmentRate: number
+    stepAverages: Record<string, number>
+    abandonmentPoints: Record<string, number>
+    sessions: Array<{
+        sessionId: string
+        startTime: string
+        endTime: string | null
+        completed: boolean
+        abandonedAt: string | null
+        totalDuration: string | null
+        stepsCount: string
+        lastStep: string | null
+    }>
+    steps: Array<{
+        sessionId: string
+        step: string
+        timestamp: string
+        timeSinceStart: string
+        timeSinceLastStep: string | null
+    }>
+}
+
 const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
     const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
+    const [onboardingStats, setOnboardingStats] = useState<OnboardingStats | null>(null)
     const [selectedProvider, setSelectedProvider] = useState<ApiProvider | 'all'>('all')
     const [maptilerInputValue, setMapTilerInputValue] = useState<string>('')
     const [maptilerNote, setMapTilerNote] = useState<string>('')
     const [loading, setLoading] = useState<boolean>(false)
+    const [onboardingLoading, setOnboardingLoading] = useState<boolean>(false)
 
     const loadData = useCallback(async () => {
         // Charger les données agrégées depuis Google Sheets
@@ -66,12 +97,33 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         }
     }, [])
 
+    const loadOnboardingData = useCallback(async () => {
+        // Charger les données d'onboarding depuis Google Sheets
+        setOnboardingLoading(true)
+        try {
+            const apiUrl = getApiBaseUrl()
+            const response = await fetch(`${apiUrl}/onboarding/aggregated`)
+            const result = await response.json()
+            if (result.success) {
+                setOnboardingStats(result.data)
+            } else {
+                console.warn('⚠️ Erreur chargement données onboarding:', result.error)
+            }
+        } catch (error) {
+            console.warn('⚠️ Erreur chargement données onboarding:', error)
+        } finally {
+            setOnboardingLoading(false)
+        }
+    }, [])
+
     useEffect(() => {
         loadData()
+        loadOnboardingData()
 
         // Auto-refresh toutes les heures
         const interval = setInterval(() => {
             loadData()
+            loadOnboardingData()
         }, 60 * 60 * 1000) // 1 heure
 
         // Note: La sauvegarde automatique est gérée par autoSaveAnalytics dans main.tsx
@@ -80,7 +132,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         return () => {
             clearInterval(interval)
         }
-    }, [loadData])
+    }, [loadData, loadOnboardingData])
 
     const handleAddMapTilerReference = async () => {
         const value = parseInt(maptilerInputValue, 10)
@@ -174,7 +226,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
             const result = await response.json()
             if (result.success) {
-                console.log('✅ Analytics sauvegardées dans Google Sheets (automatique)')
+                // Vider le cache après sauvegarde réussie
+                analyticsTracker.clearSavedHistory()
+                console.log('✅ Analytics sauvegardées dans Google Sheets et cache vidé')
             } else {
                 console.warn('⚠️ Erreur sauvegarde:', result.error)
             }
@@ -404,161 +458,161 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
                 {/* Graphique de comparaison */}
                 <div className="analytics-comparison-chart-container">
-                    <div className="analytics-comparison-chart">
-                        {(() => {
-                            // Recalculer la comparaison avec les données globales
-                            const maptilerRequests = aggregatedData.history.filter(r => r.provider === 'maptiler')
-                            const sortedRefs = [...aggregatedData.maptilerReferences].sort((a, b) => a.timestamp - b.timestamp)
-                            const initialRef = sortedRefs[0]
-                            const initialValue = initialRef?.value || 104684
-                            const initialDate = initialRef
-                                ? new Date(initialRef.timestamp).toISOString().split('T')[0]
-                                : new Date().toISOString().split('T')[0]
+                    {(() => {
+                        // Recalculer la comparaison avec les données globales
+                        const maptilerRequests = aggregatedData.history.filter(r => r.provider === 'maptiler')
+                        const sortedRefs = [...aggregatedData.maptilerReferences].sort((a, b) => a.timestamp - b.timestamp)
+                        const initialRef = sortedRefs[0]
+                        const initialValue = initialRef?.value || 104684
+                        const initialDate = initialRef
+                            ? new Date(initialRef.timestamp).toISOString().split('T')[0]
+                            : new Date().toISOString().split('T')[0]
 
-                            // Grouper par date
-                            const dailyData = new Map<string, { tracked: number; reference: number | null }>()
-                            maptilerRequests.forEach(req => {
-                                const reqDate = new Date(req.timestamp).toISOString().split('T')[0]
-                                if (reqDate >= initialDate) {
-                                    const existing = dailyData.get(reqDate) || { tracked: 0, reference: null }
-                                    existing.tracked++
-                                    dailyData.set(reqDate, existing)
-                                }
-                            })
-
-                            sortedRefs.forEach(ref => {
-                                const date = new Date(ref.timestamp).toISOString().split('T')[0]
-                                const existing = dailyData.get(date) || { tracked: 0, reference: null }
-                                existing.reference = ref.value
-                                dailyData.set(date, existing)
-                            })
-
-                            let cumulativeTracked = 0
-                            const comparisonData = Array.from(dailyData.entries())
-                                .map(([date, data]) => {
-                                    cumulativeTracked += data.tracked
-                                    const trackedCumulative = initialValue + cumulativeTracked
-                                    const referenceCumulative = data.reference !== null ? data.reference : null
-
-                                    return {
-                                        date,
-                                        dateTime: new Date(date).getTime(),
-                                        tracked: data.tracked,
-                                        reference: data.reference,
-                                        trackedCumulative,
-                                        referenceCumulative
-                                    }
-                                })
-                                .sort((a, b) => a.dateTime - b.dateTime)
-
-                            if (comparisonData.length === 0) {
-                                return (
-                                    <div className="analytics-empty">
-                                        Aucune donnée de comparaison. Enregistrez une valeur MapTiler pour commencer.
-                                    </div>
-                                )
+                        // Grouper par date
+                        const dailyData = new Map<string, { tracked: number; reference: number | null }>()
+                        maptilerRequests.forEach(req => {
+                            const reqDate = new Date(req.timestamp).toISOString().split('T')[0]
+                            if (reqDate >= initialDate) {
+                                const existing = dailyData.get(reqDate) || { tracked: 0, reference: null }
+                                existing.tracked++
+                                dailyData.set(reqDate, existing)
                             }
+                        })
 
-                            // Calculer les variations en pourcentage pour chaque jour
-                            const dataWithPercentages = comparisonData.map((item) => {
-                                const variation = item.referenceCumulative !== null
-                                    ? item.referenceCumulative - item.trackedCumulative
-                                    : null
+                        sortedRefs.forEach(ref => {
+                            const date = new Date(ref.timestamp).toISOString().split('T')[0]
+                            const existing = dailyData.get(date) || { tracked: 0, reference: null }
+                            existing.reference = ref.value
+                            dailyData.set(date, existing)
+                        })
 
-                                // Calculer le pourcentage de variation par rapport à notre compteur
-                                const percentage = item.trackedCumulative > 0 && variation !== null
-                                    ? (variation / item.trackedCumulative) * 100
-                                    : null
+                        let cumulativeTracked = 0
+                        const comparisonData = Array.from(dailyData.entries())
+                            .map(([date, data]) => {
+                                cumulativeTracked += data.tracked
+                                const trackedCumulative = initialValue + cumulativeTracked
+                                const referenceCumulative = data.reference !== null ? data.reference : null
 
                                 return {
-                                    ...item,
-                                    variation,
-                                    percentage
+                                    date,
+                                    dateTime: new Date(date).getTime(),
+                                    tracked: data.tracked,
+                                    reference: data.reference,
+                                    trackedCumulative,
+                                    referenceCumulative
                                 }
                             })
+                            .sort((a, b) => a.dateTime - b.dateTime)
 
-                            // Trouver la valeur max de pourcentage absolue pour l'échelle
-                            const percentages = dataWithPercentages
-                                .map(d => d.percentage !== null ? Math.abs(d.percentage) : 0)
-                                .filter(p => p > 0)
-                            const maxPercentage = Math.max(...percentages, 1)
+                        if (comparisonData.length === 0) {
+                            return (
+                                <div className="analytics-empty">
+                                    Aucune donnée de comparaison. Enregistrez une valeur MapTiler pour commencer.
+                                </div>
+                            )
+                        }
 
-                            return dataWithPercentages.map((item, index) => {
-                                const { variation, percentage } = item
+                        // Préparer les données pour le graphique XY
+                        const chartData = comparisonData.map((item) => {
+                            const dateObj = new Date(item.date)
+                            return {
+                                date: item.date,
+                                dateLabel: dateObj.toLocaleDateString('fr-FR', {
+                                    day: '2-digit',
+                                    month: '2-digit'
+                                }),
+                                notreCompteur: item.trackedCumulative,
+                                maptiler: item.referenceCumulative !== null ? item.referenceCumulative : null
+                            }
+                        })
 
-                                // Hauteur de la barre = pourcentage absolu
-                                const barHeight = percentage !== null && maxPercentage > 0
-                                    ? (Math.abs(percentage) / maxPercentage) * 100
-                                    : 0
-
-                                // Couleur : vert si positif (MapTiler > nous), rouge si négatif (nous > MapTiler)
-                                const isPositive = percentage !== null && percentage > 0
-                                const isNegative = percentage !== null && percentage < 0
-
-                                return (
-                                    <div key={index} className="analytics-comparison-bar-container">
-                                        <div className="analytics-comparison-bars">
-                                            {percentage !== null ? (
-                                                <div
-                                                    className={`analytics-comparison-bar ${isPositive ? 'analytics-comparison-bar-positive' :
-                                                        isNegative ? 'analytics-comparison-bar-negative' :
-                                                            'analytics-comparison-bar-zero'
-                                                        }`}
-                                                    style={{ height: `${barHeight}%` }}
-                                                    title={`Variation: ${percentage > 0 ? '+' : ''}${percentage.toFixed(2)}%\nÉcart: ${variation !== null ? (variation > 0 ? '+' : '') + variation.toLocaleString() : 'N/A'} requêtes\nMapTiler: ${item.referenceCumulative?.toLocaleString()}\nNotre compteur: ${item.trackedCumulative.toLocaleString()}`}
-                                                />
-                                            ) : (
-                                                <div
-                                                    className="analytics-comparison-bar analytics-comparison-bar-no-data"
-                                                    style={{ height: '2px' }}
-                                                    title="Pas de valeur MapTiler pour ce jour"
-                                                />
-                                            )}
-                                        </div>
-                                        <div className="analytics-comparison-label">
-                                            <div className="analytics-comparison-date">
-                                                {new Date(item.date).toLocaleDateString('fr-FR', {
-                                                    day: '2-digit',
-                                                    month: '2-digit',
-                                                    weekday: 'short'
-                                                })}
-                                            </div>
-                                            <div className="analytics-comparison-values">
-                                                {percentage !== null ? (
-                                                    <span className={
-                                                        isPositive ? 'analytics-comparison-value-positive' :
-                                                            isNegative ? 'analytics-comparison-value-negative' :
-                                                                'analytics-comparison-value-zero'
-                                                    }>
-                                                        {percentage > 0 ? '+' : ''}{percentage.toFixed(1)}%
-                                                    </span>
-                                                ) : (
-                                                    <span className="analytics-comparison-value-no-data">-</span>
-                                                )}
-                                            </div>
-                                        </div>
+                        return (
+                            <>
+                                <div className="analytics-comparison-chart">
+                                    <ResponsiveContainer width="100%" height={400}>
+                                        <LineChart
+                                            data={chartData}
+                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis
+                                                dataKey="dateLabel"
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={80}
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '12px' }}
+                                            />
+                                            <YAxis
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '12px' }}
+                                                tickFormatter={(value) => value.toLocaleString()}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: 'var(--surface)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius)',
+                                                    color: 'var(--text)'
+                                                }}
+                                                formatter={(value: unknown, name: string) => {
+                                                    if (value === null || value === undefined) return ['N/A', name]
+                                                    const numValue = typeof value === 'number' ? value : Number(value)
+                                                    if (isNaN(numValue)) return ['N/A', name]
+                                                    return [numValue.toLocaleString(), name]
+                                                }}
+                                                labelFormatter={(label) => {
+                                                    const item = chartData.find(d => d.dateLabel === label)
+                                                    return item ? new Date(item.date).toLocaleDateString('fr-FR', {
+                                                        weekday: 'long',
+                                                        day: '2-digit',
+                                                        month: 'long',
+                                                        year: 'numeric'
+                                                    }) : label
+                                                }}
+                                            />
+                                            <Legend
+                                                wrapperStyle={{ paddingTop: '20px' }}
+                                                formatter={(value) => {
+                                                    if (value === 'notreCompteur') return 'Notre compteur'
+                                                    if (value === 'maptiler') return 'MapTiler'
+                                                    return value
+                                                }}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="notreCompteur"
+                                                stroke="var(--primary)"
+                                                strokeWidth={2}
+                                                dot={{ r: 4 }}
+                                                name="notreCompteur"
+                                                connectNulls={false}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="maptiler"
+                                                stroke="var(--success)"
+                                                strokeWidth={2}
+                                                dot={{ r: 4 }}
+                                                name="maptiler"
+                                                connectNulls={false}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="analytics-comparison-legend">
+                                    <div className="analytics-legend-item">
+                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--primary)' }}></div>
+                                        <span>Notre compteur (cumulatif)</span>
                                     </div>
-                                )
-                            })
-                        })()}
-                    </div>
-                    <div className="analytics-comparison-legend">
-                        <div className="analytics-legend-item">
-                            <div className="analytics-legend-color analytics-legend-positive"></div>
-                            <span>MapTiler &gt; Notre compteur (+%)</span>
-                        </div>
-                        <div className="analytics-legend-item">
-                            <div className="analytics-legend-color analytics-legend-negative"></div>
-                            <span>Notre compteur &gt; MapTiler (-%)</span>
-                        </div>
-                        <div className="analytics-legend-item">
-                            <div className="analytics-legend-color analytics-legend-zero"></div>
-                            <span>Égalité (0%)</span>
-                        </div>
-                        <div className="analytics-legend-note">
-                            <small>Pourcentage calculé par rapport à notre compteur cumulé</small>
-                        </div>
-                    </div>
+                                    <div className="analytics-legend-item">
+                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--success)' }}></div>
+                                        <span>MapTiler (valeurs enregistrées)</span>
+                                    </div>
+                                </div>
+                            </>
+                        )
+                    })()}
                 </div>
 
                 {/* Liste des valeurs de référence */}
@@ -627,6 +681,245 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                         </div>
                     )
                 })()}
+            </div>
+
+            {/* Section Onboarding */}
+            <div className="analytics-section">
+                <h3 className="analytics-section-title">📈 Onboarding - Parcours d'intégration</h3>
+                
+                {onboardingLoading ? (
+                    <div className="analytics-loading">Chargement des statistiques d'onboarding...</div>
+                ) : onboardingStats ? (
+                    <>
+                        {/* Stats globales onboarding */}
+                        <div className="analytics-stats-grid">
+                            <div className="analytics-stat-card">
+                                <div className="analytics-stat-label">Total Sessions</div>
+                                <div className="analytics-stat-value">{onboardingStats.totalSessions.toLocaleString()}</div>
+                            </div>
+                            <div className="analytics-stat-card analytics-stat-success">
+                                <div className="analytics-stat-label">Sessions Complétées</div>
+                                <div className="analytics-stat-value">{onboardingStats.completedSessions.toLocaleString()}</div>
+                                <div className="analytics-stat-percent">
+                                    {onboardingStats.totalSessions > 0 
+                                        ? ((onboardingStats.completedSessions / onboardingStats.totalSessions) * 100).toFixed(1) 
+                                        : 0}%
+                                </div>
+                            </div>
+                            <div className="analytics-stat-card analytics-stat-error">
+                                <div className="analytics-stat-label">Sessions Abandonnées</div>
+                                <div className="analytics-stat-value">{onboardingStats.abandonedSessions.toLocaleString()}</div>
+                                <div className="analytics-stat-percent">
+                                    {onboardingStats.abandonmentRate.toFixed(1)}%
+                                </div>
+                            </div>
+                            <div className="analytics-stat-card">
+                                <div className="analytics-stat-label">Durée Moyenne</div>
+                                <div className="analytics-stat-value">
+                                    {onboardingStats.averageDuration !== null
+                                        ? `${Math.round(onboardingStats.averageDuration / 1000)}s`
+                                        : 'N/A'}
+                                </div>
+                            </div>
+                            <div className="analytics-stat-card">
+                                <div className="analytics-stat-label">Étapes Moyennes</div>
+                                <div className="analytics-stat-value">{onboardingStats.averageSteps.toFixed(1)}</div>
+                            </div>
+                        </div>
+
+                        {/* Graphique des temps moyens par étape */}
+                        {Object.keys(onboardingStats.stepAverages).length > 0 && (
+                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
+                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
+                                    Temps moyen par étape (en secondes)
+                                </h4>
+                                <div className="analytics-comparison-chart">
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <LineChart
+                                            data={Object.entries(onboardingStats.stepAverages)
+                                                .map(([step, time]) => ({
+                                                    step: step.replace(/_/g, ' '),
+                                                    time: Math.round(time / 1000) // Convertir en secondes
+                                                }))
+                                                .sort((a, b) => a.time - b.time)}
+                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis
+                                                dataKey="step"
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={100}
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '11px' }}
+                                            />
+                                            <YAxis
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '12px' }}
+                                                label={{ value: 'Temps (s)', angle: -90, position: 'insideLeft' }}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: 'var(--surface)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius)',
+                                                    color: 'var(--text)'
+                                                }}
+                                                formatter={(value: unknown) => [`${value}s`, 'Temps moyen']}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="time"
+                                                stroke="var(--primary)"
+                                                strokeWidth={2}
+                                                dot={{ r: 4 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Points d'abandon */}
+                        {Object.keys(onboardingStats.abandonmentPoints).length > 0 && (
+                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
+                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
+                                    Points d'abandon (où les utilisateurs quittent)
+                                </h4>
+                                <div className="analytics-comparison-chart">
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <LineChart
+                                            data={Object.entries(onboardingStats.abandonmentPoints)
+                                                .map(([step, count]) => ({
+                                                    step: step.replace(/_/g, ' '),
+                                                    count
+                                                }))
+                                                .sort((a, b) => b.count - a.count)}
+                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis
+                                                dataKey="step"
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={100}
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '11px' }}
+                                            />
+                                            <YAxis
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '12px' }}
+                                                label={{ value: 'Nombre d\'abandons', angle: -90, position: 'insideLeft' }}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: 'var(--surface)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius)',
+                                                    color: 'var(--text)'
+                                                }}
+                                                formatter={(value: unknown) => {
+                                                    const numValue = typeof value === 'number' ? value : Number(value)
+                                                    return [isNaN(numValue) ? 'N/A' : numValue.toString(), 'Abandons']
+                                                }}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="count"
+                                                stroke="var(--error)"
+                                                strokeWidth={2}
+                                                dot={{ r: 4 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Graphique évolution du temps de session dans le temps */}
+                        {onboardingStats.sessions.length > 0 && (
+                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
+                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
+                                    Évolution des durées de session (dernières sessions)
+                                </h4>
+                                <div className="analytics-comparison-chart">
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <LineChart
+                                            data={(() => {
+                                                const lastSessions = onboardingStats.sessions.slice(-50)
+                                                const startIndex = Math.max(0, onboardingStats.sessions.length - 50)
+                                                return lastSessions.map((session, index) => ({
+                                                    session: `#${startIndex + index + 1}`,
+                                                    duration: session.totalDuration ? Math.round(parseFloat(session.totalDuration) / 1000) : null,
+                                                    completed: session.completed
+                                                }))
+                                            })()}
+                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis
+                                                dataKey="session"
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={80}
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '11px' }}
+                                            />
+                                            <YAxis
+                                                stroke="var(--text-secondary)"
+                                                style={{ fontSize: '12px' }}
+                                                label={{ value: 'Durée (s)', angle: -90, position: 'insideLeft' }}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: 'var(--surface)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius)',
+                                                    color: 'var(--text)'
+                                                }}
+                                                formatter={(value: unknown) => {
+                                                    if (value === null || value === undefined) return ['N/A', 'Durée']
+                                                    const numValue = typeof value === 'number' ? value : Number(value)
+                                                    return [isNaN(numValue) ? 'N/A' : `${numValue}s`, 'Durée']
+                                                }}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="duration"
+                                                stroke="var(--primary)"
+                                                strokeWidth={2}
+                                                dot={(props: any) => {
+                                                    const { payload } = props
+                                                    return (
+                                                        <circle
+                                                            cx={props.cx}
+                                                            cy={props.cy}
+                                                            r={4}
+                                                            fill={payload.completed ? 'var(--success)' : 'var(--error)'}
+                                                        />
+                                                    )
+                                                }}
+                                                connectNulls={false}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="analytics-comparison-legend" style={{ marginTop: 'var(--md)' }}>
+                                    <div className="analytics-legend-item">
+                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--success)' }}></div>
+                                        <span>Sessions complétées</span>
+                                    </div>
+                                    <div className="analytics-legend-item">
+                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--error)' }}></div>
+                                        <span>Sessions abandonnées</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="analytics-empty">Aucune donnée d'onboarding disponible</div>
+                )}
             </div>
 
             {/* Historique récent */}

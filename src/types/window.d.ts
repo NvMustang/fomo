@@ -20,7 +20,7 @@ declare global {
         setSelectedEventFromProfile?: (event: Event) => void
         navigateToMapPage?: () => void
 
-        // Visitor integration (visitorIntegration.tsx, DiscoverPage.tsx)
+        // Visitor onboarding (visitorOnboarding.tsx, DiscoverPage.tsx)
         __updateVisitorSelectedEventRef?: (event: Event | null) => void
         __closeEventCard?: () => void
         __openEventCard?: (event: Event) => void
@@ -28,13 +28,14 @@ declare global {
         __onVisitorEventCardOpened?: (event: Event) => void
         __onVisitorFakeEventCardOpened?: (event: Event) => void
         __hideVisitorToast?: () => void
-        __activateVisitorButtons?: () => void
+        __onVisitorEventCardCloseWithToast?: () => void
+        __showCloseEventCardToast?: () => void
 
-        // Confetti loader (visitorIntegration.tsx)
+        // Confetti loader (visitorOnboarding.tsx)
         __confettiLoader?: Promise<typeof import('canvas-confetti')>
     }
 }
 
-export {}
+export { }
 
 

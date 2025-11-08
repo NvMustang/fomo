@@ -80,7 +80,7 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
         : {}
 
     return (
-        <div 
+        <div
             className={`toast-overlay ${isClosing ? 'closing' : ''} ${toast.bounceAnimation ? 'toast-bounce' : ''}`}
             style={overlayStyle}
         >

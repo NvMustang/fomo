@@ -314,6 +314,25 @@ class AnalyticsTracker {
     }
 
     /**
+     * Vider l'historique sauvegardé (après sauvegarde réussie)
+     * Garde les stats agrégées mais vide l'historique détaillé
+     */
+    clearSavedHistory(): void {
+        // Vider l'historique global
+        this.data.history = []
+        
+        // Vider les requêtes détaillées dans chaque provider (garder les stats agrégées)
+        Object.keys(this.data.stats).forEach(provider => {
+            const stats = this.data.stats[provider as ApiProvider]
+            stats.requests = []
+        })
+        
+        this.data.lastUpdate = Date.now()
+        this.saveToStorage()
+        console.log('🧹 [AnalyticsTracker] Historique vidé du cache')
+    }
+
+    /**
      * Réinitialiser les stats
      */
     reset(): void {

@@ -140,10 +140,29 @@ export interface UserResponse {
 
 // ===== GEOCODING =====
 export interface AddressSuggestion {
-    display_name: string
+    display_name: string // Nom principal (pour affichage)
+    name?: string // Nom du lieu (ex: "Rue de la Paix", "Restaurant XYZ")
+    address?: string // Adresse complète (ex: "Rue de la Paix, Paris, Île-de-France, France")
     lat: string
     lon: string
     place_id: string
+    place_name?: string // Nom complet avec ville, région, pays
+    components?: {
+        street?: string
+        place?: string
+        locality?: string
+        region?: string
+        country?: string
+        postcode?: string
+        address_number?: string
+        country_code?: string
+    }
+    context?: Array<{
+        id: string
+        text?: string
+        name?: string
+        short_code?: string
+    }>
 }
 
 // ===== BATCH ACTIONS =====

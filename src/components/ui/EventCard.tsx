@@ -22,7 +22,10 @@ interface EventCardProps {
     isMyEventsPage?: boolean // Pour distinguer le comportement sur My Events
     onEdit?: (event: Event) => void // Callback pour éditer l'événement
     onResponseClick?: (response: UserResponseValue) => void // Callback quand une réponse est cliquée (pour déclencher les étoiles)
-    responseButtonsDisabled?: boolean // Désactive les boutons réponse (visuellement et animations)
+    responseButtonsDisabled?: boolean // Désactive les boutons réponse initialement (visuellement et animations)
+    onLabelClick?: () => void // Callback quand l'étiquette est cliquée (pour déclencher le toast impatience en visitor mode)
+    isDetailsExpanded?: boolean // Si fourni, contrôle l'état d'expansion des détails (mode contrôlé)
+    onToggleExpanded?: () => void // Callback pour gérer le toggle d'expansion (mode contrôlé)
 }
 
 export const EventCard = React.memo<EventCardProps>(({
@@ -32,9 +35,25 @@ export const EventCard = React.memo<EventCardProps>(({
     onEdit,
     onResponseClick,
     responseButtonsDisabled = false,
+    onLabelClick,
+    isDetailsExpanded: isDetailsExpandedProp,
+    onToggleExpanded,
 }: EventCardProps) => {
-    // État pour l'expansion des détails
-    const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+    // État interne pour l'expansion (uncontrolled)
+    const [isDetailsExpandedInternal, setIsDetailsExpandedInternal] = useState(false)
+
+    // Utiliser le prop isDetailsExpanded si fourni (controlled), sinon utiliser l'état interne
+    const isDetailsExpanded = isDetailsExpandedProp !== undefined ? isDetailsExpandedProp : isDetailsExpandedInternal
+
+    // Synchroniser l'état interne si le prop change
+    useEffect(() => {
+        if (isDetailsExpandedProp !== undefined) {
+            setIsDetailsExpandedInternal(isDetailsExpandedProp)
+        }
+    }, [isDetailsExpandedProp])
+
+    // État local pour l'activation des boutons (géré localement dans EventCard)
+    const [buttonsActivated, setButtonsActivated] = useState(!responseButtonsDisabled)
 
     // État pour l'expansion de la zone de partage (uniquement sur page profile)
     const [isShareExpanded, setIsShareExpanded] = useState(false)
@@ -72,8 +91,6 @@ export const EventCard = React.memo<EventCardProps>(({
     // Mémorise la réponse utilisateur à l'ouverture
     const initialResponseRef = useRef<UserResponseValue | undefined>(undefined)
 
-
-
     // Ref pour accéder aux dernières valeurs de responses et user dans le cleanup
     const responsesRef = useRef(responses)
     const userIdRef = useRef(user?.id)
@@ -85,11 +102,22 @@ export const EventCard = React.memo<EventCardProps>(({
     }, [responses, user?.id])
 
     const toggleExpanded = () => {
-        setIsDetailsExpanded(!isDetailsExpanded)
-        // Appeler la fonction d'activation des boutons visitor si disponible
-        if (window.__activateVisitorButtons) {
-            window.__activateVisitorButtons()
+        if (onToggleExpanded) {
+            // Si onToggleExpanded est fourni, le parent contrôle l'état
+            onToggleExpanded()
+        } else {
+            // Sinon, gérer l'état en interne
+            setIsDetailsExpandedInternal(!isDetailsExpandedInternal)
         }
+
+        // Activer les boutons si pas déjà activés (géré localement)
+        if (!buttonsActivated && responseButtonsDisabled) {
+            setButtonsActivated(true)
+        }
+
+        // Appeler le callback au clic sur l'étiquette (pour déclencher le toast impatience en visitor mode)
+        // Indépendant de l'état des boutons - juste un clic sur l'étiquette
+        onLabelClick?.()
     }
 
     // Handler pour confirmer le nom visitor
@@ -129,6 +157,12 @@ export const EventCard = React.memo<EventCardProps>(({
     }
 
     const handleClose = () => {
+        // Pour les fake events, ne pas envoyer de réponses au backend (purement visuel)
+        const isFake = (event.id || '').startsWith('fake-') || (event as any).isFake
+        if (isFake) {
+            return
+        }
+
         // En mode visitor, vérifier s'il y a une réponse en attente dans sessionStorage
         // (réponse sélectionnée mais pas encore envoyée car formulaire pas rempli)
         let pendingResponse: UserResponseValue = null
@@ -249,8 +283,20 @@ export const EventCard = React.memo<EventCardProps>(({
             style={{
                 height: '100%'
             }}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+                // Ne pas stopper la propagation si le clic est sur la zone cliquable
+                const target = e.target as HTMLElement
+                if (!target.closest('.event-card-clickable-area')) {
+                    e.stopPropagation()
+                }
+            }}
+            onMouseDown={(e) => {
+                // Ne pas stopper la propagation si le clic est sur la zone cliquable
+                const target = e.target as HTMLElement
+                if (!target.closest('.event-card-clickable-area')) {
+                    e.stopPropagation()
+                }
+            }}
         >
             {/* Container cliquable pour toggle les détails */}
             <div
@@ -258,7 +304,10 @@ export const EventCard = React.memo<EventCardProps>(({
                 role="button"
                 tabIndex={0}
                 aria-expanded={isDetailsExpanded}
-                onClick={toggleExpanded}
+                onClick={(e) => {
+                    e.stopPropagation() // Empêcher la propagation vers les parents
+                    toggleExpanded()
+                }}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
@@ -311,15 +360,13 @@ export const EventCard = React.memo<EventCardProps>(({
                 </div>
 
                 {/* Zone scrollable - contenu expandable */}
-                {isDetailsExpanded && (
-                    <div
-                        className="event-details-section"
-                        style={{
-                            flex: 1,
-                            overflowY: 'auto',
-                            minHeight: 0 // Important pour que flex: 1 fonctionne correctement
-                        }}
-                    >
+                <div
+                    className={`event-details-section ${isDetailsExpanded ? 'expanded' : ''}`}
+                    style={{
+                        overflowY: isDetailsExpanded ? 'auto' : 'hidden',
+                        minHeight: 0 // Important pour que flex: 1 fonctionne correctement
+                    }}
+                >
                         {event.description && (
                             <div className="event-description">
                                 <p>{event.description}</p>
@@ -357,7 +404,6 @@ export const EventCard = React.memo<EventCardProps>(({
                             </span>
                         </div>
                     </div>
-                )}
             </div>
 
             {/* Zone fixe 4 - boutons de réponses toujours visibles */}
@@ -372,20 +418,20 @@ export const EventCard = React.memo<EventCardProps>(({
 
                 return (
                     <>
-                        <div 
+                        <div
                             onClick={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                         >
                             <ButtonGroup
-                                items={RESPONSE_OPTIONS.map(({ type, label }) => ({ 
-                                    value: type, 
+                                items={RESPONSE_OPTIONS.map(({ type, label }) => ({
+                                    value: type,
                                     label,
-                                    disabled: responseButtonsDisabled
+                                    disabled: !buttonsActivated
                                 }))}
                                 defaultValue={groupValue}
                                 onChange={(next) => {
-                                    // Si les boutons sont désactivés, ne rien faire (pas d'animation stars)
-                                    if (responseButtonsDisabled) {
+                                    // Si les boutons ne sont pas activés, ne rien faire (pas d'animation stars)
+                                    if (!buttonsActivated) {
                                         return
                                     }
                                     const nextFinal: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' =

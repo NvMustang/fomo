@@ -2,7 +2,7 @@
  * Filters Context - Gestion des filtres globaux
  * 
  * Gère les filtres de recherche, catégories et plages horaires
- * avec persistence localStorage SANS useEffect
+ * SANS persistence (les filtres sont réinitialisés à chaque refresh)
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react'
@@ -55,6 +55,7 @@ interface FiltersContextType {
     getCalendarEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
     getDiscoverEvents: () => { events: Event[]; totalCount: number; filteredCount: number; isLoading: boolean; hasError: boolean }
     getMapEvents: () => Event[] // Source de vérité pour la carte : getDiscoverEvents() en mode public, événements avec réponses en mode private
+    getAllMapEvents: (options?: { visitorEvent?: Event | null; fakeEvents?: Event[] }) => Event[] // Version unifiée incluant visitorEvent et fake pins selon le mode privacy (filtrage automatique avec matchPublic)
     getMyEvents: () => Event[]
     getProfileEventsGroupedByPeriods: () => { periods: CalendarPeriod[]; totalEvents: number }
 
@@ -97,22 +98,16 @@ interface FiltersProviderProps {
 }
 
 export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) => {
-    // Initialiser les filtres depuis localStorage (1 seule fois au montage)
+    // Initialiser les filtres avec les valeurs par défaut (pas de persistence)
+    // Nettoyer localStorage au démarrage pour supprimer les anciennes valeurs
     const [filters, setFiltersState] = useState<Filters>(() => {
+        // Nettoyer localStorage au démarrage pour supprimer les anciennes valeurs persistées
         try {
-            const savedFilters = localStorage.getItem('fomo-filters')
-            if (savedFilters) {
-                const parsed = JSON.parse(savedFilters)
-                // Forcer au démarrage: masquer les "masqués" et les "refusés"
-                return {
-                    ...parsed,
-                    showHiddenEvents: false,
-                    hideRejectedEvents: true
-                }
-            }
+            localStorage.removeItem('fomo-filters')
         } catch (error) {
-            console.warn('Erreur lors du chargement des filtres depuis localStorage:', error)
+            // Ignorer les erreurs de localStorage
         }
+        
         // Valeurs par défaut
         return {
             searchQuery: '',
@@ -131,18 +126,10 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
     const { user } = useAuth()
     const { isPublicMode } = usePrivacy()
 
-    // Setter custom qui sauvegarde dans localStorage SANS useEffect
+    // Setter simple sans persistence (les filtres ne sont pas sauvegardés)
     const setFilters = useCallback((newFilters: Filters | ((prev: Filters) => Filters)) => {
         setFiltersState(prev => {
             const updated = typeof newFilters === 'function' ? newFilters(prev) : newFilters
-
-            // Sauvegarder directement dans localStorage (pas de useEffect)
-            try {
-                localStorage.setItem('fomo-filters', JSON.stringify(updated))
-            } catch (error) {
-                console.warn('Erreur lors de la sauvegarde des filtres dans localStorage:', error)
-            }
-
             return updated
         })
     }, [])
@@ -330,6 +317,46 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
             })
         }
     }, [isPublicMode, getDiscoverEvents, responses, currentUserId])
+
+    /**
+     * Version unifiée de getMapEvents qui inclut le visitorEvent et les fake pins selon le mode privacy.
+     * 
+     * Logique unifiée :
+     * - Mode public : retourne fakeEvents filtrés (si présents) OU tous les événements (getMapEvents)
+     * - Mode privé : retourne visitorEvent (s'il existe) + événements avec réponse (getMapEvents), pas de fake pins
+     * 
+     * Le filtrage des fake events se fait automatiquement avec matchPublic() selon isPublicMode.
+     * 
+     * @param options - Options pour visitorEvent et fakeEvents
+     * @returns Événements unifiés pour la carte selon le mode privacy
+     */
+    const getAllMapEvents = useCallback((options?: { visitorEvent?: Event | null; fakeEvents?: Event[] }): Event[] => {
+        const { visitorEvent, fakeEvents = [] } = options || {}
+        
+        // Filtrer les fake events selon le mode privacy (utilise matchPublic comme pour les événements réels)
+        const filteredFakeEvents = fakeEvents.filter(e => matchPublic(e, isPublicMode))
+        
+        // Mode public avec fake events : afficher uniquement les fake events filtrés
+        if (isPublicMode && filteredFakeEvents.length > 0) {
+            return filteredFakeEvents
+        }
+        
+        // Récupérer les événements réels selon le mode privacy
+        const realEvents = getMapEvents()
+        
+        // Inclure le visitorEvent s'il existe et n'est pas déjà dans realEvents (pour éviter les doublons)
+        // En mode privé : toujours inclure le visitorEvent (car l'utilisateur a été invité)
+        // En mode public : inclure le visitorEvent s'il n'est pas déjà dans la liste (cas où l'événement est privé)
+        if (visitorEvent) {
+            const visitorEventInRealEvents = realEvents.some(e => e.id === visitorEvent.id)
+            if (!visitorEventInRealEvents) {
+                return [visitorEvent, ...realEvents]
+            }
+        }
+        
+        // Retourner les événements réels (visitorEvent déjà inclus s'il était dans realEvents)
+        return realEvents
+    }, [isPublicMode, getMapEvents])
 
     /**
      * Filtre les événements où l'utilisateur est organisateur.
@@ -872,7 +899,8 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         getFriends,
         getFriendsGroupedByFrienship,
         getGuests,
-        getGuestsGroupedByResponse
+        getGuestsGroupedByResponse,
+        getAllMapEvents
     }), [
         filters,
         setFilters,
@@ -883,6 +911,7 @@ export const FiltersProvider: React.FC<FiltersProviderProps> = ({ children }) =>
         getCalendarEvents,
         getDiscoverEvents,
         getMapEvents,
+        getAllMapEvents,
         getMyEvents,
         getProfileEventsGroupedByPeriods,
         filterByQuery,

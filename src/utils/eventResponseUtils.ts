@@ -4,7 +4,6 @@
  */
 
 import type { UserResponse, UserResponseValue } from '@/types/fomoTypes'
-import { setUserResponseFeatureState } from '@/map/stylingPinsController'
 import { format } from 'date-fns'
 
 /**
@@ -195,13 +194,6 @@ export function addEventResponseShared(config: AddEventResponseConfig): void {
         } catch (error) {
             console.error(`❌ [${contextName}] Erreur lors de l'ajout de la réponse:`, error)
             // Le rollback sera géré par le catch ci-dessous
-        }
-
-        // Mettre à jour la carte impérativement via le controller (sans props/event bus)
-        try {
-            setUserResponseFeatureState(eventId, finalResponse)
-        } catch {
-            // ignorer si la carte n'est pas prête
         }
 
         return updated

@@ -19,16 +19,16 @@ import {
     isWeekend,
     isSameWeek,
     isSameMonth,
-    isToday,
-    isTomorrow,
     startOfWeek,
     endOfWeek,
     startOfMonth,
     endOfMonth,
     addWeeks,
     addMonths,
+    addDays,
     isPast,
-
+    startOfDay,
+    isWithinInterval,
 } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 
@@ -488,7 +488,16 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
     }
 
     // 2. Today
-    if (isToday(startDate)) {
+    // Un événement est "aujourd'hui" si aujourd'hui est entre startDate et endDate (inclus)
+    const today = startOfDay(now)
+    const eventStartDay = startOfDay(startDate)
+    const eventEndDay = startOfDay(endDate)
+
+    // Vérifier si aujourd'hui est dans l'intervalle [eventStartDay, eventEndDay]
+    // Utiliser isWithinInterval avec les dates normalisées (startOfDay)
+    const isTodayInRange = isWithinInterval(today, { start: eventStartDay, end: eventEndDay })
+
+    if (isTodayInRange) {
         return {
             key: 'today',
             label: 'Aujourd\'hui',
@@ -498,7 +507,13 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
     }
 
     // 3. Tomorrow
-    if (isTomorrow(startDate)) {
+    // Un événement est "demain" si demain est entre startDate et endDate (inclus)
+    const tomorrowDay = startOfDay(addDays(now, 1))
+
+    // Vérifier si demain est dans l'intervalle [eventStartDay, eventEndDay]
+    const isTomorrowInRange = isWithinInterval(tomorrowDay, { start: eventStartDay, end: eventEndDay })
+
+    if (isTomorrowInRange) {
         return {
             key: 'tomorrow',
             label: 'Demain',

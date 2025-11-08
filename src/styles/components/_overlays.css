@@ -104,25 +104,8 @@
     pointer-events: auto;
 }
 
-/* Lueur subtile sur les bords */
+/* Bordure dégradé pour tous les toasts (référence unifiée) */
 .toast-message::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: var(--radius-lg);
-    padding: 2px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-}
-
-/* Bordure dégradé pour toast visitor (identique au modal visitor) */
-.toast-message.toast-visitor::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -315,4 +298,61 @@
     animation: overlayFadeIn 0.3s ease-out;
     /* Permettre tous les gestes tactiles de passer à travers */
     touch-action: auto;
+}
+
+/* ========================
+   WELCOME SCREEN OVERLAY
+   Overlay unifié pour les modals d'authentification dans WelcomeScreen
+   Hérite du système overlay unifié avec adaptations spécifiques
+   ======================== */
+
+.welcome-screen-overlay {
+    /* Hérite du système overlay unifié */
+    position: absolute;
+    top: 30vh;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    /* Pas de background (transparent sur fond dégradé) */
+    background: transparent;
+    /* Pas de padding (positionnement spécifique) */
+    padding: 0;
+    /* Utilise z-index du système unifié */
+    z-index: var(--z-index-modal, 1000);
+    /* Animation spécifique avec délai (utilise transition-medium comme base) */
+    opacity: 0;
+    transform: translateY(20px);
+    animation: welcomeAuthFadeIn 1s ease-out 1.5s forwards;
+}
+
+/* Variante pour mode partiel (partialHeight) */
+.loading-screen-partial .welcome-screen-overlay {
+    position: fixed;
+    top: 30vh;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    align-items: flex-start;
+    padding-top: 0;
+    /* Animation plus rapide pour le mode partiel */
+    animation: welcomeAuthFadeIn 0.5s ease-out 0.3s forwards;
+}
+
+/* Animation spécifique pour welcome screen (utilise overlayFadeIn comme base) */
+@keyframes welcomeAuthFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

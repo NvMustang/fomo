@@ -4,13 +4,20 @@
  * Page de gestion calendaire des événements auxquels l'utilisateur participe
  */
 
-import React, { useRef, useEffect } from 'react'
-import { EventCard } from '@/components'
+import React, { useRef, useEffect, useState } from 'react'
+import { EventCard } from '@/components/ui/EventCard'
 import { useFilters } from '@/contexts/FiltersContext'
+import { animateWindowScrollTo } from '@/hooks/useModalScrollHint'
 
 const CalendarPage: React.FC = () => {
   // 🔄 RÉFÉRENCES POUR LE SCROLL
   const periodRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+
+  // Référence pour tracker si l'animation de scroll initiale a déjà été jouée
+  const hasScrolledToTodayRef = useRef(false)
+
+  // État pour suivre quel EventCard a ses détails ouverts (un seul à la fois)
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
 
   // Données pour Calendar: getCalendarEvents() + getOnlineEventsGroupedByPeriods()
   const { getCalendarEvents, getOnlineEventsGroupedByPeriods } = useFilters()
@@ -25,10 +32,20 @@ const CalendarPage: React.FC = () => {
   })).filter(period => period.events.length > 0)
 
   // 🔄 POSITIONNEMENT SUR LE PROCHAIN ÉVÉNEMENT PAR RAPPORT À L'HEURE ACTUELLE
+  // Ne s'exécute qu'une seule fois lors du premier chargement de la page
   useEffect(() => {
+    // Ne jouer l'animation qu'une seule fois
+    if (hasScrolledToTodayRef.current) {
+      return
+    }
+
     if (filteredCalendarGrouping.length > 0 && !isLoading) {
+      // Timer pour le scroll
+      let scrollTimer: NodeJS.Timeout | null = null
+      let animationFrameId: number | null = null
+
       // Attendre un peu pour que le DOM soit rendu
-      const timer = setTimeout(() => {
+      scrollTimer = setTimeout(() => {
         let targetPeriod = null
 
         // Chercher le prochain événement par rapport à l'heure actuelle
@@ -42,15 +59,19 @@ const CalendarPage: React.FC = () => {
           }
         }
 
-        // Scroll vers la période cible avec gap
+        // Scroll vers la période cible
         if (targetPeriod) {
           const targetElement = periodRefs.current[targetPeriod.key]
           if (targetElement) {
-            // Utiliser scrollIntoView avec block: 'start' puis ajuster avec scrollBy
-            targetElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start'
-            })
+            // Marquer que l'animation a été jouée
+            hasScrolledToTodayRef.current = true
+            
+            // Calculer la position cible (top de l'élément)
+            const targetRect = targetElement.getBoundingClientRect()
+            const targetY = window.scrollY + targetRect.top
+
+            // Animation avec durée personnalisable (1200ms) - fonction unifiée depuis useModalScrollHint
+            animationFrameId = animateWindowScrollTo(targetY, 1200)
           } else {
             console.log('❌ Élément non trouvé pour:', targetPeriod.key)
           }
@@ -59,7 +80,14 @@ const CalendarPage: React.FC = () => {
         }
       }, 100)
 
-      return () => clearTimeout(timer)
+      return () => {
+        if (scrollTimer) {
+          clearTimeout(scrollTimer)
+        }
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId)
+        }
+      }
     }
   }, [filteredCalendarGrouping, isLoading])
 
@@ -104,6 +132,11 @@ const CalendarPage: React.FC = () => {
                       event={event}
                       showToggleResponse={true}
                       isMyEventsPage={true}
+                      isDetailsExpanded={selectedCardId === event.id}
+                      onToggleExpanded={() => {
+                        // Si cette carte est déjà ouverte, la fermer, sinon l'ouvrir (et fermer les autres)
+                        setSelectedCardId(selectedCardId === event.id ? null : event.id)
+                      }}
                     />
                   </div>
                 ))}

@@ -10,7 +10,7 @@
 .modal_overlay {
     position: fixed;
     inset: 0;
-    z-index: var(--z-index-modal);
+    z-index: 1010;
     /* Au-dessus de event-card-container (1004) et FakeEventCard */
     background: rgba(0, 0, 0, 0.5);
     /* Animation d'entrée */
@@ -24,17 +24,32 @@
     bottom: calc(var(--navbar-height) + var(--button-radius) + var(--sm));
     left: 50%;
     transform: translateX(-50%);
-    z-index: calc(var(--z-index-modal) + 1);
-    /* Au-dessus de l'overlay */
+    z-index: 1011;
+    /* Au-dessus de l'overlay (1010) */
     overflow: visible;
     /* Permet au modal de gérer son propre scroll */
 }
 
-/* Modal sans backdrop - affiché par-dessus la carte */
+/* ========================
+   MODAL WELCOME SCREEN
+   Styles pour modals affichés dans WelcomeScreen (sans backdrop)
+   ======================== */
+
+/* Modal sans backdrop - affiché par-dessus WelcomeScreen */
 .modal-no-backdrop {
-    /* Pas de backdrop, juste le modal flottant */
-    z-index: calc(var(--z-index-modal) + 2);
-    /* Au-dessus de tout pour être visible par-dessus la carte */
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    z-index: 1;
+}
+
+/* Override du positionnement fixed du modal_container dans WelcomeScreen */
+.welcome-screen-overlay .modal_container {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
 }
 
 /* Modal principal */
@@ -105,7 +120,6 @@
 .modal-content {
     padding: var(--lg);
     overflow-y: auto;
-    scroll-behavior: smooth;
 }
 
 .modal-form {
@@ -119,6 +133,14 @@
     color: white;
     border: 1px solid white;
     background: rgba(255, 255, 255, 0.2);
+}
+
+/* Titres et textes en blanc */
+.modal-welcome h2,
+.modal-welcome h3,
+.modal-welcome p,
+.modal-welcome .auth-subtitle {
+    color: white;
 }
 
 .modal-welcome .form-label {
@@ -139,6 +161,21 @@
     color: white;
     border: 1px solid white;
     background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-welcome .button.primary:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Bouton retour en blanc */
+.modal-welcome .back-button {
+    color: white;
+    border-color: white;
+}
+
+/* Bouton retour avec fond transparent dans les modals de formulaire */
+.modal-content .back-button {
+    background: transparent;
 }
 
 /* Modal header avec titre et bouton fermer */
@@ -207,7 +244,6 @@
     flex: 1;
     overflow-y: auto;
     min-height: 0;
-    scroll-behavior: smooth;
 }
 
 .modal-content-inner {
@@ -289,4 +325,9 @@
 
 .visitor-form-header h2 {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Amélioration du toast avec animation douce */
+.toast-message {
+    animation: toastIntroSlideUp 0.4s ease-out;
 }

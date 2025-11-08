@@ -409,6 +409,34 @@ class DataServiceV2 {
             savedAt: row[10] || new Date().toISOString(),
             sessionId: row[11] || '', // Session ID de l'utilisateur
             userName: row[12] || '' // Nom de l'utilisateur
+        }),
+
+        onboardingSessions: (row) => ({
+            sessionId: row[0] || '',
+            startTime: row[1] || new Date().toISOString(),
+            endTime: row[2] || null,
+            completed: row[3] === 'true',
+            abandonedAt: row[4] || null,
+            totalDuration: row[5] || null,
+            stepsCount: row[6] || '0',
+            lastStep: row[7] || null,
+            userAgent: row[8] || '',
+            viewportWidth: row[9] || '',
+            viewportHeight: row[10] || '',
+            savedAt: row[11] || new Date().toISOString(),
+            deploymentId: row[12] || '' // Colonne N (index 12)
+        }),
+
+        onboardingSteps: (row) => ({
+            sessionId: row[0] || '',
+            step: row[1] || '',
+            timestamp: row[2] || new Date().toISOString(),
+            timeSinceStart: row[3] || '',
+            timeSinceLastStep: row[4] || null,
+            userAgent: row[5] || '',
+            viewportWidth: row[6] || '',
+            viewportHeight: row[7] || '',
+            savedAt: row[8] || new Date().toISOString()
         })
     }
 
