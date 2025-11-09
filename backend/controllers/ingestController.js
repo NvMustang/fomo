@@ -156,6 +156,37 @@ class IngestController {
     }
 
     /**
+     * Middleware pour valider la clé API depuis le body (pour formulaire POST)
+     */
+    static validateApiKeyFromBody(req, res, next) {
+        const providedKey = req.body.apiKey || req.body.fomoKey || req.body.fomo_key
+        const expectedKey = process.env.FOMO_KEY
+
+        if (!expectedKey) {
+            console.error('❌ FOMO_KEY non configurée dans les variables d\'environnement')
+            return res.status(500).json({
+                ok: false,
+                error: 'Configuration serveur invalide'
+            })
+        }
+
+        if (!providedKey || providedKey !== expectedKey) {
+            console.warn(`⚠️ Tentative d'accès avec clé invalide depuis ${req.ip}`)
+            return res.status(401).json({
+                ok: false,
+                error: 'Clé d\'authentification invalide'
+            })
+        }
+
+        // Supprimer la clé du body pour éviter de la traiter comme une donnée d'événement
+        delete req.body.apiKey
+        delete req.body.fomoKey
+        delete req.body.fomo_key
+
+        next()
+    }
+
+    /**
      * Endpoint principal: POST /api/ingest/event
      */
     static async ingestEvent(req, res) {
@@ -173,6 +204,59 @@ class IngestController {
             const validation = IngestController.validateEventPayload(payload)
             if (!validation.isValid) {
                 console.warn(`⚠️ [${requestId}] Validation échouée:`, validation.errors)
+                
+                // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
+                if (req.body.requestId) {
+                    const result = {
+                        ok: false,
+                        error: 'Données invalides',
+                        details: validation.errors
+                    }
+                    return res.status(400).send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function() {
+            const result = ${JSON.stringify(result)};
+            const requestId = ${JSON.stringify(req.body.requestId)};
+            
+            const response = {
+                type: 'fomo-bookmarklet-response',
+                requestId: requestId,
+                ok: false,
+                error: result.error,
+                details: result.details
+            };
+            
+            try {
+                if (window.opener) {
+                    window.opener.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            setTimeout(function() {
+                try {
+                    window.close();
+                } catch (e) {}
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
+                    `)
+                }
+                
                 return res.status(400).json({
                     ok: false,
                     error: 'Données invalides',
@@ -190,6 +274,59 @@ class IngestController {
             if (duplicate) {
                 const city = IngestController.extractCity(payload.address || '')
                 console.log(`🔄 [${requestId}] Doublon détecté: ${payload.title} - ${city} (ID existant: ${duplicate.id})`)
+                
+                // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
+                if (req.body.requestId) {
+                    const result = {
+                        ok: true,
+                        id: duplicate.id,
+                        duplicate: true
+                    }
+                    return res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function() {
+            const result = ${JSON.stringify(result)};
+            const requestId = ${JSON.stringify(req.body.requestId)};
+            
+            const response = {
+                type: 'fomo-bookmarklet-response',
+                requestId: requestId,
+                ok: result.ok,
+                id: result.id,
+                duplicate: result.duplicate || false
+            };
+            
+            try {
+                if (window.opener) {
+                    window.opener.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            setTimeout(function() {
+                try {
+                    window.close();
+                } catch (e) {}
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
+                    `)
+                }
+                
                 return res.json({
                     ok: true,
                     id: duplicate.id,
@@ -210,6 +347,69 @@ class IngestController {
             const city = IngestController.extractCity(payload.address || '')
             console.log(`✅ [${requestId}] Événement ingéré: ${payload.title} - ${city} (ID: ${eventId})`)
 
+            // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
+            // qui envoie la réponse via postMessage
+            if (req.body.requestId) {
+                const result = {
+                    ok: true,
+                    id: eventId,
+                    duplicate: false
+                }
+                return res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function() {
+            const result = ${JSON.stringify(result)};
+            const requestId = ${JSON.stringify(req.body.requestId)};
+            
+            // Envoyer la réponse au parent/opener
+            const response = {
+                type: 'fomo-bookmarklet-response',
+                requestId: requestId,
+                ok: result.ok,
+                id: result.id,
+                duplicate: result.duplicate || false
+            };
+            
+            try {
+                if (window.opener) {
+                    window.opener.postMessage(response, '*');
+                    console.log('📤 Réponse envoyée via window.opener');
+                }
+            } catch (e) {
+                console.error('Erreur postMessage opener:', e);
+            }
+            
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(response, '*');
+                    console.log('📤 Réponse envoyée via window.parent');
+                }
+            } catch (e) {
+                console.error('Erreur postMessage parent:', e);
+            }
+            
+            // Fermer la fenêtre après 500ms
+            setTimeout(function() {
+                try {
+                    window.close();
+                } catch (e) {
+                    // Ignorer si on ne peut pas fermer
+                }
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
+                `)
+            }
+
             res.json({
                 ok: true,
                 id: eventId
@@ -217,10 +417,244 @@ class IngestController {
 
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur ingestion événement:`, error)
+            
+            // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
+            if (req.body && req.body.requestId) {
+                const result = {
+                    ok: false,
+                    error: error.message || 'Erreur interne du serveur'
+                }
+                return res.status(500).send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function() {
+            const result = ${JSON.stringify(result)};
+            const requestId = ${JSON.stringify(req.body.requestId)};
+            
+            const response = {
+                type: 'fomo-bookmarklet-response',
+                requestId: requestId,
+                ok: false,
+                error: result.error
+            };
+            
+            try {
+                if (window.opener) {
+                    window.opener.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(response, '*');
+                }
+            } catch (e) {}
+            
+            setTimeout(function() {
+                try {
+                    window.close();
+                } catch (e) {}
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
+                `)
+            }
+            
             res.status(500).json({
                 ok: false,
                 error: error.message || 'Erreur interne du serveur'
             })
+        }
+    }
+
+    /**
+     * Endpoint spécifique pour formulaire POST: POST /api/ingest/event-form
+     * Renvoie une page HTML qui communique via postMessage avec expectedOrigin
+     */
+    static async ingestEventForm(req, res) {
+        const requestId = req.body.requestId || Math.random().toString(36).substr(2, 9)
+        const timestamp = new Date().toISOString()
+        const expectedOrigin = req.body.expectedOrigin || (req.headers.referer ? new URL(req.headers.referer).origin : '*')
+
+        // Log IP et requestId pour ratelimit
+        console.log(`📥 [${requestId}] [${timestamp}] Requête formulaire POST`)
+        console.log(`📥 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
+        console.log(`📥 [${requestId}] ExpectedOrigin:`, expectedOrigin)
+
+        try {
+            // Extraire le payload (sans apiKey, requestId, expectedOrigin)
+            const payload = { ...req.body }
+            delete payload.apiKey
+            delete payload.fomoKey
+            delete payload.fomo_key
+            delete payload.requestId
+            delete payload.expectedOrigin
+
+            console.log(`📥 [${requestId}] Payload:`, JSON.stringify(payload, null, 2))
+
+            // Validation du payload
+            const validation = IngestController.validateEventPayload(payload)
+            if (!validation.isValid) {
+                console.warn(`⚠️ [${requestId}] Validation échouée:`, validation.errors)
+                return res.status(400).send(`
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function(){
+            const payload = ${JSON.stringify({ id: null, requestId: requestId, expectedOrigin: expectedOrigin })};
+            const expected = payload.expectedOrigin || '*';
+            
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: 'FOMO_INGEST_RESPONSE',
+                    ok: false,
+                    error: 'Données invalides',
+                    details: ${JSON.stringify(validation.errors)},
+                    requestId: payload.requestId
+                }, expected);
+            }
+            
+            try { window.close(); } catch(e) {}
+        })();
+    </script>
+</body>
+</html>
+                `)
+            }
+
+            // Vérification de déduplication
+            const duplicate = await IngestController.checkDuplicate(
+                payload.url,
+                payload.title,
+                payload.start
+            )
+
+            if (duplicate) {
+                const city = IngestController.extractCity(payload.address || '')
+                console.log(`🔄 [${requestId}] Doublon détecté: ${payload.title} - ${city} (ID existant: ${duplicate.id})`)
+                
+                return res.send(`
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function(){
+            const payload = ${JSON.stringify({ id: duplicate.id, requestId: requestId, expectedOrigin: expectedOrigin })};
+            const expected = payload.expectedOrigin || '*';
+            
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: 'FOMO_INGEST_RESPONSE',
+                    ok: true,
+                    id: payload.id,
+                    duplicate: true,
+                    requestId: payload.requestId
+                }, expected);
+            }
+            
+            try { window.close(); } catch(e) {}
+        })();
+    </script>
+</body>
+</html>
+                `)
+            }
+
+            // Transformation et enregistrement
+            const { eventId, rowData } = IngestController.transformPayload(payload)
+
+            await DataServiceV2.upsertData(
+                EventsController.EVENTS_RANGE,
+                rowData,
+                0, // key column (ID)
+                eventId
+            )
+
+            const city = IngestController.extractCity(payload.address || '')
+            console.log(`✅ [${requestId}] Événement ingéré: ${payload.title} - ${city} (ID: ${eventId})`)
+
+            // Renvoyer une page HTML simple qui envoie la réponse via postMessage
+            // Cette page s'exécute dans la popup ouverte par le formulaire POST
+            return res.send(`
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function(){
+            const payload = ${JSON.stringify({ id: eventId, requestId: requestId, expectedOrigin: expectedOrigin })};
+            const expected = payload.expectedOrigin || '*';
+            
+            // Envoyer le message au bookmarklet (window.opener = la page Facebook)
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: 'FOMO_INGEST_RESPONSE',
+                    ok: true,
+                    id: payload.id,
+                    duplicate: false,
+                    requestId: payload.requestId
+                }, expected);
+            }
+            
+            // Fermer la popup
+            try { window.close(); } catch(e) {}
+        })();
+    </script>
+</body>
+</html>
+            `)
+
+        } catch (error) {
+            console.error(`❌ [${requestId}] Erreur ingestion événement:`, error)
+            
+            return res.status(500).send(`
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FOMO Bookmarklet</title>
+</head>
+<body>
+    <script>
+        (function(){
+            const payload = ${JSON.stringify({ id: null, requestId: requestId, expectedOrigin: expectedOrigin })};
+            const expected = payload.expectedOrigin || '*';
+            
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: 'FOMO_INGEST_RESPONSE',
+                    ok: false,
+                    error: ${JSON.stringify(error.message || 'Erreur interne du serveur')},
+                    requestId: payload.requestId
+                }, expected);
+            }
+            
+            try { window.close(); } catch(e) {}
+        })();
+    </script>
+</body>
+</html>
+            `)
         }
     }
 }

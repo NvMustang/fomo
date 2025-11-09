@@ -65,5 +65,26 @@ router.post('/reset', (req, res) => {
     }
 })
 
+/**
+ * POST /analytics/clear-cache
+ * Instruction pour vider le cache localStorage côté frontend
+ * Le frontend doit appeler analyticsTracker.clearAllCache() après avoir reçu cette réponse
+ */
+router.post('/clear-cache', (req, res) => {
+    try {
+        res.json({
+            success: true,
+            message: 'Cache à vider côté frontend',
+            action: 'clearAllCache'
+        })
+    } catch (error) {
+        console.error('❌ Erreur instruction vidage cache:', error)
+        res.status(500).json({
+            success: false,
+            error: error.message
+        })
+    }
+})
+
 module.exports = router
 

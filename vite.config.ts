@@ -91,7 +91,6 @@ export default defineConfig({
         manualChunks: {
           maplibre: ['maplibre-gl'],
           'react-map': ['react-map-gl'],
-          clustering: ['supercluster'],
         },
       },
     },

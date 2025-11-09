@@ -25,6 +25,7 @@ export { default as CreateEventModal } from './modals/CreateEventModal'
 export { UserConnexionModal } from '@/onboarding/modals/UserConnexionModal'
 export { VisitorRegistrationModal } from '@/onboarding/modals/VisitorRegistrationModal'
 export { BetaModal } from './modals/BetaModal'
+export { BookmarkletBatchModal } from './modals/BookmarkletBatchModal'
 
 // Composants utilitaires
 export { LocationPicker } from './ui/LocationPicker'

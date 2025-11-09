@@ -16,6 +16,8 @@
 
     // ===== CONFIGURATION =====
     // ⚠️ MODIFIER CETTE URL avec votre URL de production
+    // Pour test local: http://localhost:3001/api
+    // Pour production: https://fomo-swart.vercel.app/api
     const API_BASE_URL = 'https://fomo-swart.vercel.app/api';
     // ⚠️ MODIFIER CETTE CLÉ avec votre clé API FOMO (même valeur que FOMO_KEY dans .env)
     const FOMO_KEY = 'LaFomoCrew';
@@ -50,8 +52,8 @@
             venue_name: '',
             address: '',
             host: '',
-            attending_count: 0,
-            interested_count: 0,
+            attending_count: '',
+            interested_count: '',
             cover: ''
         };
 
@@ -620,11 +622,13 @@
                 for (const span of dateSpans) {
                     const text = span.textContent.trim();
                     // Pattern: "Dimanche 26 avril 2026 de 13:00 à 19:00" ou similaire
+                    // OU formats relatifs: "Aujourd'hui à 06:00", "Demain à 22:00", "Aujourd'hui de 6:00 à 16:00"
                     if (text && (
                         (text.includes('de') && text.includes('à') && text.match(/\d{1,2}\s+\w+\s+\d{4}/)) ||
                         (text.includes('à') && text.match(/\d{1,2}\s+\w+\s+\d{4}/)) ||
                         text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
-                        text.match(/\d{4}-\d{2}-\d{2}/)
+                        text.match(/\d{4}-\d{2}-\d{2}/) ||
+                        /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
                     )) {
                         dateText = text;
                         console.log('📅 [FOMO Bookmarklet] Date trouvée via span spécifique:', text);
@@ -647,7 +651,13 @@
                         console.log(`📅 [FOMO Bookmarklet] Sélecteur "${selector}": ${elements.length} éléments trouvés`);
                         for (const el of elements) {
                             const text = el.textContent.trim() || el.getAttribute('aria-label') || '';
-                            if (text && (text.includes('à') || text.match(/\d{1,2}\s+\w+\s+\d{4}/) || text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) || text.match(/\d{4}-\d{2}-\d{2}/))) {
+                            if (text && (
+                                text.includes('à') ||
+                                text.match(/\d{1,2}\s+\w+\s+\d{4}/) ||
+                                text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
+                                text.match(/\d{4}-\d{2}-\d{2}/) ||
+                                /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
+                            )) {
                                 dateText = text;
                                 console.log('📅 [FOMO Bookmarklet] Date trouvée via attribut:', text);
                                 break;
@@ -664,7 +674,12 @@
                     console.log('📅 [FOMO Bookmarklet] Nombre de spans dir="auto" trouvés:', spans.length);
                     for (const span of spans) {
                         const text = span.textContent.trim();
-                        if (text && (text.includes('à') || text.match(/\d{1,2}\s+\w+\s+\d{4}/) || text.match(/\d{1,2}\/\d{1,2}\/\d{4}/))) {
+                        if (text && (
+                            text.includes('à') ||
+                            text.match(/\d{1,2}\s+\w+\s+\d{4}/) ||
+                            text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
+                            /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
+                        )) {
                             dateText = text;
                             console.log('📅 [FOMO Bookmarklet] Date trouvée via span dir="auto":', text);
                             break;
@@ -687,6 +702,45 @@
                                 console.log('✅ [FOMO Bookmarklet] Date ISO parsée avec succès:', data.start);
                             } else {
                                 console.warn('⚠️ [FOMO Bookmarklet] Date ISO invalide après parsing:', isoMatch[1]);
+                            }
+                        } else if (/(aujourd'hui|today)/i.test(dateText) || /(demain|tomorrow)/i.test(dateText)) {
+                            // Formats relatifs: "Aujourd'hui à 06:00", "Demain à 22:00", "Aujourd'hui de 6:00 à 16:00"
+                            console.log('📅 [FOMO Bookmarklet] Format relatif détecté (Aujourd\'hui/Demain)');
+
+                            const now = new Date();
+                            let targetDate = new Date(now);
+
+                            // Déterminer si c'est "Demain" ou "Aujourd'hui"
+                            if (/(demain|tomorrow)/i.test(dateText)) {
+                                targetDate.setDate(targetDate.getDate() + 1);
+                                console.log('📅 [FOMO Bookmarklet] Date relative: Demain');
+                            } else {
+                                console.log('📅 [FOMO Bookmarklet] Date relative: Aujourd\'hui');
+                            }
+
+                            // Chercher d'abord le format avec plage: "de 6:00 à 16:00"
+                            const rangeMatch = dateText.match(/de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
+                            if (rangeMatch) {
+                                const [, startHour, startMinute, endHour, endMinute] = rangeMatch;
+                                targetDate.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+                                data.start = targetDate.toISOString();
+                                console.log('✅ [FOMO Bookmarklet] Date relative parsée (début avec plage):', data.start);
+
+                                const endDate = new Date(targetDate);
+                                endDate.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+                                data.end = endDate.toISOString();
+                                console.log('✅ [FOMO Bookmarklet] Date relative parsée (fin avec plage):', data.end);
+                            } else {
+                                // Format simple: "à 06:00" ou "à 6:00"
+                                const timeMatch = dateText.match(/à\s+(\d{1,2}):(\d{2})/i);
+                                if (timeMatch) {
+                                    const [, hour, minute] = timeMatch;
+                                    targetDate.setHours(parseInt(hour), parseInt(minute), 0, 0);
+                                    data.start = targetDate.toISOString();
+                                    console.log('✅ [FOMO Bookmarklet] Date relative parsée (début simple):', data.start);
+                                } else {
+                                    console.warn('⚠️ [FOMO Bookmarklet] Format relatif détecté mais heure non trouvée');
+                                }
                             }
                         } else {
                             console.log('📅 [FOMO Bookmarklet] Format ISO non détecté, tentative parsing format français...');
@@ -851,6 +905,216 @@
 
             // Recherche du NOM DU LIEU (venue name) - basée sur l'icône SVG de localisation (fallback si structure conteneur n'a pas fonctionné)
             const venueSearchContainer = searchContainer || mainContent;
+
+            // Stratégie 0: Via aria-label "Informations de localisation pour cet évènement" (prioritaire)
+            if (!data.venue_name || !data.address) {
+                console.log('📍 [FOMO Bookmarklet] Stratégie 0: Recherche via aria-label de localisation...');
+
+                // Chercher le div avec l'aria-label spécifique
+                const locationDiv = venueSearchContainer.querySelector('div[aria-label*="Informations de localisation"], div[aria-label*="localisation"]');
+
+                if (locationDiv) {
+                    console.log('✅ [FOMO Bookmarklet] Div de localisation trouvé via aria-label');
+
+                    // Chercher le lien à l'intérieur de ce div
+                    const venueLink = locationDiv.querySelector('a[role="link"]');
+
+                    if (venueLink) {
+                        console.log('✅ [FOMO Bookmarklet] Lien trouvé dans le div de localisation');
+
+                        // Chercher les spans à l'intérieur du lien
+                        // Structure: premier span avec le nom, deuxième span avec l'adresse
+                        const spans = venueLink.querySelectorAll('span[dir="auto"]');
+                        const texts = [];
+
+                        for (const span of spans) {
+                            const text = span.textContent.trim();
+                            // Filtrer les textes trop courts ou trop longs, et éviter les doublons
+                            if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
+                                texts.push(text);
+                            }
+                        }
+
+                        // Chercher aussi dans les divs qui contiennent les spans (structure imbriquée)
+                        const divs = venueLink.querySelectorAll('div.xu06os2.x1ok221b');
+                        if (divs.length >= 2) {
+                            // Premier div = nom, deuxième div = adresse
+                            const nameDiv = divs[0];
+                            const addressDiv = divs[1];
+
+                            const nameText = nameDiv.textContent.trim();
+                            const addressText = addressDiv.textContent.trim();
+
+                            if (nameText && nameText.length > 2 && nameText.length < 200 &&
+                                addressText && addressText.length > 5 && addressText.length < 200) {
+
+                                // Vérifier que ce n'est pas le titre de l'événement
+                                const isTitle = data.title && (
+                                    nameText.toLowerCase() === data.title.toLowerCase() ||
+                                    nameText.toLowerCase().includes(data.title.toLowerCase()) ||
+                                    data.title.toLowerCase().includes(nameText.toLowerCase())
+                                );
+
+                                if (!isTitle) {
+                                    // Vérifier que l'adresse ressemble à une adresse
+                                    const looksLikeAddress = addressText.includes(',') ||
+                                        /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
+
+                                    if (looksLikeAddress) {
+                                        if (!data.venue_name) {
+                                            data.venue_name = nameText;
+                                            console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (divs):', nameText);
+                                        }
+                                        if (!data.address) {
+                                            data.address = addressText;
+                                            console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (divs):', addressText);
+                                        }
+                                        // Données trouvées, on peut arrêter la recherche
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fallback: utiliser les spans si les divs n'ont pas fonctionné
+                        if ((!data.venue_name || !data.address) && texts.length >= 2) {
+                            const potentialName = texts[0];
+                            const potentialAddress = texts[1];
+
+                            // Vérifier que ce n'est pas le titre de l'événement
+                            const isTitle = data.title && (
+                                potentialName.toLowerCase() === data.title.toLowerCase() ||
+                                potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
+                                data.title.toLowerCase().includes(potentialName.toLowerCase())
+                            );
+
+                            if (!isTitle) {
+                                // Vérifier que l'adresse ressemble à une adresse
+                                const looksLikeAddress = potentialAddress.includes(',') ||
+                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
+
+                                if (looksLikeAddress) {
+                                    if (!data.venue_name) {
+                                        data.venue_name = potentialName;
+                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (spans):', potentialName);
+                                    }
+                                    if (!data.address) {
+                                        data.address = potentialAddress;
+                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (spans):', potentialAddress);
+                                    }
+                                }
+                            }
+                        } else if (texts.length === 1 && !data.address) {
+                            // Si un seul texte, vérifier si c'est une adresse
+                            const text = texts[0];
+                            const looksLikeAddress = text.includes(',') ||
+                                /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(text);
+
+                            if (looksLikeAddress) {
+                                data.address = text;
+                                console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (texte unique):', text);
+                            }
+                        }
+                    } else {
+                        console.log('⚠️ [FOMO Bookmarklet] Lien non trouvé dans le div de localisation');
+                    }
+                } else {
+                    console.log('⚠️ [FOMO Bookmarklet] Div de localisation non trouvé via aria-label, fallback sur recherche de liens...');
+
+                    // Fallback: chercher les liens avec les classes spécifiques (ancienne méthode)
+                    const venueLinks = venueSearchContainer.querySelectorAll('a[role="link"]');
+                    console.log('📍 [FOMO Bookmarklet] Nombre de liens trouvés (fallback):', venueLinks.length);
+
+                    for (const link of venueLinks) {
+                        // Vérifier si le lien contient les classes spécifiques (au moins quelques-unes)
+                        const linkClasses = link.className;
+                        if (!linkClasses.includes('x1i10hfl') || !linkClasses.includes('x1qjc9v5')) {
+                            continue;
+                        }
+
+                        // Chercher les spans à l'intérieur du lien
+                        const spans = link.querySelectorAll('span[dir="auto"]');
+                        const texts = [];
+
+                        for (const span of spans) {
+                            const text = span.textContent.trim();
+                            if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
+                                texts.push(text);
+                            }
+                        }
+
+                        // Chercher aussi dans les divs qui contiennent les spans (structure imbriquée)
+                        const divs = link.querySelectorAll('div.xu06os2.x1ok221b');
+                        if (divs.length >= 2) {
+                            // Premier div = nom, deuxième div = adresse
+                            const nameDiv = divs[0];
+                            const addressDiv = divs[1];
+
+                            const nameText = nameDiv.textContent.trim();
+                            const addressText = addressDiv.textContent.trim();
+
+                            if (nameText && nameText.length > 2 && nameText.length < 200 &&
+                                addressText && addressText.length > 5 && addressText.length < 200) {
+
+                                // Vérifier que ce n'est pas le titre de l'événement
+                                const isTitle = data.title && (
+                                    nameText.toLowerCase() === data.title.toLowerCase() ||
+                                    nameText.toLowerCase().includes(data.title.toLowerCase()) ||
+                                    data.title.toLowerCase().includes(nameText.toLowerCase())
+                                );
+
+                                if (!isTitle) {
+                                    // Vérifier que l'adresse ressemble à une adresse
+                                    const looksLikeAddress = addressText.includes(',') ||
+                                        /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
+
+                                    if (looksLikeAddress) {
+                                        if (!data.venue_name) {
+                                            data.venue_name = nameText;
+                                            console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback divs):', nameText);
+                                        }
+                                        if (!data.address) {
+                                            data.address = addressText;
+                                            console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback divs):', addressText);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fallback: utiliser les spans si les divs n'ont pas fonctionné
+                        if ((!data.venue_name || !data.address) && texts.length >= 2) {
+                            const potentialName = texts[0];
+                            const potentialAddress = texts[1];
+
+                            // Vérifier que ce n'est pas le titre de l'événement
+                            const isTitle = data.title && (
+                                potentialName.toLowerCase() === data.title.toLowerCase() ||
+                                potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
+                                data.title.toLowerCase().includes(potentialName.toLowerCase())
+                            );
+
+                            if (!isTitle) {
+                                // Vérifier que l'adresse ressemble à une adresse
+                                const looksLikeAddress = potentialAddress.includes(',') ||
+                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
+
+                                if (looksLikeAddress) {
+                                    if (!data.venue_name) {
+                                        data.venue_name = potentialName;
+                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback spans):', potentialName);
+                                    }
+                                    if (!data.address) {
+                                        data.address = potentialAddress;
+                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback spans):', potentialAddress);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Stratégie basée sur l'icône SVG de localisation (robuste, ne dépend pas des classes CSS)
             // 1. Trouver le SVG avec le path de localisation
@@ -1070,15 +1334,69 @@
             }
 
             // ===== COMPTEURS (PARTICIPANTS ET INTÉRESSÉS) =====
+            /**
+             * Extrait un texte de compteur (nombre ou format abrégé comme "1K", "2K", "1,9K")
+             * @param {string} text - Texte à extraire (ex: "1K", "166", "1.5K", "1,9K")
+             * @returns {string|null} - Texte du compteur ou null si invalide
+             */
+            function extractCountText(text) {
+                if (!text) return null;
+
+                // Nettoyer le texte (supprimer espaces insécables, espaces, etc.)
+                let cleanText = text.replace(/\u00A0/g, ' ').trim().replace(/\s+/g, ' ');
+
+                // Format simple: nombre entier (ex: "166", "999")
+                if (/^\d+$/.test(cleanText)) {
+                    return cleanText;
+                }
+
+                // Format abrégé avec K - gérer les virgules (format européen) et les points (format anglo-saxon)
+                // Ex: "1K", "2K", "1.5K", "1,9K", "6,2K"
+                const kMatch = cleanText.match(/^(\d+)[,.]?(\d+)?\s*K$/i);
+                if (kMatch) {
+                    const [, wholePart, decimalPart] = kMatch;
+                    // Normaliser: convertir la virgule en point pour la cohérence, puis reconstruire
+                    if (decimalPart) {
+                        return `${wholePart}.${decimalPart}K`.toUpperCase();
+                    } else {
+                        return `${wholePart}K`.toUpperCase();
+                    }
+                }
+
+                // Format abrégé avec M - gérer les virgules et les points
+                // Ex: "1M", "2.5M", "1,2M"
+                const mMatch = cleanText.match(/^(\d+)[,.]?(\d+)?\s*M$/i);
+                if (mMatch) {
+                    const [, wholePart, decimalPart] = mMatch;
+                    if (decimalPart) {
+                        return `${wholePart}.${decimalPart}M`.toUpperCase();
+                    } else {
+                        return `${wholePart}M`.toUpperCase();
+                    }
+                }
+
+                return null;
+            }
+
             // Stratégie 1: Chercher les spans avec classes spécifiques qui contiennent un nombre
             // Chercher les spans avec dir="auto" et classes communes (xdmh292, x15dsfln, etc.)
             const countSpans = mainContent.querySelectorAll('span[dir="auto"][class*="xdmh292"], span[dir="auto"][class*="x15dsfln"]');
             for (const span of countSpans) {
-                const text = span.textContent.trim();
-                // Vérifier si c'est juste un nombre (compteur)
-                const numMatch = text.match(/^(\d+)$/);
-                if (numMatch) {
-                    const count = parseInt(numMatch[1]);
+                let text = span.textContent.trim();
+                let countText = extractCountText(text);
+
+                // Si le span ne contient qu'un nombre ou qu'un "K", essayer de combiner avec le parent
+                // (Facebook peut séparer "1" et "K" dans des spans différents)
+                if (countText === null && span.parentElement) {
+                    const parentText = span.parentElement.textContent.trim();
+                    // Essayer d'extraire le texte du parent (qui peut contenir "1 K" si séparé)
+                    countText = extractCountText(parentText);
+                    if (countText !== null) {
+                        text = parentText; // Utiliser le texte du parent pour le contexte
+                    }
+                }
+
+                if (countText !== null) {
                     // Chercher le contexte autour (parent, siblings, previous/next siblings, grand-parent)
                     const parent = span.parentElement;
                     const grandParent = parent ? parent.parentElement : null;
@@ -1119,16 +1437,16 @@
                     // Vérifier si le contexte indique "participants", "going", etc.
                     if (context.includes('participant') || context.includes('going') || context.includes('vont') ||
                         context.includes('participer') || context.includes('personne') || context.includes('va')) {
-                        if (!data.attending_count || count > data.attending_count) {
-                            data.attending_count = count;
-                            console.log('👥 [FOMO Bookmarklet] Participants trouvés via span:', count);
+                        if (!data.attending_count) {
+                            data.attending_count = countText;
+                            console.log('👥 [FOMO Bookmarklet] Participants trouvés via span:', countText);
                         }
                     }
                     // Vérifier si le contexte indique "intéressés", "interested", etc.
                     if (context.includes('intéressé') || context.includes('interested') || context.includes('s\'intéresse')) {
-                        if (!data.interested_count || count > data.interested_count) {
-                            data.interested_count = count;
-                            console.log('👀 [FOMO Bookmarklet] Intéressés trouvés via span:', count);
+                        if (!data.interested_count) {
+                            data.interested_count = countText;
+                            console.log('👀 [FOMO Bookmarklet] Intéressés trouvés via span:', countText);
                         }
                     }
                 }
@@ -1138,38 +1456,40 @@
             const allBodyText = document.body.textContent || '';
 
             // Participants/Going
+            // Patterns mis à jour pour gérer les formats abrégés (1K, 2K, 1,9K, 6,2K, etc.)
             const attendingPatterns = [
-                /(\d+)\s*(personnes|people|participants|going|participent|vont|participeront)/i,
-                /(\d+)\s*(personne|person|participant|va|participera)/i,
-                /going[:\s]+(\d+)/i,
-                /participants[:\s]+(\d+)/i
+                /(\d+(?:[.,]\d+)?\s*[KM]?)\s*(personnes|people|participants|going|participent|vont|participeront)/i,
+                /(\d+(?:[.,]\d+)?\s*[KM]?)\s*(personne|person|participant|va|participera)/i,
+                /going[:\s]+(\d+(?:[.,]\d+)?\s*[KM]?)/i,
+                /participants[:\s]+(\d+(?:[.,]\d+)?\s*[KM]?)/i
             ];
 
             for (const pattern of attendingPatterns) {
                 const match = allBodyText.match(pattern);
                 if (match) {
-                    const count = parseInt(match[1]) || 0;
-                    if (count > data.attending_count) {
-                        data.attending_count = count;
+                    const countText = extractCountText(match[1].trim());
+                    if (countText !== null && !data.attending_count) {
+                        data.attending_count = countText;
                     }
                     break;
                 }
             }
 
             // Intéressés/Interested
+            // Patterns mis à jour pour gérer les formats abrégés (1K, 2K, 1,9K, 6,2K, etc.)
             const interestedPatterns = [
-                /(\d+)\s*(intéressés|interested|intéressées|s'intéressent)/i,
-                /(\d+)\s*(intéressé|interested)/i,
-                /interested[:\s]+(\d+)/i,
-                /intéressés[:\s]+(\d+)/i
+                /(\d+(?:[.,]\d+)?\s*[KM]?)\s*(intéressés|interested|intéressées|s'intéressent)/i,
+                /(\d+(?:[.,]\d+)?\s*[KM]?)\s*(intéressé|interested)/i,
+                /interested[:\s]+(\d+(?:[.,]\d+)?\s*[KM]?)/i,
+                /intéressés[:\s]+(\d+(?:[.,]\d+)?\s*[KM]?)/i
             ];
 
             for (const pattern of interestedPatterns) {
                 const match = allBodyText.match(pattern);
                 if (match) {
-                    const count = parseInt(match[1]) || 0;
-                    if (count > data.interested_count) {
-                        data.interested_count = count;
+                    const countText = extractCountText(match[1].trim());
+                    if (countText !== null && !data.interested_count) {
+                        data.interested_count = countText;
                     }
                     break;
                 }
@@ -1179,19 +1499,19 @@
             const buttons = document.querySelectorAll('button, [role="button"]');
             for (const button of buttons) {
                 const text = button.textContent.trim();
-                // Pattern: "X going" ou "X interested"
-                const goingMatch = text.match(/(\d+)\s*(going|participants|vont)/i);
+                // Pattern: "X going" ou "X interested" - mis à jour pour gérer les formats abrégés (1,9K, 6,2K, etc.)
+                const goingMatch = text.match(/(\d+(?:[.,]\d+)?\s*[KM]?)\s*(going|participants|vont)/i);
                 if (goingMatch) {
-                    const count = parseInt(goingMatch[1]) || 0;
-                    if (count > data.attending_count) {
-                        data.attending_count = count;
+                    const countText = extractCountText(goingMatch[1].trim());
+                    if (countText !== null && !data.attending_count) {
+                        data.attending_count = countText;
                     }
                 }
-                const interestedMatch = text.match(/(\d+)\s*(interested|intéressés)/i);
+                const interestedMatch = text.match(/(\d+(?:[.,]\d+)?\s*[KM]?)\s*(interested|intéressés)/i);
                 if (interestedMatch) {
-                    const count = parseInt(interestedMatch[1]) || 0;
-                    if (count > data.interested_count) {
-                        data.interested_count = count;
+                    const countText = extractCountText(interestedMatch[1].trim());
+                    if (countText !== null && !data.interested_count) {
+                        data.interested_count = countText;
                     }
                 }
             }
@@ -1222,44 +1542,141 @@
      * Créer et afficher l'interface de validation
      */
     function showValidationModal(eventData, onConfirm, onCancel) {
-        // Créer l'overlay
-        const overlay = document.createElement('div');
-        overlay.id = 'fomo-bookmarklet-overlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 999999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        `;
-
-        // Créer la modal
+        // Créer la modal directement (sans overlay) - positionnée en haut à droite
         const modal = document.createElement('div');
+        modal.id = 'fomo-bookmarklet-modal';
         modal.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 400px;
+            max-height: calc(100vh - 40px);
             background: white;
             border-radius: 8px;
-            padding: 24px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
+            padding: 20px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 999999;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        `;
+
+        // En-tête avec titre et bouton de fermeture
+        const header = document.createElement('div');
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+            cursor: move;
+            user-select: none;
         `;
 
         // Titre
         const title = document.createElement('h2');
         title.textContent = '📅 Ajouter l\'événement à FOMO';
-        title.style.cssText = 'margin: 0 0 20px 0; font-size: 24px; color: #333;';
+        title.style.cssText = 'margin: 0; font-size: 18px; color: #333; flex: 1;';
+
+        // Bouton de fermeture (X)
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #666;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            border-radius: 4px;
+        `;
+        closeBtn.onclick = () => {
+            if (document.body.contains(modal)) {
+                document.body.removeChild(modal);
+            }
+            window.__FOMO_BOOKMARKLET_ACTIVE = false;
+            onCancel();
+        };
+        closeBtn.onmouseover = () => {
+            closeBtn.style.background = '#f0f0f0';
+        };
+        closeBtn.onmouseout = () => {
+            closeBtn.style.background = 'none';
+        };
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        // Fonctionnalité de drag & drop pour déplacer le modal
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let modalStartX = 0;
+        let modalStartY = 0;
+
+        header.onmousedown = (e) => {
+            // Ne pas activer le drag si on clique sur un bouton
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                return;
+            }
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            const rect = modal.getBoundingClientRect();
+            modalStartX = rect.left;
+            modalStartY = rect.top;
+            modal.style.transition = 'none';
+            document.body.style.userSelect = 'none';
+        };
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            let newX = modalStartX + deltaX;
+            let newY = modalStartY + deltaY;
+
+            // Limiter le déplacement dans la fenêtre
+            const maxX = window.innerWidth - modal.offsetWidth;
+            const maxY = window.innerHeight - modal.offsetHeight;
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+
+            modal.style.left = newX + 'px';
+            modal.style.top = newY + 'px';
+            modal.style.right = 'auto';
+            modal.style.bottom = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                modal.style.transition = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // Conteneur scrollable pour le contenu
+        const scrollableContent = document.createElement('div');
+        scrollableContent.style.cssText = `
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
+            padding-right: 8px;
+        `;
 
         // Formulaire
         const form = document.createElement('form');
-        form.style.cssText = 'display: flex; flex-direction: column; gap: 16px;';
+        form.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
 
         // Fonction helper pour créer un champ
         function createField(label, name, value, required = false, type = 'text') {
@@ -1288,11 +1705,13 @@
             }
             input.required = required;
             input.style.cssText = `
-                padding: 8px 12px;
+                padding: 6px 10px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
-                font-size: 14px;
+                font-size: 13px;
                 font-family: inherit;
+                width: 100%;
+                box-sizing: border-box;
             `;
 
             container.appendChild(labelEl);
@@ -1360,8 +1779,8 @@
         const addressField = createField('Adresse du lieu', 'address', eventData.address);
         const hostField = createField('Organisateur', 'host', eventData.host);
         const coverField = createField('Image de couverture (URL)', 'cover', eventData.cover);
-        const attendingField = createField('Nombre de participants', 'attending_count', eventData.attending_count || 0, false, 'number');
-        const interestedField = createField('Nombre d\'intéressés', 'interested_count', eventData.interested_count || 0, false, 'number');
+        const attendingField = createField('Nombre de participants', 'attending_count', eventData.attending_count || '', false, 'text');
+        const interestedField = createField('Nombre d\'intéressés', 'interested_count', eventData.interested_count || '', false, 'text');
 
         // Logs pour vérifier les valeurs finales
         console.log('📅 [FOMO Bookmarklet] Valeur finale champ date début:', startField.input.value);
@@ -1380,36 +1799,41 @@
         form.appendChild(attendingField.container);
         form.appendChild(interestedField.container);
 
-        // Boutons
+        // Ajouter l'en-tête et le formulaire au conteneur scrollable
+        scrollableContent.appendChild(header);
+        scrollableContent.appendChild(form);
+
+        // Boutons (fixes en bas, non scrollables)
         const buttons = document.createElement('div');
-        buttons.style.cssText = 'display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; width: 100%;';
+        buttons.style.cssText = 'display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee; flex-shrink: 0;';
 
         const cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
         cancelBtn.textContent = 'Annuler';
         cancelBtn.style.cssText = `
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: 1px solid #ccc;
             background: #f5f5f5;
             color: #333;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            display: inline-block;
             min-width: 80px;
             flex-shrink: 0;
         `;
         cancelBtn.onclick = () => {
-            document.body.removeChild(overlay);
+            if (document.body.contains(modal)) {
+                document.body.removeChild(modal);
+            }
             window.__FOMO_BOOKMARKLET_ACTIVE = false;
             onCancel();
         };
 
         const submitBtn = document.createElement('button');
-        submitBtn.type = 'submit';
+        submitBtn.type = 'button'; // Changé de 'submit' à 'button' car le bouton n'est pas dans le form
         submitBtn.textContent = 'Envoyer';
         submitBtn.style.cssText = `
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
             background: #1877f2;
             color: white;
@@ -1417,10 +1841,16 @@
             cursor: pointer;
             font-size: 14px;
             font-weight: 600;
-            display: inline-block;
             min-width: 80px;
             flex-shrink: 0;
         `;
+        // Déclencher manuellement la soumission du formulaire
+        submitBtn.onclick = () => {
+            console.log('🔘 [FOMO Bookmarklet] Bouton Envoyer cliqué');
+            // Créer et déclencher l'événement submit
+            const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+            form.dispatchEvent(submitEvent);
+        };
 
         buttons.appendChild(cancelBtn);
         buttons.appendChild(submitBtn);
@@ -1428,6 +1858,7 @@
         // Gestion de la soumission
         form.onsubmit = async (e) => {
             e.preventDefault();
+            console.log('🔘 [FOMO Bookmarklet] Formulaire soumis');
 
             // Validation
             if (!titleField.input.value.trim()) {
@@ -1477,41 +1908,37 @@
                 address: addressField.input.value.trim() || undefined,
                 host: hostField.input.value.trim() || undefined,
                 cover: coverField.input.value.trim() || undefined,
-                attending_count: parseInt(attendingField.input.value) || 0,
-                interested_count: parseInt(interestedField.input.value) || 0
+                attending_count: attendingField.input.value.trim() || undefined,
+                interested_count: interestedField.input.value.trim() || undefined
             };
 
             // Désactiver le bouton pendant l'envoi
             submitBtn.disabled = true;
             submitBtn.textContent = 'Envoi...';
 
+            console.log('📤 [FOMO Bookmarklet] Envoi du payload:', payload);
+
             try {
                 await onConfirm(payload);
+                console.log('✅ [FOMO Bookmarklet] onConfirm terminé avec succès');
             } catch (error) {
+                console.error('❌ [FOMO Bookmarklet] Erreur dans onConfirm:', error);
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Envoyer';
                 alert('Erreur: ' + (error.message || 'Erreur inconnue'));
             }
         };
 
-        modal.appendChild(title);
-        modal.appendChild(form);
+        // Assembler la modal
+        modal.appendChild(scrollableContent);
         modal.appendChild(buttons);
-        overlay.appendChild(modal);
-
-        // Fermer au clic sur l'overlay
-        overlay.onclick = (e) => {
-            if (e.target === overlay) {
-                document.body.removeChild(overlay);
-                window.__FOMO_BOOKMARKLET_ACTIVE = false;
-                onCancel();
-            }
-        };
 
         // Fermer avec Escape
         const escapeHandler = (e) => {
             if (e.key === 'Escape') {
-                document.body.removeChild(overlay);
+                if (document.body.contains(modal)) {
+                    document.body.removeChild(modal);
+                }
                 window.__FOMO_BOOKMARKLET_ACTIVE = false;
                 document.removeEventListener('keydown', escapeHandler);
                 onCancel();
@@ -1519,32 +1946,172 @@
         };
         document.addEventListener('keydown', escapeHandler);
 
-        document.body.appendChild(overlay);
+        // Ajouter la modal au body
+        document.body.appendChild(modal);
     }
 
     /**
-     * Envoyer les données à l'API
+     * Envoyer les données à l'API via formulaire POST + popup
+     * (contourne la same-origin policy et la CSP de Facebook)
+     * Utilise un formulaire POST car c'est moins bloqué que window.open()
      */
-    async function sendToAPI(payload, password) {
-        const response = await fetch(`${API_BASE_URL}/ingest/event`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-FOMO-Key': password
-            },
-            body: JSON.stringify(payload)
-        });
+    function sendToAPI(payload, password) {
+        console.log('📤 [FOMO Bookmarklet] Envoi des données via formulaire POST...');
 
-        const data = await response.json();
+        return new Promise((resolve, reject) => {
+            // Générer un requestId unique avec crypto.randomUUID() si disponible
+            const requestId = typeof crypto !== 'undefined' && crypto.randomUUID 
+                ? crypto.randomUUID() 
+                : `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+            
+            // Extraire expectedOrigin depuis location.origin
+            const expectedOrigin = window.location.origin;
 
-        if (!response.ok) {
-            if (response.status === 401) {
-                throw new Error('Mot de passe incorrect. Veuillez réessayer.');
+            // Créer un formulaire POST invisible
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = API_BASE_URL + '/ingest/event-form';
+            form.target = 'fomo-bookmarklet-receiver';
+            form.style.cssText = 'position: absolute; left: -9999px; opacity: 0; pointer-events: none;';
+
+            // Ajouter la clé API (apiKey)
+            const keyInput = document.createElement('input');
+            keyInput.type = 'hidden';
+            keyInput.name = 'apiKey';
+            keyInput.value = password;
+            form.appendChild(keyInput);
+
+            // Ajouter requestId
+            const requestIdInput = document.createElement('input');
+            requestIdInput.type = 'hidden';
+            requestIdInput.name = 'requestId';
+            requestIdInput.value = requestId;
+            form.appendChild(requestIdInput);
+
+            // Ajouter expectedOrigin
+            const expectedOriginInput = document.createElement('input');
+            expectedOriginInput.type = 'hidden';
+            expectedOriginInput.name = 'expectedOrigin';
+            expectedOriginInput.value = expectedOrigin;
+            form.appendChild(expectedOriginInput);
+
+            // Ajouter toutes les données de l'événement
+            for (const [key, value] of Object.entries(payload)) {
+                if (value !== undefined && value !== null) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = typeof value === 'string' ? value : JSON.stringify(value);
+                    form.appendChild(input);
+                }
             }
-            throw new Error(data.error || `Erreur ${response.status}`);
-        }
 
-        return data;
+            document.body.appendChild(form);
+
+            // Déclarer timeoutId dans le scope parent pour pouvoir le nettoyer
+            let timeoutId = null;
+
+            // Écouter les réponses de la popup
+            const messageHandler = (event) => {
+                // Log tous les messages pour debug
+                console.log('📨 [FOMO Bookmarklet] Message reçu:', {
+                    origin: event.origin,
+                    type: event.data?.type,
+                    requestId: event.data?.requestId,
+                    expectedRequestId: requestId
+                });
+
+                // Vérifier l'origine pour la sécurité
+                // La popup vient de notre domaine (fomo-swart.vercel.app ou localhost:3001)
+                const apiOrigin = API_BASE_URL.replace('/api', '').split('/').slice(0, 3).join('/');
+                // Pour localhost, accepter aussi les variantes
+                const allowedOrigins = apiOrigin.includes('localhost') 
+                    ? [apiOrigin, 'http://localhost:3001', 'http://127.0.0.1:3001']
+                    : apiOrigin.includes('fomo-swart.vercel.app')
+                    ? ['https://fomo-swart.vercel.app']
+                    : [apiOrigin];
+                
+                // Vérifier que l'origine contient notre domaine
+                const originMatches = allowedOrigins.some(origin => {
+                    const originDomain = origin.replace('https://', '').replace('http://', '').split(':')[0];
+                    return event.origin.includes(originDomain);
+                });
+                
+                if (!originMatches) {
+                    console.log('⚠️ [FOMO Bookmarklet] Message ignoré - origine incorrecte:', event.origin, 'attendu:', allowedOrigins);
+                    return; // Ignorer les messages d'autres origines
+                }
+
+                // Vérifier que c'est bien une réponse pour cette requête
+                if (event.data?.type === 'FOMO_INGEST_RESPONSE' && event.data?.requestId === requestId) {
+                    console.log('✅ [FOMO Bookmarklet] Réponse reçue:', event.data);
+                    
+                    // Nettoyer le timeout
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
+                    
+                    // Nettoyer
+                    window.removeEventListener('message', messageHandler);
+                    if (document.body.contains(form)) {
+                        document.body.removeChild(form);
+                    }
+                    
+                    try {
+                        const popup = window.open('', 'fomo-bookmarklet-receiver');
+                        if (popup && !popup.closed) {
+                            popup.close();
+                        }
+                    } catch (e) {
+                        // Ignorer si déjà fermée
+                    }
+
+                    // Résoudre ou rejeter selon le résultat
+                    if (event.data.ok) {
+                        resolve({
+                            ok: true,
+                            id: event.data.id,
+                            duplicate: event.data.duplicate || false
+                        });
+                    } else {
+                        reject(new Error(event.data.error || 'Erreur inconnue'));
+                    }
+                }
+            };
+
+            window.addEventListener('message', messageHandler);
+
+            // Soumettre le formulaire (ouvre une popup)
+            console.log('📤 [FOMO Bookmarklet] Soumission du formulaire POST...');
+            console.log('📤 [FOMO Bookmarklet] RequestId:', requestId);
+            console.log('📤 [FOMO Bookmarklet] ExpectedOrigin:', expectedOrigin);
+            form.submit();
+
+            // Vérifier si la popup s'est ouverte (après un court délai)
+            setTimeout(() => {
+                try {
+                    const popup = window.open('', 'fomo-bookmarklet-receiver');
+                    if (popup && !popup.closed) {
+                        console.log('✅ [FOMO Bookmarklet] Popup ouverte avec succès');
+                    } else {
+                        console.warn('⚠️ [FOMO Bookmarklet] Popup non accessible ou fermée');
+                    }
+                } catch (e) {
+                    console.warn('⚠️ [FOMO Bookmarklet] Impossible de vérifier la popup:', e);
+                }
+            }, 500);
+
+            // Timeout de sécurité (10 secondes)
+            // Pas de fallback fetch/sendBeacon car ils sont bloqués par la CSP de Facebook
+            timeoutId = setTimeout(() => {
+                console.warn('⚠️ [FOMO Bookmarklet] Timeout après 10 secondes - pas de réponse du serveur');
+                window.removeEventListener('message', messageHandler);
+                if (document.body.contains(form)) {
+                    document.body.removeChild(form);
+                }
+                reject(new Error('Timeout - la popup n\'a pas répondu. Vérifiez que les popups ne sont pas bloquées.'));
+            }, 10000);
+        });
     }
 
     /**
@@ -1564,52 +2131,64 @@
 
             // Étape 2: Afficher l'interface de validation
             showValidationModal(eventData, async (payload) => {
-                // Étape 3: Envoyer à l'API
+                // Étape 3: Envoyer les données directement à l'API
+                console.log('🚀 [FOMO Bookmarklet] Callback onConfirm appelé avec payload:', payload);
                 try {
+                    // Envoyer à l'API via formulaire POST
                     const result = await sendToAPI(payload, FOMO_KEY);
-
-                    // Afficher le résultat
-                    const overlay = document.querySelector('#fomo-bookmarklet-overlay');
-                    if (overlay) {
-                        const modal = overlay.querySelector('div');
-                        if (modal) {
+                    console.log('✅ [FOMO Bookmarklet] Événement créé:', result);
+                    
+                    // Afficher le message de succès selon l'architecture
+                    if (result.ok) {
+                        if (result.duplicate) {
+                            alert('⚠️ Doublon détecté. L\'événement existe déjà ✅\nID: ' + result.id);
+                        } else {
+                            alert('Événement envoyé ✅\nID: ' + result.id);
+                        }
+                    } else {
+                        alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+                    }
+                    
+                    // Fermer la modal
+                    const modal = document.querySelector('#fomo-bookmarklet-modal');
+                    if (modal && document.body.contains(modal)) {
+                        document.body.removeChild(modal);
+                    }
+                    window.__FOMO_BOOKMARKLET_ACTIVE = false;
+                } catch (error) {
+                    console.error('❌ [FOMO Bookmarklet] Erreur dans callback onConfirm:', error);
+                    
+                    // Afficher un message d'erreur dans la modal
+                    const modal = document.querySelector('#fomo-bookmarklet-modal');
+                    if (modal) {
+                        const scrollableContent = modal.querySelector('div');
+                        if (scrollableContent) {
                             const message = document.createElement('div');
                             message.style.cssText = `
-                                padding: 16px;
-                                margin-top: 16px;
+                                padding: 12px;
+                                margin-top: 12px;
                                 border-radius: 4px;
-                                background: ${result.duplicate ? '#fff3cd' : '#d4edda'};
-                                color: ${result.duplicate ? '#856404' : '#155724'};
+                                background: #f8d7da;
+                                color: #721c24;
                                 font-size: 14px;
+                                text-align: center;
                             `;
-                            if (result.duplicate) {
-                                message.textContent = `⚠️ Doublon détecté. L'événement existe déjà (ID: ${result.id})`;
-                            } else {
-                                message.textContent = `✅ Événement ajouté avec succès ! (ID: ${result.id})`;
+                            message.textContent = `❌ Erreur: ${error.message || 'Erreur inconnue'}`;
+                            scrollableContent.appendChild(message);
+                        }
+                    }
+                    
+                    // Réactiver le bouton en cas d'erreur
+                    if (modal) {
+                        const buttons = modal.querySelectorAll('button[type="button"]');
+                        for (const btn of buttons) {
+                            if (btn.textContent.trim() === 'Envoi...' || btn.textContent.trim() === 'Envoyer') {
+                                btn.disabled = false;
+                                btn.textContent = 'Envoyer';
+                                break;
                             }
-                            modal.appendChild(message);
-
-                            // Fermer après 3 secondes
-                            setTimeout(() => {
-                                if (document.body.contains(overlay)) {
-                                    document.body.removeChild(overlay);
-                                    window.__FOMO_BOOKMARKLET_ACTIVE = false;
-                                }
-                            }, 3000);
                         }
                     }
-                } catch (error) {
-                    // En cas d'erreur 401, la clé API est incorrecte
-                    if (error.message.includes('Mot de passe incorrect') || error.message.includes('non autorisé')) {
-                        alert('❌ Erreur: La clé API FOMO est incorrecte.\n\nVeuillez vérifier la constante FOMO_KEY dans le code du bookmarklet.');
-                        const overlay = document.querySelector('#fomo-bookmarklet-overlay');
-                        if (overlay && document.body.contains(overlay)) {
-                            document.body.removeChild(overlay);
-                            window.__FOMO_BOOKMARKLET_ACTIVE = false;
-                        }
-                        return;
-                    }
-                    throw error;
                 }
             }, () => {
                 // Annulation
@@ -1625,4 +2204,5 @@
     // Lancer le processus
     main();
 })();
+
 

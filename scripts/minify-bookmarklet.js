@@ -22,9 +22,9 @@ async function minifyBookmarklet() {
         // NOTE: drop_console et pure_funcs désactivés pour permettre le débogage
         const result = await minify(code, {
             compress: {
-                drop_console: true, // Supprimer les console.log pour réduire la taille
+                drop_console: false, // Garder les console.log temporairement pour le débogage
                 drop_debugger: true,
-                pure_funcs: ['console.log', 'console.warn'], // Supprimer console.log et console.warn
+                // Ne pas supprimer console.log et console.error pour le débogage
                 passes: 3, // Plus de passes pour une meilleure compression
                 unsafe: true, // Optimisations plus agressives
                 unsafe_comps: true,

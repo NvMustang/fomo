@@ -50,7 +50,7 @@ Le backend utilise :
 
 ```env
 GOOGLE_SERVICE_ACCOUNT_KEY=./service-account.json
-GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+GOOGLE_SPREADSHEET_ID=14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ
 PORT=3001
 CORS_ORIGIN=http://localhost:5173
 
@@ -60,6 +60,9 @@ GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
 # MapTiler API Key (pour le géocodage et les cartes)
 # Obtenez votre clé sur https://cloud.maptiler.com/
 MAPLIBRE_ACCESS_TOKEN=your_maptiler_api_key
+
+# Clé d'authentification pour le bookmarklet (ingestion d'événements)
+FOMO_KEY=votre_mot_de_passe_secret
 ```
 
 ### 🧪 Détection automatique de l'environnement

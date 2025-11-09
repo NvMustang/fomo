@@ -38,6 +38,8 @@ app.use(cors({
     credentials: true
 }))
 app.use(express.json())
+// Parser pour les formulaires POST (application/x-www-form-urlencoded)
+app.use(express.urlencoded({ extended: true }))
 
 // Debug middleware supprimé
 

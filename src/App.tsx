@@ -23,6 +23,8 @@ const ProfilePageComponent = lazy(() => import('@/pages/ProfilePage'))
 const DiscoverPage = lazy(() => import('@/pages/DiscoverPage'))
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'))
+const BookmarkletPage = lazy(() => import('@/pages/BookmarkletPage'))
+const BookmarkletReceiverPage = lazy(() => import('@/pages/BookmarkletReceiverPage'))
 const VisitorModeApp = lazy(() => import('@/onboarding/visitorOnboarding').then(module => ({ default: module.VisitorModeApp })))
 
 
@@ -142,6 +144,8 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
                 <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><div className="spinner" /></div>}>
                     {currentPage === 'dashboard' && <DashboardPage />}
                     {currentPage === 'onboarding' && <OnboardingPage />}
+                    {currentPage === 'bookmarklet' && <BookmarkletPage />}
+                    {currentPage === 'bookmarklet-receiver' && <BookmarkletReceiverPage />}
                     {currentPage === 'map' && (
                         <DiscoverPage
                             isModalOpen={isModalOpen}

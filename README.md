@@ -94,6 +94,38 @@ npm run build
 - [Scripts](SCRIPTS.md) - Scripts de gestion
 - [Styles](src/styles/README.md) - Guide de styles CSS
 
+## 🔖 Bookmarklet FOMO
+
+Le bookmarklet permet d'extraire des événements Facebook et de les ajouter directement à FOMO.
+
+### Installation
+
+1. Ouvrir le fichier `public/bookmarklet.js`
+2. **Modifier l'URL de l'API** : Remplacer `API_BASE_URL` par votre URL de production (ex: `https://votre-domaine.vercel.app/api`)
+3. Minifier le code (optionnel, pour réduire la taille)
+4. Créer un nouveau bookmarklet dans votre navigateur :
+   - Chrome/Edge: `chrome://bookmarks/` → Organiser → Ajouter une page
+   - Firefox: Clic droit sur la barre de favoris → Nouveau favori
+   - Safari: Clic droit sur la barre de favoris → Ajouter un favori
+5. Coller le code minifié dans l'URL du bookmarklet
+
+### Utilisation
+
+1. Ouvrir une page d'événement Facebook (ex: `facebook.com/events/...`)
+2. Cliquer sur le bookmarklet FOMO
+3. Entrer le mot de passe FOMO (configuré dans `FOMO_KEY` côté serveur)
+4. Vérifier/modifier les données extraites dans le formulaire
+5. Cliquer sur "Envoyer"
+
+### Configuration Backend
+
+Ajouter dans `backend/.env` :
+```env
+FOMO_KEY=votre_mot_de_passe_secret
+```
+
+⚠️ **Sécurité**: Le mot de passe est demandé à chaque utilisation du bookmarklet. Ne le partagez qu'avec les utilisateurs autorisés.
+
 ## 🔒 Sécurité
 
 ⚠️ **Important**: 
