@@ -339,8 +339,6 @@ class AnalyticsTracker {
      */
     reset(): void {
         const now = Date.now()
-        // Date du jour à minuit pour la valeur initiale
-        const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime()
 
         this.data = {
             stats: {
