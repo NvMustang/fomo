@@ -7,7 +7,8 @@ const DataServiceV2 = require('../utils/dataService')
 
 class EventsController {
     // Range Google Sheets pour la feuille Events
-    static EVENTS_RANGE = 'Events!A2:Q'
+    // Colonnes: A=ID, B=CreatedAt, C=Title, D=Description, E=StartsAt, F=EndsAt, G=Venue Name, H=Venue Address, I=Lat, J=Lng, K=Cover URL, L=Image Position, M=Organizer ID, N=Is Public, O=Is Online, P=ModifiedAt, Q=DeletedAt, R=Source
+    static EVENTS_RANGE = 'Events!A2:R'
 
     /**
      * Récupérer tous les événements actifs
@@ -136,7 +137,8 @@ class EventsController {
                 eventData.isPublic || 'false',              // N: Is Public
                 eventData.isOnline || 'false',              // O: Is Online
                 new Date().toISOString(),                   // P: ModifiedAt
-                ''                                          // Q: DeletedAt
+                '',                                         // Q: DeletedAt
+                eventData.source || 'manual'                // R: Source (par défaut 'manual' pour création manuelle)
             ]
 
             const result = await DataServiceV2.upsertData(

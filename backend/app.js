@@ -75,7 +75,10 @@ app.get('/', (req, res) => {
 
             // Utilitaires
             searchAddresses: 'GET /api/geocode/search/:query',
-            health: 'GET /api/health'
+            health: 'GET /api/health',
+
+            // Ingestion (Bookmarklet)
+            ingestEvent: 'POST /api/ingest/event'
         }
     })
 })

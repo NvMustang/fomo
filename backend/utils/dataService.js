@@ -350,7 +350,8 @@ class DataServiceV2 {
             isPublic: toBool(row[13]),
             isOnline: toBool(row[14]),
             modifiedAt: row[15] || new Date().toISOString(),
-            deletedAt: row[16] || null
+            deletedAt: row[16] || null,
+            source: row[17] || '' // R: Source (ex: 'facebook', 'manual', etc.)
         }),
 
         user: (row) => ({

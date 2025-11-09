@@ -15,6 +15,7 @@ const tagsRoutes = require('./tags')
 const betaRoutes = require('./beta')
 const analyticsRoutes = require('./analytics')
 const onboardingRoutes = require('./onboarding')
+const ingestRoutes = require('./ingest')
 
 // Montage des routes
 router.use('/events', eventsRoutes)
@@ -26,5 +27,6 @@ router.use('/tags', tagsRoutes)
 router.use('/beta', betaRoutes)
 router.use('/analytics', analyticsRoutes)
 router.use('/onboarding', onboardingRoutes)
+router.use('/ingest', ingestRoutes)
 
 module.exports = router
