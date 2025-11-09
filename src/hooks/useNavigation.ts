@@ -13,7 +13,7 @@ type Page = 'map' | 'dashboard' | 'onboarding' | 'list' | 'chat' | 'profil'
  */
 function getInitialPage(): Page {
     const path = window.location.pathname
-    if (path === '/dashboard') {
+    if (path === '/analytics') {
         return 'dashboard'
     }
     if (path === '/onboarding') {
@@ -32,7 +32,7 @@ export function useNavigation() {
     useEffect(() => {
         const handlePopState = () => {
             const path = window.location.pathname
-            if (path === '/dashboard') {
+            if (path === '/analytics') {
                 setCurrentPage('dashboard')
             } else if (path === '/onboarding') {
                 setCurrentPage('onboarding')
@@ -52,7 +52,7 @@ export function useNavigation() {
 
         // Mettre à jour l'URL sans recharger la page
         if (page === 'dashboard') {
-            window.history.pushState({}, '', '/dashboard')
+            window.history.pushState({}, '', '/analytics')
         } else if (page === 'onboarding') {
             window.history.pushState({}, '', '/onboarding')
         } else if (page === 'map') {

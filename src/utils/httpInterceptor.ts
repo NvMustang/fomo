@@ -9,15 +9,16 @@ import { analyticsTracker } from './analyticsTracker'
 
 let isIntercepted = false
 
-// Cache local pour éviter de tracker les mêmes requêtes plusieurs fois
-// Utile en développement pour éviter de tracker les rechargements depuis le cache
-// Les tiles MapTiler sont statiques, donc on peut avoir un cache plus long
+// Cache local pour éviter de tracker les mêmes requêtes plusieurs fois dans la même frame
+// Réduit le bruit en développement (rechargements rapides)
+// IMPORTANT: Les requêtes depuis le cache (304) comptent dans le quota MapTiler, donc on les tracke aussi
 const requestCache = new Map<string, number>()
-const CACHE_DURATION_MS = 60000 // 60 secondes - ignore les mêmes requêtes dans cette fenêtre
-// Pour les tiles statiques, 1 minute est raisonnable et réduit le bruit en développement
+const CACHE_DURATION_MS = 1000 // 1 seconde - évite seulement les doublons dans la même frame
+// Note: Réduit de 60s à 1s car les requêtes depuis le cache (304) doivent être trackées
 
 /**
- * Vérifier si une requête a déjà été trackée récemment
+ * Vérifier si une requête a déjà été trackée très récemment (même frame)
+ * Permet d'éviter les doublons lors de rechargements rapides sans masquer les requêtes légitimes
  */
 function isRecentlyTracked(url: string, endpoint: string): boolean {
     const key = `${url}|${endpoint}`
@@ -25,7 +26,7 @@ function isRecentlyTracked(url: string, endpoint: string): boolean {
     const lastTracked = requestCache.get(key)
     
     if (lastTracked && (now - lastTracked) < CACHE_DURATION_MS) {
-        return true // Déjà trackée récemment
+        return true // Déjà trackée dans la même frame
     }
     
     // Mettre à jour le cache
@@ -65,21 +66,26 @@ function interceptFetch(): void {
                 const response = await originalFetch(input, init)
                 const success = response.ok
 
-                // Ne tracker que les requêtes qui partent vraiment vers le serveur
-                // Ignorer les requêtes servies depuis le cache (status 304 ou response.type === 'opaque')
-                const isFromCache = response.status === 304 || response.type === 'opaque'
+                // IMPORTANT: Les requêtes depuis le cache (304) comptent dans le quota MapTiler
+                // On doit les tracker aussi pour avoir un compteur précis
+                // response.type === 'opaque' peut être ignoré (CORS, mais rare pour MapTiler)
+                const isFromCache = response.status === 304
+                const isOpaque = response.type === 'opaque'
                 
                 // Déterminer l'endpoint pour le cache
                 const endpoint = isTile ? 'tile' : isFont ? 'font' : 'api'
                 
-                // Vérifier si cette requête a déjà été trackée récemment (évite les doublons en dev)
+                // Vérifier si cette requête a déjà été trackée très récemment (même frame)
+                // Permet d'éviter les doublons lors de rechargements rapides
                 const alreadyTracked = isRecentlyTracked(url, endpoint)
                 
-                if (!isFromCache && !alreadyTracked) {
+                // Tracker toutes les requêtes MapTiler, y compris celles depuis le cache (304)
+                // car elles comptent dans le quota MapTiler
+                if (!isOpaque && !alreadyTracked) {
                     if (isTile) {
                         analyticsTracker.trackRequest('maptiler', 'tile', success, {
                             method: init?.method || 'GET',
-                            error: success ? undefined : `HTTP ${response.status}`
+                            error: success ? undefined : `HTTP ${response.status}${isFromCache ? ' (cached)' : ''}`
                         })
                     } else if (isFont) {
                         // Les fonts sont gratuites, mais on peut les tracker
@@ -88,7 +94,8 @@ function interceptFetch(): void {
                         })
                     } else {
                         analyticsTracker.trackRequest('maptiler', 'api', success, {
-                            method: init?.method || 'GET'
+                            method: init?.method || 'GET',
+                            error: success ? undefined : `HTTP ${response.status}${isFromCache ? ' (cached)' : ''}`
                         })
                     }
                 }

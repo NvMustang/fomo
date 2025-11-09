@@ -144,10 +144,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         analyticsTracker.addMapTilerReference(value, maptilerNote || undefined)
         setMapTilerInputValue('')
         setMapTilerNote('')
-        loadData()
 
-        // Sauvegarder dans Google Sheets
+        // Sauvegarder dans Google Sheets d'abord
         await saveAnalyticsToBackend()
+        
+        // Puis recharger les données depuis le backend
+        await loadData()
     }
 
     const saveAnalyticsToBackend = useCallback(async () => {

@@ -45,7 +45,8 @@ class AnalyticsController {
             console.log(`📊 [${requestId}] Répartition:`, byProvider)
 
             // Préparer les données à sauvegarder
-            const rowsToSave = []
+            const requestsToSave = []
+            const referencesToSave = []
 
             // Calculer les valeurs cumulatives pour chaque référence MapTiler
             const sortedRefs = maptilerReferences.sort((a, b) => a.timestamp - b.timestamp)
@@ -57,7 +58,7 @@ class AnalyticsController {
 
             // Sauvegarder TOUTES les requêtes API de l'historique
             history.forEach(request => {
-                rowsToSave.push([
+                requestsToSave.push([
                     new Date(request.timestamp).toISOString(), // timestamp
                     request.provider, // provider (maptiler, mapbox, googlesheets, backend)
                     request.endpoint || '', // endpoint
@@ -90,7 +91,7 @@ class AnalyticsController {
                     ? ((variation / trackedCumulative) * 100).toFixed(2)
                     : '0'
 
-                rowsToSave.push([
+                referencesToSave.push([
                     new Date(ref.timestamp).toISOString(),
                     'maptiler_reference',
                     'reference',
@@ -109,13 +110,26 @@ class AnalyticsController {
 
             // Sauvegarder dans Google Sheets avec déduplication (append en batch)
             let savedCount = 0
-            if (rowsToSave.length > 0) {
-                const { appendDataWithDeduplication } = require('../utils/sheets-config')
-                // Déduplication par Timestamp + Provider + Endpoint + Method (colonnes A, B, C, D, indices 0, 1, 2, 3)
-                const result = await appendDataWithDeduplication('Analytics', rowsToSave, [0, 1, 2, 3], 2, 50000, requestId)
-                savedCount = result.saved
-                console.log(`✅ [${requestId}] ${result.saved} nouvelles lignes analytics sauvegardées (${result.duplicates} doublons ignorés, ${history.length} requêtes + ${maptilerReferences.length} références MapTiler)`)
-            } else {
+            let savedReferences = 0
+            const { appendDataWithDeduplication } = require('../utils/sheets-config')
+            
+            // Sauvegarder les requêtes normales : déduplication par Timestamp + Provider + Endpoint + Method
+            if (requestsToSave.length > 0) {
+                const result = await appendDataWithDeduplication('Analytics', requestsToSave, [0, 1, 2, 3], 2, 50000, requestId)
+                savedCount += result.saved
+                console.log(`✅ [${requestId}] ${result.saved} nouvelles requêtes sauvegardées (${result.duplicates} doublons ignorés)`)
+            }
+            
+            // Sauvegarder les références MapTiler : déduplication par Timestamp + Valeur (colonnes 0 et 7)
+            // Cela évite les doublons même si la même valeur est sauvegardée plusieurs fois
+            if (referencesToSave.length > 0) {
+                const result = await appendDataWithDeduplication('Analytics', referencesToSave, [0, 7], 2, 50000, requestId)
+                savedReferences = result.saved
+                savedCount += result.saved
+                console.log(`✅ [${requestId}] ${result.saved} nouvelles références MapTiler sauvegardées (${result.duplicates} doublons ignorés)`)
+            }
+            
+            if (savedCount === 0) {
                 console.log(`⚠️ [${requestId}] Aucune donnée à sauvegarder`)
             }
             res.json({
@@ -124,29 +138,6 @@ class AnalyticsController {
             })
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur sauvegarde analytics:`, error)
-            res.status(500).json({
-                success: false,
-                error: error.message
-            })
-        }
-    }
-
-    /**
-     * Récupérer les analytics sauvegardées
-     */
-    static async getAnalytics(req, res) {
-        try {
-            const analytics = await DataServiceV2.getAllActiveData(
-                AnalyticsController.ANALYTICS_RANGE,
-                DataServiceV2.mappers.analytics
-            )
-
-            res.json({
-                success: true,
-                data: analytics
-            })
-        } catch (error) {
-            console.error('❌ Erreur récupération analytics:', error)
             res.status(500).json({
                 success: false,
                 error: error.message

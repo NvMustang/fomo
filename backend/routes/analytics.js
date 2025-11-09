@@ -40,12 +40,6 @@ router.get('/', (req, res) => {
 router.get('/backend', AnalyticsController.getBackendStats.bind(AnalyticsController))
 
 /**
- * GET /analytics/saved
- * Récupérer les analytics sauvegardées depuis Google Sheets
- */
-router.get('/saved', AnalyticsController.getAnalytics.bind(AnalyticsController))
-
-/**
  * GET /analytics/aggregated
  * Récupérer les statistiques agrégées de tous les utilisateurs depuis Google Sheets
  */

@@ -316,6 +316,7 @@ class AnalyticsTracker {
     /**
      * Vider l'historique sauvegardé (après sauvegarde réussie)
      * Garde les stats agrégées mais vide l'historique détaillé
+     * Vide aussi les références MapTiler pour éviter les doublons
      */
     clearSavedHistory(): void {
         // Vider l'historique global
@@ -327,9 +328,13 @@ class AnalyticsTracker {
             stats.requests = []
         })
         
+        // Vider les références MapTiler sauvegardées pour éviter les doublons
+        // Les références sont déjà dans Google Sheets, le dashboard les charge depuis le backend
+        this.data.maptilerReferences = []
+        
         this.data.lastUpdate = Date.now()
         this.saveToStorage()
-        console.log('🧹 [AnalyticsTracker] Historique vidé du cache')
+        console.log('🧹 [AnalyticsTracker] Historique et références MapTiler vidés du cache')
     }
 
     /**
