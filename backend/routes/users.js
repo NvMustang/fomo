@@ -28,6 +28,9 @@ router.get('/match-email/:email', UsersController.matchByEmail)
 // GET /api/users/search - Rechercher des utilisateurs par nom ou email
 router.get('/search', UsersController.searchUsers)
 
+// GET /api/users/:id - Récupérer un utilisateur par ID
+router.get('/:id', UsersController.getUserById)
+
 // GET /api/users/:id/friends - Récupérer les amis d'un utilisateur
 router.get('/:id/friends', UsersController.getUserFriends)
 

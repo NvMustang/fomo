@@ -122,15 +122,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = React.memo(({ children 
                 if (matchedId) {
                     // User trouvé (peut être un visiteur ou un user authentifié)
                     console.log('✅ [AuthContext] User trouvé:', matchedId)
-                    const existingUser = await fomoData.checkUserByEmail(email.trim())
+                    
+                    // Récupérer le user complet par son ID (inclut les visitors)
+                    const existingUser = await fomoData.getUserById(matchedId)
+                    
                     if (existingUser) {
-                        // Ne JAMAIS connecter un visitor - les visitors doivent rester des visitors
+                        // Si c'est un visitor, le transformer en user authentifié
                         if (existingUser.isVisitor === true) {
-                            console.warn('⚠️ [AuthContext] Visitor détecté (isVisitor: true), refus de connexion automatique')
-                            // Ne pas connecter le visitor, laisser userToConnect à null pour créer un nouveau user
-                            // ou lancer une erreur selon le comportement souhaité
-                            // Ici, on laisse continuer pour créer un nouveau user (ou l'utilisateur devra s'inscrire)
-                            console.log('ℹ️ [AuthContext] Le visitor doit s\'inscrire pour se connecter')
+                            console.log('🔄 [AuthContext] Visitor détecté, transformation en user authentifié...')
+                            
+                            // Mettre à jour le visitor avec isVisitor: false et les nouvelles données
+                            const updatedUser = await fomoData.updateUser(matchedId, {
+                                isVisitor: false,
+                                name: name.trim(),
+                                city: city.trim(),
+                                lat: lat ?? null,
+                                lng: lng ?? null
+                            })
+                            
+                            if (updatedUser) {
+                                console.log('✅ [AuthContext] Visitor transformé en user:', updatedUser.id)
+                                userToConnect = updatedUser
+                                
+                                // Mettre à jour lastConnexion
+                                const lastConnexion = new Date().toISOString()
+                                try {
+                                    await fomoData.saveUserToBackend(userToConnect, lastConnexion)
+                                    console.log('✅ [AuthContext] lastConnexion mis à jour')
+                                } catch (error) {
+                                    console.error('❌ [AuthContext] Erreur mise à jour lastConnexion:', error)
+                                }
+                            } else {
+                                console.error('❌ [AuthContext] Échec de la transformation du visitor')
+                                // Fallback : créer un nouveau user si la mise à jour échoue
+                            }
                         } else {
                             // User authentifié existant -> connexion directe
                             userToConnect = existingUser

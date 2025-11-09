@@ -648,6 +648,45 @@ export class FomoDataManager {
         }
     }
 
+    async getUserById(userId: string): Promise<User | null> {
+        try {
+            const apiUrl = `${API_BASE_URL}/users/${encodeURIComponent(userId)}`
+
+            console.log(`🔍 [Frontend] getUserById: "${userId}"`)
+            console.log(`🔗 [Frontend] URL API: ${apiUrl}`)
+
+            const response = await fetch(apiUrl)
+
+            if (response.ok) {
+                const result = await response.json()
+                if (result.success && result.data) {
+                    console.log(`✅ [Frontend] Utilisateur trouvé: ${result.data.name} (${result.data.email})`)
+                    return result.data
+                }
+                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (success: false)`)
+                return null
+            }
+
+            if (response.status === 404) {
+                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (404)`)
+                return null
+            }
+
+            const errorText = await response.text().catch(() => 'Unable to read error')
+            console.error(`❌ [Frontend] Erreur HTTP ${response.status} lors de la récupération utilisateur:`, errorText)
+            return null
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            const errorStack = error instanceof Error ? error.stack : undefined
+            console.error('❌ [Frontend] Erreur récupération utilisateur:', {
+                message: errorMessage,
+                stack: errorStack,
+                apiUrl: `${API_BASE_URL}/users/...`
+            })
+            return null
+        }
+    }
+
 
     async updateUser(userId: string, userData: Partial<User>, newId?: string): Promise<User | null> {
         try {
