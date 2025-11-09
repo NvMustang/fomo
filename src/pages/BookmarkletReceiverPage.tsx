@@ -44,7 +44,7 @@ export default function BookmarkletReceiverPage() {
         console.log('📥 [BookmarkletReceiver] Page chargée...')
 
         // Lire les données depuis l'URL (query params) ou postMessage
-        const processData = async (payload: BookmarkletEventPayload, requestId: string) => {
+        const processData = async (payload: BookmarkletEventPayload, requestId: string, eventSource: MessageEventSource | null) => {
             console.log('📥 [BookmarkletReceiver] Traitement des données:', {
                 requestId,
                 title: payload.title
@@ -53,7 +53,7 @@ export default function BookmarkletReceiverPage() {
             // Préparer la réponse
             const response: BookmarkletResponse = {
                 type: 'fomo-bookmarklet-response',
-                requestId: message.requestId,
+                requestId,
                 ok: false
             }
 
@@ -69,7 +69,7 @@ export default function BookmarkletReceiverPage() {
                         'Content-Type': 'application/json',
                         'X-FOMO-Key': FOMO_KEY
                     },
-                    body: JSON.stringify(message.payload)
+                    body: JSON.stringify(payload)
                 })
 
                 const data = await apiResponse.json()
@@ -96,10 +96,10 @@ export default function BookmarkletReceiverPage() {
             }
 
             // Envoyer la réponse au bookmarklet
-            // event.source peut être window.opener (popup) ou window.parent (iframe)
-            if (event.source && event.source !== window) {
+            // eventSource peut être window.opener (popup) ou window.parent (iframe)
+            if (eventSource && eventSource !== window) {
                 try {
-                    (event.source as Window).postMessage(response, '*')
+                    (eventSource as Window).postMessage(response, '*')
                     console.log('📤 [BookmarkletReceiver] Réponse envoyée au bookmarklet:', response)
                 } catch (err) {
                     console.error('❌ [BookmarkletReceiver] Erreur lors de l\'envoi de la réponse:', err)
@@ -117,6 +117,14 @@ export default function BookmarkletReceiverPage() {
                 } catch (err) {
                     console.error('❌ [BookmarkletReceiver] Erreur lors de l\'envoi de la réponse:', err)
                 }
+            }
+        }
+
+        const handleMessage = (event: MessageEvent) => {
+            // Vérifier que c'est un message du bookmarklet
+            if (event.data && event.data.type === 'fomo-bookmarklet-event') {
+                const message = event.data as BookmarkletMessage
+                processData(message.payload, message.requestId, event.source)
             }
         }
 
