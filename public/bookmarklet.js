@@ -1960,10 +1960,10 @@
 
         return new Promise((resolve, reject) => {
             // Générer un requestId unique avec crypto.randomUUID() si disponible
-            const requestId = typeof crypto !== 'undefined' && crypto.randomUUID 
-                ? crypto.randomUUID() 
+            const requestId = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
                 : `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-            
+
             // Extraire expectedOrigin depuis location.origin
             const expectedOrigin = window.location.origin;
 
@@ -2025,18 +2025,18 @@
                 // La popup vient de notre domaine (fomo-swart.vercel.app ou localhost:3001)
                 const apiOrigin = API_BASE_URL.replace('/api', '').split('/').slice(0, 3).join('/');
                 // Pour localhost, accepter aussi les variantes
-                const allowedOrigins = apiOrigin.includes('localhost') 
+                const allowedOrigins = apiOrigin.includes('localhost')
                     ? [apiOrigin, 'http://localhost:3001', 'http://127.0.0.1:3001']
                     : apiOrigin.includes('fomo-swart.vercel.app')
-                    ? ['https://fomo-swart.vercel.app']
-                    : [apiOrigin];
-                
+                        ? ['https://fomo-swart.vercel.app']
+                        : [apiOrigin];
+
                 // Vérifier que l'origine contient notre domaine
                 const originMatches = allowedOrigins.some(origin => {
                     const originDomain = origin.replace('https://', '').replace('http://', '').split(':')[0];
                     return event.origin.includes(originDomain);
                 });
-                
+
                 if (!originMatches) {
                     console.log('⚠️ [FOMO Bookmarklet] Message ignoré - origine incorrecte:', event.origin, 'attendu:', allowedOrigins);
                     return; // Ignorer les messages d'autres origines
@@ -2045,18 +2045,18 @@
                 // Vérifier que c'est bien une réponse pour cette requête
                 if (event.data?.type === 'FOMO_INGEST_RESPONSE' && event.data?.requestId === requestId) {
                     console.log('✅ [FOMO Bookmarklet] Réponse reçue:', event.data);
-                    
+
                     // Nettoyer le timeout
                     if (timeoutId) {
                         clearTimeout(timeoutId);
                     }
-                    
+
                     // Nettoyer
                     window.removeEventListener('message', messageHandler);
                     if (document.body.contains(form)) {
                         document.body.removeChild(form);
                     }
-                    
+
                     try {
                         const popup = window.open('', 'fomo-bookmarklet-receiver');
                         if (popup && !popup.closed) {
@@ -2137,7 +2137,7 @@
                     // Envoyer à l'API via formulaire POST
                     const result = await sendToAPI(payload, FOMO_KEY);
                     console.log('✅ [FOMO Bookmarklet] Événement créé:', result);
-                    
+
                     // Afficher le message de succès selon l'architecture
                     if (result.ok) {
                         if (result.duplicate) {
@@ -2148,7 +2148,7 @@
                     } else {
                         alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
                     }
-                    
+
                     // Fermer la modal
                     const modal = document.querySelector('#fomo-bookmarklet-modal');
                     if (modal && document.body.contains(modal)) {
@@ -2157,7 +2157,7 @@
                     window.__FOMO_BOOKMARKLET_ACTIVE = false;
                 } catch (error) {
                     console.error('❌ [FOMO Bookmarklet] Erreur dans callback onConfirm:', error);
-                    
+
                     // Afficher un message d'erreur dans la modal
                     const modal = document.querySelector('#fomo-bookmarklet-modal');
                     if (modal) {
@@ -2177,7 +2177,7 @@
                             scrollableContent.appendChild(message);
                         }
                     }
-                    
+
                     // Réactiver le bouton en cas d'erreur
                     if (modal) {
                         const buttons = modal.querySelectorAll('button[type="button"]');

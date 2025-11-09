@@ -5,6 +5,7 @@
 
 const DataServiceV2 = require('../utils/dataService')
 const EventsController = require('./eventsController')
+const GeocodingService = require('../services/geocodingService')
 
 class IngestController {
     /**
@@ -77,7 +78,7 @@ class IngestController {
      */
     static extractCity(address) {
         if (!address || typeof address !== 'string') return ''
-        
+
         const parts = address.split(',').map(p => p.trim())
         // Prendre l'avant-dernier élément (généralement la ville)
         if (parts.length >= 2) {
@@ -114,8 +115,9 @@ class IngestController {
 
     /**
      * Transformer le payload bookmarklet vers le format Google Sheets
+     * Inclut le géocodage de l'adresse si disponible
      */
-    static transformPayload(payload) {
+    static async transformPayload(payload) {
         const eventId = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
         const now = new Date().toISOString()
 
@@ -130,6 +132,49 @@ class IngestController {
             venueName = addressParts[0] || ''
         }
 
+        // Calculer la date de fin : si absente, ajouter 8h à la date de début
+        let endsAt = payload.end || ''
+        if (!endsAt && payload.start) {
+            const startDate = new Date(payload.start)
+            if (!isNaN(startDate.getTime())) {
+                startDate.setHours(startDate.getHours() + 8)
+                endsAt = startDate.toISOString()
+            }
+        }
+
+        // Géocodage de l'adresse si disponible
+        let lat = '0.000000'
+        let lng = '0.000000'
+        if (payload.address && payload.address.trim()) {
+            try {
+                console.log(`🌐 Géocodage de l'adresse: ${payload.address}`)
+                const geocodeResult = await GeocodingService.searchAddresses(payload.address.trim(), { limit: 1 })
+
+                if (geocodeResult.success && geocodeResult.data && geocodeResult.data.length > 0) {
+                    const firstResult = geocodeResult.data[0]
+                    lat = parseFloat(firstResult.lat || 0).toFixed(6)
+                    lng = parseFloat(firstResult.lon || 0).toFixed(6)
+                    console.log(`✅ Coordonnées trouvées: ${lat}, ${lng}`)
+                } else {
+                    console.warn(`⚠️ Aucune coordonnée trouvée pour: ${payload.address}`)
+                }
+            } catch (geocodeError) {
+                console.error('❌ Erreur lors du géocodage:', geocodeError)
+                // Ne pas bloquer l'ingestion si le géocodage échoue
+            }
+        }
+
+        // Image position par défaut: 50:50
+        const imagePosition = '50;50'
+
+        // Organizer ID : accepter la valeur string fournie par le json, sinon valeur par défaut
+        const organizerId = (payload.organizerId && typeof payload.organizerId === 'string' && payload.organizerId.trim())
+            ? payload.organizerId.trim()
+            : 'bookmarklet-fomo'
+
+        // Source : utiliser l'URL de l'événement
+        const source = payload.url || payload.source || 'facebook'
+
         // Format de ligne Google Sheets: [id, createdAt, title, description, startsAt, endsAt, venueName, venueAddress, lat, lng, coverUrl, imagePosition, organizerId, isPublic, isOnline, modifiedAt, deletedAt, source]
         const rowData = [
             eventId,                                    // A: ID
@@ -137,19 +182,19 @@ class IngestController {
             payload.title.trim(),                       // C: Title
             payload.description || '',                  // D: Description
             payload.start,                              // E: StartsAt
-            payload.end || '',                          // F: EndsAt
+            endsAt,                                     // F: EndsAt (start + 8h si absent)
             venueName,                                  // G: Venue Name
             payload.address || '',                     // H: Venue Address
-            '0.000000',                                 // I: Latitude (placeholder, géocodage futur)
-            '0.000000',                                // J: Longitude (placeholder, géocodage futur)
+            lat,                                        // I: Latitude (géocodée)
+            lng,                                        // J: Longitude (géocodée)
             payload.cover || '',                       // K: Cover URL
-            '',                                         // L: Image Position (vide par défaut)
-            'bookmarklet-fomo',                        // M: Organizer ID
-            'true',                                     // N: Is Public (événements Facebook publics)
-            'false',                                   // O: Is Online (par défaut false, peut être détecté si pas d'address)
+            imagePosition,                              // L: Image Position (50;50 par défaut)
+            organizerId,                                // M: Organizer ID (depuis payload ou défaut)
+            'true',                                     // N: Is Public (toujours true)
+            'true',                                     // O: Is Online (toujours true)
             now,                                        // P: ModifiedAt
             '',                                         // Q: DeletedAt
-            payload.source || 'facebook'                // R: Source (par défaut 'facebook' pour le bookmarklet)
+            source                                      // R: Source (URL de l'événement)
         ]
 
         return { eventId, rowData }
@@ -204,59 +249,6 @@ class IngestController {
             const validation = IngestController.validateEventPayload(payload)
             if (!validation.isValid) {
                 console.warn(`⚠️ [${requestId}] Validation échouée:`, validation.errors)
-                
-                // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
-                if (req.body.requestId) {
-                    const result = {
-                        ok: false,
-                        error: 'Données invalides',
-                        details: validation.errors
-                    }
-                    return res.status(400).send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>FOMO Bookmarklet</title>
-</head>
-<body>
-    <script>
-        (function() {
-            const result = ${JSON.stringify(result)};
-            const requestId = ${JSON.stringify(req.body.requestId)};
-            
-            const response = {
-                type: 'fomo-bookmarklet-response',
-                requestId: requestId,
-                ok: false,
-                error: result.error,
-                details: result.details
-            };
-            
-            try {
-                if (window.opener) {
-                    window.opener.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            try {
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            setTimeout(function() {
-                try {
-                    window.close();
-                } catch (e) {}
-            }, 500);
-        })();
-    </script>
-</body>
-</html>
-                    `)
-                }
-                
                 return res.status(400).json({
                     ok: false,
                     error: 'Données invalides',
@@ -274,59 +266,6 @@ class IngestController {
             if (duplicate) {
                 const city = IngestController.extractCity(payload.address || '')
                 console.log(`🔄 [${requestId}] Doublon détecté: ${payload.title} - ${city} (ID existant: ${duplicate.id})`)
-                
-                // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
-                if (req.body.requestId) {
-                    const result = {
-                        ok: true,
-                        id: duplicate.id,
-                        duplicate: true
-                    }
-                    return res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>FOMO Bookmarklet</title>
-</head>
-<body>
-    <script>
-        (function() {
-            const result = ${JSON.stringify(result)};
-            const requestId = ${JSON.stringify(req.body.requestId)};
-            
-            const response = {
-                type: 'fomo-bookmarklet-response',
-                requestId: requestId,
-                ok: result.ok,
-                id: result.id,
-                duplicate: result.duplicate || false
-            };
-            
-            try {
-                if (window.opener) {
-                    window.opener.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            try {
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            setTimeout(function() {
-                try {
-                    window.close();
-                } catch (e) {}
-            }, 500);
-        })();
-    </script>
-</body>
-</html>
-                    `)
-                }
-                
                 return res.json({
                     ok: true,
                     id: duplicate.id,
@@ -335,7 +274,7 @@ class IngestController {
             }
 
             // Transformation et enregistrement
-            const { eventId, rowData } = IngestController.transformPayload(payload)
+            const { eventId, rowData } = await IngestController.transformPayload(payload)
 
             await DataServiceV2.upsertData(
                 EventsController.EVENTS_RANGE,
@@ -347,69 +286,6 @@ class IngestController {
             const city = IngestController.extractCity(payload.address || '')
             console.log(`✅ [${requestId}] Événement ingéré: ${payload.title} - ${city} (ID: ${eventId})`)
 
-            // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
-            // qui envoie la réponse via postMessage
-            if (req.body.requestId) {
-                const result = {
-                    ok: true,
-                    id: eventId,
-                    duplicate: false
-                }
-                return res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>FOMO Bookmarklet</title>
-</head>
-<body>
-    <script>
-        (function() {
-            const result = ${JSON.stringify(result)};
-            const requestId = ${JSON.stringify(req.body.requestId)};
-            
-            // Envoyer la réponse au parent/opener
-            const response = {
-                type: 'fomo-bookmarklet-response',
-                requestId: requestId,
-                ok: result.ok,
-                id: result.id,
-                duplicate: result.duplicate || false
-            };
-            
-            try {
-                if (window.opener) {
-                    window.opener.postMessage(response, '*');
-                    console.log('📤 Réponse envoyée via window.opener');
-                }
-            } catch (e) {
-                console.error('Erreur postMessage opener:', e);
-            }
-            
-            try {
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage(response, '*');
-                    console.log('📤 Réponse envoyée via window.parent');
-                }
-            } catch (e) {
-                console.error('Erreur postMessage parent:', e);
-            }
-            
-            // Fermer la fenêtre après 500ms
-            setTimeout(function() {
-                try {
-                    window.close();
-                } catch (e) {
-                    // Ignorer si on ne peut pas fermer
-                }
-            }, 500);
-        })();
-    </script>
-</body>
-</html>
-                `)
-            }
-
             res.json({
                 ok: true,
                 id: eventId
@@ -417,57 +293,6 @@ class IngestController {
 
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur ingestion événement:`, error)
-            
-            // Si c'est une requête depuis un formulaire (requestId présent), renvoyer une page HTML
-            if (req.body && req.body.requestId) {
-                const result = {
-                    ok: false,
-                    error: error.message || 'Erreur interne du serveur'
-                }
-                return res.status(500).send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>FOMO Bookmarklet</title>
-</head>
-<body>
-    <script>
-        (function() {
-            const result = ${JSON.stringify(result)};
-            const requestId = ${JSON.stringify(req.body.requestId)};
-            
-            const response = {
-                type: 'fomo-bookmarklet-response',
-                requestId: requestId,
-                ok: false,
-                error: result.error
-            };
-            
-            try {
-                if (window.opener) {
-                    window.opener.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            try {
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage(response, '*');
-                }
-            } catch (e) {}
-            
-            setTimeout(function() {
-                try {
-                    window.close();
-                } catch (e) {}
-            }, 500);
-        })();
-    </script>
-</body>
-</html>
-                `)
-            }
-            
             res.status(500).json({
                 ok: false,
                 error: error.message || 'Erreur interne du serveur'
@@ -545,7 +370,7 @@ class IngestController {
             if (duplicate) {
                 const city = IngestController.extractCity(payload.address || '')
                 console.log(`🔄 [${requestId}] Doublon détecté: ${payload.title} - ${city} (ID existant: ${duplicate.id})`)
-                
+
                 return res.send(`
 <!doctype html>
 <html>
@@ -578,7 +403,7 @@ class IngestController {
             }
 
             // Transformation et enregistrement
-            const { eventId, rowData } = IngestController.transformPayload(payload)
+            const { eventId, rowData } = await IngestController.transformPayload(payload)
 
             await DataServiceV2.upsertData(
                 EventsController.EVENTS_RANGE,
@@ -626,7 +451,7 @@ class IngestController {
 
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur ingestion événement:`, error)
-            
+
             return res.status(500).send(`
 <!doctype html>
 <html>
