@@ -1725,7 +1725,7 @@
         urlField.input.style.background = '#f5f5f5';
 
         const titleField = createField('Titre', 'title', eventData.title, true);
-        const descField = createField('Description', 'description', eventData.description, false, 'textarea');
+        const descField = createField('Description', 'description', eventData.description, true, 'textarea');
         // Convertir les dates ISO en format datetime-local avant de créer les champs
         let startDateTimeLocal = '';
         let endDateTimeLocal = '';
@@ -1775,10 +1775,10 @@
 
         const startField = createField('Date de début (ISO)', 'start', startDateTimeLocal || eventData.start, true, 'datetime-local');
         const endField = createField('Date de fin (ISO)', 'end', endDateTimeLocal || eventData.end, false, 'datetime-local');
-        const venueNameField = createField('Nom du lieu', 'venue_name', eventData.venue_name);
-        const addressField = createField('Adresse du lieu', 'address', eventData.address);
-        const hostField = createField('Organisateur', 'host', eventData.host);
-        const coverField = createField('Image de couverture (URL)', 'cover', eventData.cover);
+        const venueNameField = createField('Nom du lieu', 'venue_name', eventData.venue_name, false);
+        const addressField = createField('Adresse du lieu', 'address', eventData.address, true);
+        const hostField = createField('Organisateur', 'host', eventData.host, false);
+        const coverField = createField('Image de couverture (URL)', 'cover', eventData.cover, true);
         const attendingField = createField('Nombre de participants', 'attending_count', eventData.attending_count || '', false, 'text');
         const interestedField = createField('Nombre d\'intéressés', 'interested_count', eventData.interested_count || '', false, 'text');
 
@@ -1860,13 +1860,25 @@
             e.preventDefault();
             console.log('🔘 [FOMO Bookmarklet] Formulaire soumis');
 
-            // Validation
+            // Validation des champs obligatoires
             if (!titleField.input.value.trim()) {
                 alert('Le titre est obligatoire');
                 return;
             }
+            if (!descField.input.value.trim()) {
+                alert('La description est obligatoire');
+                return;
+            }
             if (!startField.input.value.trim()) {
                 alert('La date de début est obligatoire');
+                return;
+            }
+            if (!addressField.input.value.trim()) {
+                alert('L\'adresse est obligatoire (nécessaire pour le géocodage)');
+                return;
+            }
+            if (!coverField.input.value.trim()) {
+                alert('L\'image de couverture est obligatoire');
                 return;
             }
 
@@ -1896,21 +1908,37 @@
                 }
             }
 
-            // Préparer les données
+            // Préparer les données (tous les champs obligatoires sont garantis par la validation précédente)
             const payload = {
                 source: 'facebook',
                 url: urlField.input.value.trim(),
                 title: titleField.input.value.trim(),
                 description: descField.input.value.trim(),
                 start: startISO,
-                end: endISO || undefined,
-                venue_name: venueNameField.input.value.trim() || undefined,
-                address: addressField.input.value.trim() || undefined,
-                host: hostField.input.value.trim() || undefined,
-                cover: coverField.input.value.trim() || undefined,
-                attending_count: attendingField.input.value.trim() || undefined,
-                interested_count: interestedField.input.value.trim() || undefined
+                address: addressField.input.value.trim(),
+                cover: coverField.input.value.trim()
             };
+
+            // Ajouter les champs facultatifs seulement s'ils ont une valeur
+            if (endISO && endISO.trim()) {
+                payload.end = endISO;
+            }
+            const venueName = venueNameField.input.value.trim();
+            if (venueName) {
+                payload.venue_name = venueName;
+            }
+            const host = hostField.input.value.trim();
+            if (host) {
+                payload.host = host;
+            }
+            const attendingCount = attendingField.input.value.trim();
+            if (attendingCount) {
+                payload.attending_count = attendingCount;
+            }
+            const interestedCount = interestedField.input.value.trim();
+            if (interestedCount) {
+                payload.interested_count = interestedCount;
+            }
 
             // Désactiver le bouton pendant l'envoi
             submitBtn.disabled = true;

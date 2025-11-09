@@ -48,6 +48,10 @@ class IngestController {
             errors.push('Le champ "title" est obligatoire')
         }
 
+        if (!payload.description || typeof payload.description !== 'string' || !payload.description.trim()) {
+            errors.push('Le champ "description" est obligatoire')
+        }
+
         if (!payload.start || typeof payload.start !== 'string' || !payload.start.trim()) {
             errors.push('Le champ "start" est obligatoire')
         } else {
@@ -56,6 +60,15 @@ class IngestController {
             if (isNaN(startDate.getTime())) {
                 errors.push('Le champ "start" doit être une date ISO valide')
             }
+        }
+
+        // L'adresse est obligatoire car le géocodage en dépend
+        if (!payload.address || typeof payload.address !== 'string' || !payload.address.trim()) {
+            errors.push('Le champ "address" est obligatoire (nécessaire pour le géocodage)')
+        }
+
+        if (!payload.cover || typeof payload.cover !== 'string' || !payload.cover.trim()) {
+            errors.push('Le champ "cover" (image de couverture) est obligatoire')
         }
 
         // Validation optionnelle de "end" si présent
@@ -167,10 +180,15 @@ class IngestController {
         // Image position par défaut: 50:50
         const imagePosition = '50;50'
 
-        // Organizer ID : accepter la valeur string fournie par le json, sinon valeur par défaut
-        const organizerId = (payload.organizerId && typeof payload.organizerId === 'string' && payload.organizerId.trim())
-            ? payload.organizerId.trim()
-            : 'bookmarklet-fomo'
+        // Organizer ID : accepter organizerId, host, ou venue_name (dans cet ordre de priorité), sinon valeur par défaut
+        let organizerId = 'bookmarklet-fomo'
+        if (payload.organizerId && typeof payload.organizerId === 'string' && payload.organizerId.trim()) {
+            organizerId = payload.organizerId.trim()
+        } else if (payload.host && typeof payload.host === 'string' && payload.host.trim()) {
+            organizerId = payload.host.trim()
+        } else if (payload.venue_name && typeof payload.venue_name === 'string' && payload.venue_name.trim()) {
+            organizerId = payload.venue_name.trim()
+        }
 
         // Source : utiliser l'URL de l'événement
         const source = payload.url || payload.source || 'facebook'
