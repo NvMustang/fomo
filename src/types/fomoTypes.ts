@@ -63,6 +63,7 @@ export interface Event {
     ticketUrl?: string
     organizerId: string
     organizerName?: string
+    source?: string // URL source de l'événement (ex: URL Facebook)
     stats: EventStats
     isPublic?: boolean
     isOnline?: boolean

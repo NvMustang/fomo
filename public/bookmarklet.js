@@ -61,7 +61,89 @@
             // Déclarer mainContent une seule fois pour toute la fonction
             const mainContent = document.querySelector('[role="main"]') || document.body;
 
-            // ===== STRATÉGIE PRIORITAIRE : Structure conteneur avec Date/Titre/Adresse =====
+            // ===== STRATÉGIE PRIORITAIRE : Élément role="button" avec Date/Titre/Adresse =====
+            // Un élément avec role="button" contient toujours ces 3 infos dans l'ordre :
+            // 1. Date
+            // 2. Titre
+            // 3. Nom du lieu OU adresse du lieu (si virgules)
+            console.log('🔍 [FOMO Bookmarklet] === STRATÉGIE ROLE BUTTON (PRIORITAIRE) ===');
+            const roleButtons = mainContent.querySelectorAll('[role="button"]');
+            console.log('🔍 [FOMO Bookmarklet] Nombre d\'éléments role="button" trouvés:', roleButtons.length);
+
+            for (const button of roleButtons) {
+                const buttonText = button.textContent.trim();
+                if (!buttonText || buttonText.length < 10) continue;
+
+                // Chercher les spans enfants qui contiennent les informations
+                const spans = button.querySelectorAll('span[dir="auto"]');
+                if (spans.length < 3) continue;
+
+                // Extraire les textes de chaque span
+                const texts = Array.from(spans).map(span => span.textContent.trim()).filter(text => text && text.length > 0);
+                if (texts.length < 3) continue;
+
+                // Vérifier que le premier texte ressemble à une date
+                const firstText = texts[0];
+                const isDateLike = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)|aujourd'hui|demain|today|tomorrow|du\s+\d{1,2})/i.test(firstText);
+
+                if (isDateLike) {
+                    console.log('✅ [FOMO Bookmarklet] Élément role="button" avec structure Date/Titre/Adresse trouvé');
+                    console.log('📅 [FOMO Bookmarklet] Texte 1 (Date):', firstText);
+                    console.log('📝 [FOMO Bookmarklet] Texte 2 (Titre):', texts[1]);
+                    console.log('📍 [FOMO Bookmarklet] Texte 3 (Lieu/Adresse):', texts[2]);
+
+                    // 1. Date (sera parsée plus tard dans la section dates)
+                    if (!data.start && firstText) {
+                        // Stocker temporairement pour parsing ultérieur
+                        data.start = firstText;
+                        console.log('📅 [FOMO Bookmarklet] Date trouvée via role="button":', firstText);
+                    }
+
+                    // 2. Titre
+                    if (!data.title && texts[1]) {
+                        data.title = texts[1];
+                        console.log('✅ [FOMO Bookmarklet] Titre trouvé via role="button":', texts[1]);
+                    }
+
+                    // 3. Nom du lieu OU adresse
+                    if (texts[2]) {
+                        const locationText = texts[2];
+                        if (locationText.includes(',')) {
+                            // C'est une adresse complète avec virgules
+                            const parts = locationText.split(',').map(p => p.trim());
+                            if (parts.length >= 2) {
+                                // La ville est généralement l'avant-dernière partie
+                                const cityIndex = parts.length - 2;
+                                const city = parts[cityIndex];
+                                if (city && city.length >= 2 && city.length < 100) {
+                                    if (!data.venue_name) {
+                                        data.venue_name = city;
+                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu (ville) trouvé via role="button":', city);
+                                    }
+                                }
+                            }
+                            if (!data.address) {
+                                data.address = locationText;
+                                console.log('✅ [FOMO Bookmarklet] Adresse trouvée via role="button":', locationText);
+                            }
+                        } else {
+                            // Nom simple (sans virgule)
+                            if (!data.venue_name) {
+                                data.venue_name = locationText;
+                                console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via role="button":', locationText);
+                            }
+                        }
+                    }
+
+                    // Si on a trouvé au moins le titre et la date, on peut arrêter
+                    if (data.title && data.start) {
+                        console.log('✅ [FOMO Bookmarklet] Extraction via role="button" réussie');
+                        break;
+                    }
+                }
+            }
+
+            // ===== STRATÉGIE SECONDAIRE : Structure conteneur avec Date/Titre/Adresse =====
             // Chercher un conteneur avec plusieurs divs enfants, dont un contient un h1 (titre)
             // Structure: conteneur > divs enfants (x1e56ztr x1xmf6yo) > contenu
             // Ordre: 1er div = Date, 2ème div = Titre (h1), 3ème div = Adresse/Nom du lieu
@@ -528,342 +610,280 @@
             // ===== DATES =====
             console.log('📅 [FOMO Bookmarklet] === DÉBUT EXTRACTION DATES ===');
 
-            // Stratégie 0: Span spécifique avec format "du X mois. HH:MM au X mois. HH:MM" (prioritaire)
-            console.log('📅 [FOMO Bookmarklet] Stratégie 0: Recherche span spécifique avec format "du X mois. HH:MM au X mois. HH:MM"...');
-            const dateSpanSpecific = mainContent.querySelector('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"][class*="x1yc453h"][class*="x1a1m0xk"][class*="x1xlr1w8"]');
-            if (dateSpanSpecific) {
-                const dateText = dateSpanSpecific.textContent.trim();
-                console.log('📅 [FOMO Bookmarklet] Texte trouvé dans span spécifique:', dateText);
+            // Stratégie 1: Utiliser le sélecteur spécifique Facebook (avec toutes les variantes de classes possibles)
+            let dateSpanSpecific = mainContent.querySelector('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"][class*="x1yc453h"][class*="x1a1m0xk"][class*="x1xlr1w8"]') ||
+                mainContent.querySelector('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"][class*="x1gufx9m"][class*="x1s928wv"][class*="x1yc453h"][class*="x1a1m0xk"][class*="x1xlr1w8"]') ||
+                mainContent.querySelector('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"][class*="x1yc453h"]');
 
-                // Parser le format "du 8 nov. 11:00 au 9 nov. 19:00"
-                // Pattern: "du" jour mois_abrégé heure "au" jour mois_abrégé heure
-                const dateMatch = dateText.match(/du\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})/i);
+            // Stratégie 2: Si non trouvé, chercher par couleur rouge dans une zone limitée (près du titre)
+            if (!dateSpanSpecific) {
+                console.log('📅 [FOMO Bookmarklet] Sélecteur spécifique non trouvé, recherche par couleur rouge (zone limitée)...');
 
-                if (dateMatch) {
-                    const [, startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute] = dateMatch;
-                    console.log('📅 [FOMO Bookmarklet] Match trouvé:', { startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute });
-
-                    // Mapping des mois abrégés français
-                    const monthAbbrMap = {
-                        'janv': 0, 'jan': 0, 'févr': 1, 'fév': 1, 'mars': 2, 'mar': 2,
-                        'avr': 3, 'mai': 4, 'juin': 5, 'juil': 6, 'jul': 6, 'août': 7, 'aout': 7,
-                        'sept': 8, 'oct': 9, 'nov': 10, 'déc': 11, 'dec': 11,
-                        'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
-                        'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
-                    };
-
-                    const startMonth = monthAbbrMap[startMonthAbbr.toLowerCase()];
-                    const endMonth = monthAbbrMap[endMonthAbbr.toLowerCase()];
-
-                    if (startMonth !== undefined && endMonth !== undefined) {
-                        // Utiliser l'année actuelle ou l'année suivante si le mois est déjà passé
-                        const now = new Date();
-                        let year = now.getFullYear();
-                        if (startMonth < now.getMonth() || (startMonth === now.getMonth() && parseInt(startDay) < now.getDate())) {
-                            year = year + 1;
+                // Limiter la recherche à une zone proche du titre pour éviter les faux positifs
+                let searchContainer = mainContent;
+                const titleElement = document.querySelector('h1[data-testid="event-permalink-event-name"]') || mainContent.querySelector('h1');
+                if (titleElement) {
+                    // Chercher un conteneur parent commun qui contient le titre et probablement la date
+                    let parent = titleElement.parentElement;
+                    let levels = 0;
+                    while (parent && levels < 5) {
+                        // Vérifier si ce conteneur a plusieurs enfants (titre, date, adresse, etc.)
+                        const children = Array.from(parent.children);
+                        if (children.length >= 3) {
+                            searchContainer = parent;
+                            console.log('📅 [FOMO Bookmarklet] Zone de recherche limitée au conteneur du titre');
+                            break;
                         }
-
-                        const startDate = new Date(year, startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
-                        const endDate = new Date(year, endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
-
-                        console.log('📅 [FOMO Bookmarklet] Dates créées - Début:', startDate, 'Fin:', endDate);
-
-                        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-                            data.start = startDate.toISOString();
-                            data.end = endDate.toISOString();
-                            console.log('✅ [FOMO Bookmarklet] Date début extraite:', data.start);
-                            console.log('✅ [FOMO Bookmarklet] Date fin extraite:', data.end);
-                        } else {
-                            console.warn('⚠️ [FOMO Bookmarklet] Dates invalides après parsing');
-                        }
-                    } else {
-                        console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnus:', startMonthAbbr, endMonthAbbr);
+                        parent = parent.parentElement;
+                        levels++;
                     }
-                } else {
-                    console.log('📅 [FOMO Bookmarklet] Format "du X mois. HH:MM au X mois. HH:MM" non détecté dans le texte');
                 }
-            } else {
-                console.log('📅 [FOMO Bookmarklet] Span spécifique non trouvé');
-            }
 
-            // Stratégie 1: Chercher dans les métadonnées JSON-LD
-            console.log('📅 [FOMO Bookmarklet] Stratégie 1: Recherche dans JSON-LD...');
-            const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
-            console.log('📅 [FOMO Bookmarklet] Nombre de scripts JSON-LD trouvés:', jsonLdScripts.length);
-            for (const script of jsonLdScripts) {
-                try {
-                    const json = JSON.parse(script.textContent);
-                    if (json['@type'] === 'Event' || (Array.isArray(json) && json.find(item => item['@type'] === 'Event'))) {
-                        const event = Array.isArray(json) ? json.find(item => item['@type'] === 'Event') : json;
-                        console.log('📅 [FOMO Bookmarklet] Événement trouvé dans JSON-LD:', { startDate: event.startDate, endDate: event.endDate });
-                        if (event.startDate) {
-                            data.start = new Date(event.startDate).toISOString();
-                            console.log('✅ [FOMO Bookmarklet] Date début extraite depuis JSON-LD:', data.start);
-                        }
-                        if (event.endDate) {
-                            data.end = new Date(event.endDate).toISOString();
-                            console.log('✅ [FOMO Bookmarklet] Date fin extraite depuis JSON-LD:', data.end);
-                        }
-                        break;
-                    }
-                } catch (e) {
-                    console.warn('⚠️ [FOMO Bookmarklet] Erreur parsing JSON-LD:', e);
-                }
-            }
+                const allSpans = searchContainer.querySelectorAll('span[dir="auto"]');
+                console.log('📅 [FOMO Bookmarklet] Nombre de spans à analyser (zone limitée):', allSpans.length);
 
-            // Stratégie 2: Chercher les spans avec classes spécifiques Facebook (date et heure)
-            if (!data.start) {
-                console.log('📅 [FOMO Bookmarklet] Stratégie 2: Recherche dans spans avec classes spécifiques...');
-                // Chercher les spans avec dir="auto" et classes communes qui contiennent des dates
-                const dateSpans = mainContent.querySelectorAll('span[dir="auto"][class*="xdmh292"], span[dir="auto"][class*="x15dsfln"]');
-                console.log('📅 [FOMO Bookmarklet] Nombre de spans avec classes spécifiques trouvés:', dateSpans.length);
-                let dateText = '';
-
-                for (const span of dateSpans) {
+                for (const span of allSpans) {
                     const text = span.textContent.trim();
-                    // Pattern: "Dimanche 26 avril 2026 de 13:00 à 19:00" ou similaire
-                    // OU formats relatifs: "Aujourd'hui à 06:00", "Demain à 22:00", "Aujourd'hui de 6:00 à 16:00"
-                    if (text && (
-                        (text.includes('de') && text.includes('à') && text.match(/\d{1,2}\s+\w+\s+\d{4}/)) ||
-                        (text.includes('à') && text.match(/\d{1,2}\s+\w+\s+\d{4}/)) ||
-                        text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
-                        text.match(/\d{4}-\d{2}-\d{2}/) ||
-                        /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
+                    // Filtre plus strict : le texte doit ressembler fortement à une date
+                    if (text && text.length > 5 && text.length < 100 && (
+                        // Format avec jour de la semaine + date complète
+                        /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+\d{1,2}\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}/i.test(text) ||
+                        // Format "du X mois. HH:MM au X mois. HH:MM"
+                        /du\s+\d{1,2}\s+(janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.\s+\d{1,2}:\d{2}\s+au\s+\d{1,2}\s+(janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.\s+\d{1,2}:\d{2}/i.test(text) ||
+                        // Format relatif avec heure
+                        /(aujourd'hui|demain|today|tomorrow)\s+(de\s+\d{1,2}:\d{2}\s+à\s+\d{1,2}:\d{2}|à\s+\d{1,2}:\d{2})/i.test(text) ||
+                        // Format jour de la semaine avec heure
+                        /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(de\s+\d{1,2}:\d{2}\s+à\s+\d{1,2}:\d{2}|à\s+\d{1,2}:\d{2})/i.test(text)
                     )) {
-                        dateText = text;
-                        console.log('📅 [FOMO Bookmarklet] Date trouvée via span spécifique:', text);
-                        break;
-                    }
-                }
-
-                // Si pas trouvé, chercher dans les attributs data et aria-label
-                if (!dateText) {
-                    console.log('📅 [FOMO Bookmarklet] Recherche dans attributs data-testid et aria-label...');
-                    const dateSelectors = [
-                        '[data-testid="event-permalink-event-time"]',
-                        '[data-testid="event-time"]',
-                        '[aria-label*="Date"]',
-                        '[aria-label*="date"]'
-                    ];
-
-                    for (const selector of dateSelectors) {
-                        const elements = document.querySelectorAll(selector);
-                        console.log(`📅 [FOMO Bookmarklet] Sélecteur "${selector}": ${elements.length} éléments trouvés`);
-                        for (const el of elements) {
-                            const text = el.textContent.trim() || el.getAttribute('aria-label') || '';
-                            if (text && (
-                                text.includes('à') ||
-                                text.match(/\d{1,2}\s+\w+\s+\d{4}/) ||
-                                text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
-                                text.match(/\d{4}-\d{2}-\d{2}/) ||
-                                /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
-                            )) {
-                                dateText = text;
-                                console.log('📅 [FOMO Bookmarklet] Date trouvée via attribut:', text);
-                                break;
+                        const computedStyle = window.getComputedStyle(span);
+                        const color = computedStyle.color;
+                        // Extraire les valeurs RGB
+                        let isRed = false;
+                        const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+                        if (rgbMatch) {
+                            const r = parseInt(rgbMatch[1]);
+                            const g = parseInt(rgbMatch[2]);
+                            const b = parseInt(rgbMatch[3]);
+                            // Critères stricts pour le rouge : R élevé, G et B faibles
+                            isRed = (r > 180 && g < 120 && b < 120);
+                            if (isRed) {
+                                console.log('📅 [FOMO Bookmarklet] Date trouvée par couleur rouge:', text.substring(0, 60), 'RGB:', { r, g, b });
                             }
+                        } else {
+                            // Vérifier les valeurs spécifiques connues
+                            isRed = color.includes('rgb(237, 65, 65)') || // #ed4141
+                                color.includes('rgb(242, 61, 61)') || // #f23d3d
+                                color.includes('rgb(220, 29, 29)') || // #dc1d1d
+                                color.includes('rgb(255, 0, 0)') ||    // red
+                                color.includes('rgb(239, 68, 68)');   // #ef4444
                         }
-                        if (dateText) break;
-                    }
-                }
 
-                // Stratégie 3: Chercher dans tous les spans avec dir="auto" qui contiennent des dates
-                if (!dateText) {
-                    console.log('📅 [FOMO Bookmarklet] Stratégie 3: Recherche dans tous les spans dir="auto"...');
-                    const spans = document.querySelectorAll('span[dir="auto"]');
-                    console.log('📅 [FOMO Bookmarklet] Nombre de spans dir="auto" trouvés:', spans.length);
-                    for (const span of spans) {
-                        const text = span.textContent.trim();
-                        if (text && (
-                            text.includes('à') ||
-                            text.match(/\d{1,2}\s+\w+\s+\d{4}/) ||
-                            text.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||
-                            /(aujourd'hui|demain|today|tomorrow)/i.test(text) // Formats relatifs
-                        )) {
-                            dateText = text;
-                            console.log('📅 [FOMO Bookmarklet] Date trouvée via span dir="auto":', text);
+                        if (isRed) {
+                            dateSpanSpecific = span;
+                            console.log('✅ [FOMO Bookmarklet] Date trouvée par couleur rouge:', text);
                             break;
                         }
                     }
                 }
+            }
 
-                // Parser la date
-                if (dateText) {
-                    try {
-                        console.log('📅 [FOMO Bookmarklet] Texte de date à parser:', dateText);
+            if (dateSpanSpecific) {
+                const dateText = dateSpanSpecific.textContent.trim();
+                console.log('📅 [FOMO Bookmarklet] Texte trouvé:', dateText);
 
-                        // Format ISO: "2026-04-26T13:00:00"
-                        let isoMatch = dateText.match(/(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2})/);
-                        if (isoMatch) {
-                            console.log('📅 [FOMO Bookmarklet] Format ISO détecté, match:', isoMatch[1]);
-                            const parsedDate = new Date(isoMatch[1]);
-                            if (!isNaN(parsedDate.getTime())) {
-                                data.start = parsedDate.toISOString();
-                                console.log('✅ [FOMO Bookmarklet] Date ISO parsée avec succès:', data.start);
-                            } else {
-                                console.warn('⚠️ [FOMO Bookmarklet] Date ISO invalide après parsing:', isoMatch[1]);
-                            }
-                        } else if (/(aujourd'hui|today)/i.test(dateText) || /(demain|tomorrow)/i.test(dateText)) {
-                            // Formats relatifs: "Aujourd'hui à 06:00", "Demain à 22:00", "Aujourd'hui de 6:00 à 16:00"
-                            console.log('📅 [FOMO Bookmarklet] Format relatif détecté (Aujourd\'hui/Demain)');
+                // Parser les patterns spécifiques dans l'ordre
+                let parsed = false;
+                try {
+                    // Pattern 1: "du 14 nov. 17:00 au 16 nov. 20:00"
+                    let dateMatch = dateText.match(/du\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})/i);
+                    if (dateMatch) {
+                        const [, startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute] = dateMatch;
+                        console.log('📅 [FOMO Bookmarklet] Match trouvé:', { startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute });
 
+                        // Mapping des mois abrégés français
+                        const monthAbbrMap = {
+                            'janv': 0, 'jan': 0, 'févr': 1, 'fév': 1, 'mars': 2, 'mar': 2,
+                            'avr': 3, 'mai': 4, 'juin': 5, 'juil': 6, 'jul': 6, 'août': 7, 'aout': 7,
+                            'sept': 8, 'oct': 9, 'nov': 10, 'déc': 11, 'dec': 11,
+                            'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                            'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+                        };
+
+                        const startMonth = monthAbbrMap[startMonthAbbr.toLowerCase()];
+                        const endMonth = monthAbbrMap[endMonthAbbr.toLowerCase()];
+
+                        if (startMonth !== undefined && endMonth !== undefined) {
+                            // Utiliser l'année actuelle ou l'année suivante si le mois est déjà passé
                             const now = new Date();
-                            let targetDate = new Date(now);
-
-                            // Déterminer si c'est "Demain" ou "Aujourd'hui"
-                            if (/(demain|tomorrow)/i.test(dateText)) {
-                                targetDate.setDate(targetDate.getDate() + 1);
-                                console.log('📅 [FOMO Bookmarklet] Date relative: Demain');
-                            } else {
-                                console.log('📅 [FOMO Bookmarklet] Date relative: Aujourd\'hui');
+                            let year = now.getFullYear();
+                            if (startMonth < now.getMonth() || (startMonth === now.getMonth() && parseInt(startDay) < now.getDate())) {
+                                year = year + 1;
                             }
 
-                            // Chercher d'abord le format avec plage: "de 6:00 à 16:00"
-                            const rangeMatch = dateText.match(/de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
-                            if (rangeMatch) {
-                                const [, startHour, startMinute, endHour, endMinute] = rangeMatch;
-                                targetDate.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
-                                data.start = targetDate.toISOString();
-                                console.log('✅ [FOMO Bookmarklet] Date relative parsée (début avec plage):', data.start);
+                            const startDate = new Date(year, startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
+                            const endDate = new Date(year, endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
 
-                                const endDate = new Date(targetDate);
-                                endDate.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
-                                data.end = endDate.toISOString();
-                                console.log('✅ [FOMO Bookmarklet] Date relative parsée (fin avec plage):', data.end);
-                            } else {
-                                // Format simple: "à 06:00" ou "à 6:00"
-                                const timeMatch = dateText.match(/à\s+(\d{1,2}):(\d{2})/i);
-                                if (timeMatch) {
-                                    const [, hour, minute] = timeMatch;
-                                    targetDate.setHours(parseInt(hour), parseInt(minute), 0, 0);
-                                    data.start = targetDate.toISOString();
-                                    console.log('✅ [FOMO Bookmarklet] Date relative parsée (début simple):', data.start);
-                                } else {
-                                    console.warn('⚠️ [FOMO Bookmarklet] Format relatif détecté mais heure non trouvée');
+                            // Si même jour et même mois, et heure de fin < heure de début, l'événement se termine le lendemain
+                            if (startDay === endDay && startMonth === endMonth) {
+                                const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                if (endTime < startTime) {
+                                    endDate.setDate(endDate.getDate() + 1);
+                                    console.log('📅 [FOMO Bookmarklet] Heure de fin < heure de début, événement se termine le lendemain');
                                 }
                             }
+
+                            console.log('📅 [FOMO Bookmarklet] Dates créées - Début:', startDate, 'Fin:', endDate);
+
+                            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                                data.start = startDate.toISOString();
+                                data.end = endDate.toISOString();
+                                console.log('✅ [FOMO Bookmarklet] Date début extraite:', data.start);
+                                console.log('✅ [FOMO Bookmarklet] Date fin extraite:', data.end);
+                            } else {
+                                console.warn('⚠️ [FOMO Bookmarklet] Dates invalides après parsing');
+                            }
+                            parsed = true;
                         } else {
-                            console.log('📅 [FOMO Bookmarklet] Format ISO non détecté, tentative parsing format français...');
+                            console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnus:', startMonthAbbr, endMonthAbbr);
+                        }
+                    }
+
+                    // Pattern 2: "Samedi 15 novembre 2025 de 22:00 à 04:30" ou "Jeudi 18 décembre 2025 à 17:00" (ignorer le jour de la semaine, utiliser la date complète)
+                    if (!parsed) {
+                        // Format avec plage: "de 22:00 à 04:30"
+                        let fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+(\w+)\s+(\d{4})\s+de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
+                        if (fullDateMatch) {
+                            const [, day, monthName, year, startHour, startMinute, endHour, endMinute] = fullDateMatch;
                             const monthMap = {
                                 'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
                                 'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11,
                                 'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
                                 'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11
                             };
-
-                            // Format français avec début et fin: "Dimanche 26 avril 2026 de 13:00 à 19:00"
-                            // Regex plus flexible pour gérer les variations
-                            let dateMatchWithRange = dateText.match(/(\d{1,2})\s+(\w+)\s+(\d{4})\s+de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
-
-                            if (!dateMatchWithRange) {
-                                // Essayer sans le "de" explicite
-                                dateMatchWithRange = dateText.match(/(\d{1,2})\s+(\w+)\s+(\d{4}).*?(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
+                            const month = monthMap[monthName.toLowerCase()];
+                            if (month !== undefined) {
+                                const startDate = new Date(parseInt(year), month, parseInt(day), parseInt(startHour), parseInt(startMinute));
+                                const endDate = new Date(parseInt(year), month, parseInt(day), parseInt(endHour), parseInt(endMinute));
+                                const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                if (endTime < startTime) {
+                                    endDate.setDate(endDate.getDate() + 1);
+                                }
+                                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                                    data.start = startDate.toISOString();
+                                    data.end = endDate.toISOString();
+                                    parsed = true;
+                                }
                             }
-
-                            if (dateMatchWithRange) {
-                                // Format avec début et fin explicites
-                                const [, day, monthName, year, startHour, startMinute, endHour, endMinute] = dateMatchWithRange;
-                                console.log('📅 [FOMO Bookmarklet] Match avec range trouvé:', { day, monthName, year, startHour, startMinute, endHour, endMinute });
-
+                        } else {
+                            // Format simple: "à 17:00" (sans heure de fin)
+                            fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+(\w+)\s+(\d{4})\s+à\s+(\d{1,2}):(\d{2})/i);
+                            if (fullDateMatch) {
+                                const [, day, monthName, year, hour, minute] = fullDateMatch;
+                                const monthMap = {
+                                    'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+                                    'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11,
+                                    'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
+                                    'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11
+                                };
                                 const month = monthMap[monthName.toLowerCase()];
-                                console.log('📅 [FOMO Bookmarklet] Mois recherché:', monthName.toLowerCase(), '→ Index:', month);
                                 if (month !== undefined) {
-                                    const startDate = new Date(parseInt(year), month, parseInt(day), parseInt(startHour), parseInt(startMinute));
-                                    const endDate = new Date(parseInt(year), month, parseInt(day), parseInt(endHour), parseInt(endMinute));
-                                    console.log('📅 [FOMO Bookmarklet] Dates créées - Début:', startDate, 'Fin:', endDate);
-
-                                    // Vérifier que les dates sont valides
-                                    if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                                    const startDate = new Date(parseInt(year), month, parseInt(day), parseInt(hour), parseInt(minute));
+                                    if (!isNaN(startDate.getTime())) {
                                         data.start = startDate.toISOString();
-                                        data.end = endDate.toISOString();
-                                        console.log('✅ [FOMO Bookmarklet] Date de début extraite:', data.start);
-                                        console.log('✅ [FOMO Bookmarklet] Date de fin extraite:', data.end);
-                                    } else {
-                                        console.warn('⚠️ [FOMO Bookmarklet] Dates invalides après parsing - Début valide:', !isNaN(startDate.getTime()), 'Fin valide:', !isNaN(endDate.getTime()));
-                                    }
-                                } else {
-                                    console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnu:', monthName, '(mois disponibles:', Object.keys(monthMap).join(', '), ')');
-                                }
-                            } else {
-                                console.log('📅 [FOMO Bookmarklet] Format avec range non détecté, tentative format simple...');
-                                // Format français simple: "samedi 26 avril 2026 à 13:00"
-                                let dateMatch = dateText.match(/(\d{1,2})\s+(\w+)\s+(\d{4}).*?(\d{1,2}):(\d{2})/);
-
-                                // Format alternatif: "26/04/2026 13:00"
-                                if (!dateMatch) {
-                                    console.log('📅 [FOMO Bookmarklet] Tentative format numérique (DD/MM/YYYY)...');
-                                    dateMatch = dateText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}).*?(\d{1,2}):(\d{2})/);
-                                    if (dateMatch) {
-                                        const [, day, month, year, hour, minute] = dateMatch;
-                                        console.log('📅 [FOMO Bookmarklet] Match format numérique trouvé:', { day, month, year, hour, minute });
-                                        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
-                                        console.log('📅 [FOMO Bookmarklet] Date créée:', date);
-                                        if (!isNaN(date.getTime())) {
-                                            data.start = date.toISOString();
-                                            console.log('✅ [FOMO Bookmarklet] Date simple extraite (format numérique):', data.start);
-                                        } else {
-                                            console.warn('⚠️ [FOMO Bookmarklet] Date invalide après parsing format numérique');
-                                        }
-                                    } else {
-                                        console.log('📅 [FOMO Bookmarklet] Format numérique non détecté');
-                                    }
-                                } else {
-                                    const [, day, monthName, year, hour, minute] = dateMatch;
-                                    console.log('📅 [FOMO Bookmarklet] Match format français simple trouvé:', { day, monthName, year, hour, minute });
-                                    const month = monthMap[monthName.toLowerCase()];
-                                    console.log('📅 [FOMO Bookmarklet] Mois recherché:', monthName.toLowerCase(), '→ Index:', month);
-                                    if (month !== undefined) {
-                                        const date = new Date(parseInt(year), month, parseInt(day), parseInt(hour), parseInt(minute));
-                                        console.log('📅 [FOMO Bookmarklet] Date créée:', date);
-                                        if (!isNaN(date.getTime())) {
-                                            data.start = date.toISOString();
-                                            console.log('✅ [FOMO Bookmarklet] Date simple extraite (format français):', data.start);
-                                        } else {
-                                            console.warn('⚠️ [FOMO Bookmarklet] Date invalide après parsing format français');
-                                        }
-                                    } else {
-                                        console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnu dans format simple:', monthName);
+                                        parsed = true;
                                     }
                                 }
                             }
                         }
-
-                        // Chercher la durée pour calculer la date de fin si pas déjà définie
-                        if (data.start && !data.end) {
-                            console.log('📅 [FOMO Bookmarklet] Date début trouvée mais pas de fin, recherche durée...');
-                            const durationMatch = dateText.match(/(\d+)\s*(heure|hour|h|minute|min)/i);
-                            if (durationMatch) {
-                                const duration = parseInt(durationMatch[1]);
-                                const unit = durationMatch[2].toLowerCase();
-                                console.log('📅 [FOMO Bookmarklet] Durée trouvée:', duration, unit);
-                                const startDate = new Date(data.start);
-                                if (unit.includes('heure') || unit.includes('hour') || unit === 'h') {
-                                    startDate.setHours(startDate.getHours() + duration);
-                                    console.log('📅 [FOMO Bookmarklet] Ajout de', duration, 'heures à la date de début');
-                                } else if (unit.includes('minute') || unit.includes('min')) {
-                                    startDate.setMinutes(startDate.getMinutes() + duration);
-                                    console.log('📅 [FOMO Bookmarklet] Ajout de', duration, 'minutes à la date de début');
-                                }
-                                if (!isNaN(startDate.getTime())) {
-                                    data.end = startDate.toISOString();
-                                    console.log('✅ [FOMO Bookmarklet] Date de fin calculée depuis durée:', data.end);
-                                } else {
-                                    console.warn('⚠️ [FOMO Bookmarklet] Date de fin invalide après calcul depuis durée');
-                                }
-                            } else {
-                                console.log('📅 [FOMO Bookmarklet] Aucune durée trouvée dans le texte');
-                            }
-                        }
-                    } catch (e) {
-                        console.error('❌ [FOMO Bookmarklet] Erreur parsing date:', e, dateText);
-                        console.error('❌ [FOMO Bookmarklet] Stack trace:', e.stack);
                     }
-                } else {
-                    console.warn('⚠️ [FOMO Bookmarklet] Aucun texte de date trouvé pour parsing');
+
+                    // Pattern 3: "Mardi de 8:00 à 17:00" ou "Mardi à 8:00"
+                    if (!parsed) {
+                        const dayOfWeekMatch = dateText.match(/(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})|\s+à\s+(\d{1,2}):(\d{2}))/i);
+                        if (dayOfWeekMatch) {
+                            const [, dayName, startHour, startMinute, endHour, endMinute, simpleHour, simpleMinute] = dayOfWeekMatch;
+                            const dayMap = {
+                                'dimanche': 0, 'sunday': 0, 'lundi': 1, 'monday': 1, 'mardi': 2, 'tuesday': 2,
+                                'mercredi': 3, 'wednesday': 3, 'jeudi': 4, 'thursday': 4, 'vendredi': 5, 'friday': 5,
+                                'samedi': 6, 'saturday': 6
+                            };
+                            const targetDayOfWeek = dayMap[dayName.toLowerCase()];
+                            if (targetDayOfWeek !== null) {
+                                const now = new Date();
+                                const currentDayOfWeek = now.getDay();
+                                let daysToAdd = targetDayOfWeek - currentDayOfWeek;
+                                if (daysToAdd <= 0) daysToAdd += 7;
+                                const targetDate = new Date(now);
+                                targetDate.setDate(now.getDate() + daysToAdd);
+                                if (startHour !== undefined) {
+                                    targetDate.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+                                    data.start = targetDate.toISOString();
+                                    const endDate = new Date(targetDate);
+                                    endDate.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+                                    const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                    const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                    if (endTime < startTime) {
+                                        endDate.setDate(endDate.getDate() + 1);
+                                    }
+                                    data.end = endDate.toISOString();
+                                } else {
+                                    targetDate.setHours(parseInt(simpleHour), parseInt(simpleMinute), 0, 0);
+                                    data.start = targetDate.toISOString();
+                                }
+                                parsed = true;
+                            }
+                        }
+                    }
+
+                    // Pattern 4: "Aujourd'hui" / "Today" ou "Demain" / "Tomorrow"
+                    if (!parsed) {
+                        if (/(aujourd'hui|today)/i.test(dateText) || /(demain|tomorrow)/i.test(dateText)) {
+                            const now = new Date();
+                            let targetDate = new Date(now);
+                            if (/(demain|tomorrow)/i.test(dateText)) {
+                                targetDate.setDate(targetDate.getDate() + 1);
+                            }
+                            const rangeMatch = dateText.match(/de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
+                            if (rangeMatch) {
+                                const [, startHour, startMinute, endHour, endMinute] = rangeMatch;
+                                targetDate.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+                                data.start = targetDate.toISOString();
+                                const endDate = new Date(targetDate);
+                                endDate.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+                                const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                if (endTime < startTime) {
+                                    endDate.setDate(endDate.getDate() + 1);
+                                }
+                                data.end = endDate.toISOString();
+                            } else {
+                                const timeMatch = dateText.match(/à\s+(\d{1,2}):(\d{2})/i);
+                                if (timeMatch) {
+                                    const [, hour, minute] = timeMatch;
+                                    targetDate.setHours(parseInt(hour), parseInt(minute), 0, 0);
+                                    data.start = targetDate.toISOString();
+                                }
+                            }
+                            parsed = true;
+                        }
+                    }
+
+                    // Si aucun pattern n'a été parsé, mettre le string tel quel
+                    if (!parsed) {
+                        data.start = dateText;
+                        console.log('📅 [FOMO Bookmarklet] Aucun pattern reconnu, texte brut conservé:', dateText);
+                    }
+                } catch (e) {
+                    console.error('❌ [FOMO Bookmarklet] Erreur parsing date:', e);
+                    data.start = dateText;
                 }
+            } else {
+                console.log('📅 [FOMO Bookmarklet] Span spécifique non trouvé');
             }
 
-            // Résumé final des dates extraites (après toutes les stratégies)
+            // Résumé final des dates extraites
             console.log('📅 [FOMO Bookmarklet] === RÉSUMÉ EXTRACTION DATES ===');
             console.log('📅 [FOMO Bookmarklet] Date début:', data.start || 'NON TROUVÉE');
             console.log('📅 [FOMO Bookmarklet] Date fin:', data.end || 'NON TROUVÉE');
@@ -1215,6 +1235,13 @@
             console.log('📍 [FOMO Bookmarklet] Nom du lieu final:', data.venue_name || 'NON TROUVÉ');
 
             console.log('📍 [FOMO Bookmarklet] === FIN EXTRACTION ADRESSE ===');
+
+            // Fallback: si l'adresse n'est pas trouvée, utiliser le nom du lieu
+            if (!data.address && data.venue_name) {
+                data.address = data.venue_name;
+                console.log('📍 [FOMO Bookmarklet] Adresse non trouvée, utilisation du nom du lieu comme adresse:', data.address);
+            }
+
             console.log('📍 [FOMO Bookmarklet] Adresse finale:', data.address || 'NON TROUVÉE');
 
             // ===== ORGANISATEUR/HÔTE =====
@@ -1542,13 +1569,13 @@
      * Créer et afficher l'interface de validation
      */
     function showValidationModal(eventData, onConfirm, onCancel) {
-        // Créer la modal directement (sans overlay) - positionnée en haut à droite
+        // Créer la modal directement (sans overlay) - positionnée en haut à gauche
         const modal = document.createElement('div');
         modal.id = 'fomo-bookmarklet-modal';
         modal.style.cssText = `
             position: fixed;
             top: 20px;
-            right: 20px;
+            left: 20px;
             width: 400px;
             max-height: calc(100vh - 40px);
             background: white;
@@ -2166,23 +2193,72 @@
                     const result = await sendToAPI(payload, FOMO_KEY);
                     console.log('✅ [FOMO Bookmarklet] Événement créé:', result);
 
-                    // Afficher le message de succès selon l'architecture
-                    if (result.ok) {
-                        if (result.duplicate) {
-                            alert('⚠️ Doublon détecté. L\'événement existe déjà ✅\nID: ' + result.id);
+                    // Afficher le message de succès dans la modal
+                    const modal = document.querySelector('#fomo-bookmarklet-modal');
+                    if (modal) {
+                        const scrollableContent = modal.querySelector('div');
+                        if (scrollableContent) {
+                            const message = document.createElement('div');
+                            message.style.cssText = `
+                                padding: 12px;
+                                margin-top: 12px;
+                                border-radius: 4px;
+                                background: #d4edda;
+                                color: #155724;
+                                font-size: 14px;
+                                text-align: center;
+                            `;
+
+                            if (result.ok) {
+                                if (result.duplicate) {
+                                    message.textContent = `⚠️ Doublon détecté. L'événement existe déjà ✅\nID: ${result.id}`;
+                                } else {
+                                    message.textContent = `Événement envoyé ✅\nID: ${result.id}`;
+                                }
+                            } else {
+                                message.style.background = '#f8d7da';
+                                message.style.color = '#721c24';
+                                message.textContent = `❌ Erreur: ${result.error || 'Erreur inconnue'}`;
+                            }
+
+                            scrollableContent.appendChild(message);
+
+                            // Fermer la modal après 1 seconde
+                            setTimeout(() => {
+                                if (modal && document.body.contains(modal)) {
+                                    document.body.removeChild(modal);
+                                }
+                                window.__FOMO_BOOKMARKLET_ACTIVE = false;
+                            }, 1000);
                         } else {
-                            alert('Événement envoyé ✅\nID: ' + result.id);
+                            // Fallback si pas de scrollableContent
+                            if (result.ok) {
+                                if (result.duplicate) {
+                                    alert('⚠️ Doublon détecté. L\'événement existe déjà ✅\nID: ' + result.id);
+                                } else {
+                                    alert('Événement envoyé ✅\nID: ' + result.id);
+                                }
+                            } else {
+                                alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+                            }
+                            if (modal && document.body.contains(modal)) {
+                                document.body.removeChild(modal);
+                            }
+                            window.__FOMO_BOOKMARKLET_ACTIVE = false;
                         }
                     } else {
-                        alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+                        // Fallback si pas de modal
+                        if (result.ok) {
+                            if (result.duplicate) {
+                                alert('⚠️ Doublon détecté. L\'événement existe déjà ✅\nID: ' + result.id);
+                            } else {
+                                alert('Événement envoyé ✅\nID: ' + result.id);
+                            }
+                        } else {
+                            alert('❌ Erreur: ' + (result.error || 'Erreur inconnue'));
+                        }
+                        window.__FOMO_BOOKMARKLET_ACTIVE = false;
                     }
-
-                    // Fermer la modal
-                    const modal = document.querySelector('#fomo-bookmarklet-modal');
-                    if (modal && document.body.contains(modal)) {
-                        document.body.removeChild(modal);
-                    }
-                    window.__FOMO_BOOKMARKLET_ACTIVE = false;
                 } catch (error) {
                     console.error('❌ [FOMO Bookmarklet] Erreur dans callback onConfirm:', error);
 

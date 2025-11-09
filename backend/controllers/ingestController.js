@@ -159,36 +159,73 @@ class IngestController {
         let lat = '0.000000'
         let lng = '0.000000'
         if (payload.address && payload.address.trim()) {
-            try {
-                console.log(`🌐 Géocodage de l'adresse: ${payload.address}`)
-                const geocodeResult = await GeocodingService.searchAddresses(payload.address.trim(), { limit: 1 })
+            const addressTrimmed = payload.address.trim()
 
-                if (geocodeResult.success && geocodeResult.data && geocodeResult.data.length > 0) {
-                    const firstResult = geocodeResult.data[0]
-                    lat = parseFloat(firstResult.lat || 0).toFixed(6)
-                    lng = parseFloat(firstResult.lon || 0).toFixed(6)
-                    console.log(`✅ Coordonnées trouvées: ${lat}, ${lng}`)
+            // Détecter si l'adresse contient des coordonnées au format "50,493184, 5,164947" (lat, lng avec virgules comme séparateur décimal)
+            // Pattern: nombre avec virgule décimale (une ou plusieurs décimales), virgule (ou virgule+espace), nombre avec virgule décimale
+            const coordPattern = /^(-?\d+,\d+)\s*,\s*(-?\d+,\d+)$/
+            const coordMatch = addressTrimmed.match(coordPattern)
+
+            if (coordMatch) {
+                // Extraire et convertir les coordonnées (remplacer virgules par points pour parseFloat)
+                const latStr = coordMatch[1].replace(',', '.')
+                const lngStr = coordMatch[2].replace(',', '.')
+                const latNum = parseFloat(latStr)
+                const lngNum = parseFloat(lngStr)
+
+                // Valider que les coordonnées sont dans des plages valides
+                if (!isNaN(latNum) && !isNaN(lngNum) && latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180) {
+                    lat = latNum.toFixed(6)
+                    lng = lngNum.toFixed(6)
+                    console.log(`📍 Coordonnées extraites depuis l'adresse: ${lat}, ${lng}`)
                 } else {
-                    console.warn(`⚠️ Aucune coordonnée trouvée pour: ${payload.address}`)
+                    console.warn(`⚠️ Coordonnées invalides détectées dans l'adresse: ${addressTrimmed}`)
+                    // Fallback sur géocodage
+                    try {
+                        console.log(`🌐 Géocodage de l'adresse: ${addressTrimmed}`)
+                        const geocodeResult = await GeocodingService.searchAddresses(addressTrimmed, { limit: 1 })
+
+                        if (geocodeResult.success && geocodeResult.data && geocodeResult.data.length > 0) {
+                            const firstResult = geocodeResult.data[0]
+                            lat = parseFloat(firstResult.lat || 0).toFixed(6)
+                            lng = parseFloat(firstResult.lon || 0).toFixed(6)
+                            console.log(`✅ Coordonnées trouvées via géocodage: ${lat}, ${lng}`)
+                        } else {
+                            console.warn(`⚠️ Aucune coordonnée trouvée pour: ${addressTrimmed}`)
+                        }
+                    } catch (geocodeError) {
+                        console.error('❌ Erreur lors du géocodage:', geocodeError)
+                    }
                 }
-            } catch (geocodeError) {
-                console.error('❌ Erreur lors du géocodage:', geocodeError)
-                // Ne pas bloquer l'ingestion si le géocodage échoue
+            } else {
+                // Pas de coordonnées détectées, faire le géocodage normal
+                try {
+                    console.log(`🌐 Géocodage de l'adresse: ${addressTrimmed}`)
+                    const geocodeResult = await GeocodingService.searchAddresses(addressTrimmed, { limit: 1 })
+
+                    if (geocodeResult.success && geocodeResult.data && geocodeResult.data.length > 0) {
+                        const firstResult = geocodeResult.data[0]
+                        lat = parseFloat(firstResult.lat || 0).toFixed(6)
+                        lng = parseFloat(firstResult.lon || 0).toFixed(6)
+                        console.log(`✅ Coordonnées trouvées: ${lat}, ${lng}`)
+                    } else {
+                        console.warn(`⚠️ Aucune coordonnée trouvée pour: ${addressTrimmed}`)
+                    }
+                } catch (geocodeError) {
+                    console.error('❌ Erreur lors du géocodage:', geocodeError)
+                    // Ne pas bloquer l'ingestion si le géocodage échoue
+                }
             }
         }
 
         // Image position par défaut: 50:50
         const imagePosition = '50;50'
 
-        // Organizer ID : accepter organizerId, host, ou venue_name (dans cet ordre de priorité), sinon valeur par défaut
-        let organizerId = 'bookmarklet-fomo'
-        if (payload.organizerId && typeof payload.organizerId === 'string' && payload.organizerId.trim()) {
-            organizerId = payload.organizerId.trim()
-        } else if (payload.host && typeof payload.host === 'string' && payload.host.trim()) {
-            organizerId = payload.host.trim()
-        } else if (payload.venue_name && typeof payload.venue_name === 'string' && payload.venue_name.trim()) {
-            organizerId = payload.venue_name.trim()
-        }
+        // Organizer ID : utiliser uniquement le champ host (nom de l'organisateur) depuis le form POST
+        // Le form POST envoie toujours le nom de l'organisateur dans le champ host
+        const organizerId = (payload.host && typeof payload.host === 'string' && payload.host.trim())
+            ? payload.host.trim()
+            : ''
 
         // Source : utiliser l'URL de l'événement
         const source = payload.url || payload.source || 'facebook'

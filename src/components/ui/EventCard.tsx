@@ -377,9 +377,28 @@ export const EventCard = React.memo<EventCardProps>(({
                         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
                             👤 {(() => {
                                 const organizer = getUser(users || [], event.organizerId)
-                                return organizer?.name || event.organizerName || 'Organisateur inconnu'
+                                return organizer?.name || event.organizerName || event.organizerId || 'Organisateur inconnu'
                             })()}
                         </div>
+
+                        {/* Lien source (Facebook, etc.) - affiché seulement si source existe */}
+                        {event.source && event.source.trim() && (
+                            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--xs)' }}>
+                                <a 
+                                    href={event.source} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ 
+                                        color: 'var(--primary)', 
+                                        textDecoration: 'none',
+                                        wordBreak: 'break-all'
+                                    }}
+                                >
+                                    🔗 {event.source}
+                                </a>
+                            </div>
+                        )}
 
                         <div className="event-info-grid">
                             {event.price && (
