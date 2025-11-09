@@ -90,31 +90,12 @@ class AnalyticsTracker {
                 const parsed = JSON.parse(stored)
                 // Vérifier que la structure est valide
                 if (parsed && parsed.stats && parsed.history && parsed.startTime) {
-                    // Migrer les anciennes données sans maptilerReferences
+                    // Ne plus créer automatiquement de référence avec valeur hardcodée
+                    // Les références doivent être ajoutées manuellement via le dashboard
+                    // Ne plus mettre à jour automatiquement les valeurs - tout vient du sheet
                     if (!parsed.maptilerReferences || parsed.maptilerReferences.length === 0) {
-                        const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime()
-                        parsed.maptilerReferences = [
-                            {
-                                timestamp: todayStart,
-                                value: 104684,
-                                note: 'Valeur initiale relevée sur le dashboard MapTiler'
-                            }
-                        ]
-                    } else {
-                        // Mettre à jour la valeur initiale si elle existe avec l'ancienne valeur (99340)
-                        const sortedRefs = parsed.maptilerReferences.sort((a: any, b: any) => a.timestamp - b.timestamp)
-                        const firstRef = sortedRefs[0]
-                        if (firstRef && firstRef.value === 99340 && firstRef.note?.includes('Valeur initiale')) {
-                            // Mettre à jour la valeur initiale à 104684
-                            firstRef.value = 104684
-                            firstRef.note = 'Valeur initiale relevée sur le dashboard MapTiler'
-                            // Sauvegarder la mise à jour
-                            try {
-                                localStorage.setItem(storageKey, JSON.stringify(parsed))
-                            } catch (error) {
-                                console.warn('⚠️ [Analytics] Erreur sauvegarde mise à jour valeur initiale:', error)
-                            }
-                        }
+                        // Laisser vide - les références seront chargées depuis le backend
+                        parsed.maptilerReferences = []
                     }
                     return parsed
                 }
@@ -124,9 +105,8 @@ class AnalyticsTracker {
         }
 
         // Initialiser avec des stats vides
+        // Ne plus créer de référence initiale automatique - tout doit venir du sheet
         const now = Date.now()
-        // Date du jour à minuit pour la valeur initiale
-        const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime()
 
         return {
             stats: {
@@ -138,13 +118,7 @@ class AnalyticsTracker {
             history: [],
             startTime: now,
             lastUpdate: now,
-            maptilerReferences: [
-                {
-                    timestamp: todayStart,
-                    value: 104684,
-                    note: 'Valeur initiale relevée sur le dashboard MapTiler'
-                }
-            ]
+            maptilerReferences: [] // Vide - les références seront chargées depuis le backend/sheet uniquement
         }
     }
 
@@ -338,6 +312,29 @@ class AnalyticsTracker {
     }
 
     /**
+     * Vider complètement le cache localStorage
+     * Utilisé lors d'une réinitialisation complète des analytics
+     * Vide les deux clés (prod et test) pour être sûr
+     */
+    clearAllCache(): void {
+        try {
+            // Vider les deux clés (prod et test) pour être sûr
+            const prodKey = 'fomo_analytics_prod'
+            const testKey = 'fomo_analytics_test'
+            
+            localStorage.removeItem(prodKey)
+            localStorage.removeItem(testKey)
+            
+            console.log(`🧹 [AnalyticsTracker] Caches localStorage vidés (${prodKey} et ${testKey})`)
+            
+            // Réinitialiser les données en mémoire
+            this.reset()
+        } catch (error) {
+            console.warn('⚠️ [AnalyticsTracker] Erreur vidage cache:', error)
+        }
+    }
+
+    /**
      * Réinitialiser les stats
      */
     reset(): void {
@@ -355,13 +352,7 @@ class AnalyticsTracker {
             history: [],
             startTime: now,
             lastUpdate: now,
-            maptilerReferences: [
-                {
-                    timestamp: todayStart,
-                    value: 104684,
-                    note: 'Valeur initiale relevée sur le dashboard MapTiler'
-                }
-            ]
+            maptilerReferences: [] // Ne plus créer de référence par défaut - chargée depuis le backend
         }
         this.saveToStorage()
     }
@@ -440,15 +431,18 @@ class AnalyticsTracker {
         const references = this.getMapTilerReferences()
         const trackedHistory = this.getHistory({ provider: 'maptiler' })
 
-        // Trouver la valeur initiale (104684) - la première référence
-        const initialReference = references.length > 0
-            ? references.sort((a, b) => a.timestamp - b.timestamp)[0]
-            : null
+        // Trouver la valeur initiale - la première référence (tout doit venir du sheet)
+        const sortedReferences = references.sort((a, b) => a.timestamp - b.timestamp)
+        const initialReference = sortedReferences.length > 0 ? sortedReferences[0] : null
 
-        const initialValue = initialReference?.value || 104684
-        const initialDate = initialReference
-            ? new Date(initialReference.timestamp).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0]
+        // Si aucune référence n'est présente, on ne peut pas calculer les données de comparaison
+        // Retourner un tableau vide - les références doivent venir du sheet
+        if (!initialReference || initialReference.value === undefined) {
+            return []
+        }
+
+        const initialValue = initialReference.value
+        const initialDate = new Date(initialReference.timestamp).toISOString().split('T')[0]
 
         // Grouper par jour
         const dailyData = new Map<string, { tracked: number; reference: number | null }>()

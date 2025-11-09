@@ -49,12 +49,16 @@ class AnalyticsController {
             const referencesToSave = []
 
             // Calculer les valeurs cumulatives pour chaque référence MapTiler
+            // Ne plus utiliser de valeur par défaut hardcodée - tout doit venir du sheet
             const sortedRefs = maptilerReferences.sort((a, b) => a.timestamp - b.timestamp)
             const initialRef = sortedRefs[0]
-            const initialValue = initialRef?.value || 104684
+            
+            // Si aucune référence n'est présente, on ne peut pas calculer les valeurs cumulatives
+            // Dans ce cas, on ne sauvegarde que les requêtes, pas les références
+            const initialValue = initialRef?.value
             const initialDate = initialRef
                 ? new Date(initialRef.timestamp).toISOString().split('T')[0]
-                : new Date().toISOString().split('T')[0]
+                : null
 
             // Sauvegarder TOUTES les requêtes API de l'historique
             history.forEach(request => {
@@ -76,37 +80,40 @@ class AnalyticsController {
             })
 
             // Sauvegarder les valeurs de référence MapTiler avec calculs
-            maptilerReferences.forEach(ref => {
-                const refDate = new Date(ref.timestamp).toISOString().split('T')[0]
-                // Compter les requêtes depuis la date initiale jusqu'à cette référence
-                const trackedSinceStart = history.filter(r => {
-                    if (r.provider !== 'maptiler') return false
-                    const reqDate = new Date(r.timestamp).toISOString().split('T')[0]
-                    return reqDate >= initialDate && reqDate <= refDate
-                }).length
+            // Ne sauvegarder que si on a une référence initiale valide (tout doit venir du sheet)
+            if (initialRef && initialValue !== undefined && initialDate) {
+                maptilerReferences.forEach(ref => {
+                    const refDate = new Date(ref.timestamp).toISOString().split('T')[0]
+                    // Compter les requêtes depuis la date initiale jusqu'à cette référence
+                    const trackedSinceStart = history.filter(r => {
+                        if (r.provider !== 'maptiler') return false
+                        const reqDate = new Date(r.timestamp).toISOString().split('T')[0]
+                        return reqDate >= initialDate && reqDate <= refDate
+                    }).length
 
-                const trackedCumulative = initialValue + trackedSinceStart
-                const variation = ref.value - trackedCumulative
-                const percentage = trackedCumulative > 0
-                    ? ((variation / trackedCumulative) * 100).toFixed(2)
-                    : '0'
+                    const trackedCumulative = initialValue + trackedSinceStart
+                    const variation = ref.value - trackedCumulative
+                    const percentage = trackedCumulative > 0
+                        ? ((variation / trackedCumulative) * 100).toFixed(2)
+                        : '0'
 
-                referencesToSave.push([
-                    new Date(ref.timestamp).toISOString(),
-                    'maptiler_reference',
-                    'reference',
-                    'REFERENCE',
-                    'true',
-                    '',
-                    trackedCumulative.toString(), // tracked_count
-                    ref.value.toString(), // maptiler_reference_value
-                    ref.note || '', // maptiler_reference_note
-                    percentage, // variation_percentage
-                    new Date().toISOString(), // saved_at
-                    effectiveSessionId, // session_id
-                    effectiveUserName // user_name
-                ])
-            })
+                    referencesToSave.push([
+                        new Date(ref.timestamp).toISOString(),
+                        'maptiler_reference',
+                        'reference',
+                        'REFERENCE',
+                        'true',
+                        '',
+                        trackedCumulative.toString(), // tracked_count
+                        ref.value.toString(), // maptiler_reference_value
+                        ref.note || '', // maptiler_reference_note
+                        percentage, // variation_percentage
+                        new Date().toISOString(), // saved_at
+                        effectiveSessionId, // session_id
+                        effectiveUserName // user_name
+                    ])
+                })
+            }
 
             // Sauvegarder dans Google Sheets avec déduplication (append en batch)
             let savedCount = 0
@@ -167,19 +174,106 @@ class AnalyticsController {
     /**
      * Récupérer les statistiques agrégées depuis Google Sheets
      * Agrège toutes les données de tous les utilisateurs
+     * Combine automatiquement les données de TEST et PRODUCTION si disponibles
      */
     static async getAggregatedStats(req, res) {
         try {
+            // Lire depuis la DB configurée (test en local, prod en production)
             const analytics = await DataServiceV2.getAllActiveData(
                 AnalyticsController.ANALYTICS_RANGE,
                 DataServiceV2.mappers.analytics
             )
+            
+            // Si on est en local et qu'on a une DB de test, combiner aussi avec la production
+            // Si on est en production, combiner aussi avec la DB de test si disponible
+            const isLocal = !process.env.VERCEL
+            const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
+            const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
+            
+            let combinedAnalytics = [...analytics]
+            
+            // Si on a les deux bases disponibles, combiner les données
+            if (testSpreadsheetId && productionSpreadsheetId) {
+                try {
+                    // Lire depuis l'autre base
+                    const otherSpreadsheetId = isLocal ? productionSpreadsheetId : testSpreadsheetId
+                    const { google } = require('googleapis')
+                    const path = require('path')
+                    const backendDir = path.join(__dirname, '..')
+                    
+                    const authConfig = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+                        ? {
+                            credentials: typeof process.env.GOOGLE_SERVICE_ACCOUNT_KEY === 'string' 
+                                ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+                                : process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+                            scopes: [
+                                'https://www.googleapis.com/auth/spreadsheets',
+                                'https://www.googleapis.com/auth/drive'
+                            ],
+                            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
+                        }
+                        : {
+                            keyFile: path.join(backendDir, 'service-account.json'),
+                            scopes: [
+                                'https://www.googleapis.com/auth/spreadsheets',
+                                'https://www.googleapis.com/auth/drive'
+                            ],
+                            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
+                        }
+                    
+                    const auth = new google.auth.GoogleAuth(authConfig)
+                    const sheets = google.sheets({ version: 'v4', auth })
+                    
+                    const response = await sheets.spreadsheets.values.get({
+                        spreadsheetId: otherSpreadsheetId,
+                        range: AnalyticsController.ANALYTICS_RANGE
+                    })
+                    
+                    const otherRows = response.data.values || []
+                    const otherAnalytics = otherRows.map(row => DataServiceV2.mappers.analytics(row))
+                    
+                    // Combiner les requêtes (dédupliquer par timestamp + provider + endpoint)
+                    const requestKeys = new Set(
+                        combinedAnalytics
+                            .filter(a => a.provider !== 'maptiler_reference')
+                            .map(a => `${a.timestamp}|${a.provider}|${a.endpoint}`)
+                    )
+                    
+                    const otherRequests = otherAnalytics.filter(a => {
+                        if (a.provider === 'maptiler_reference') return false
+                        const key = `${a.timestamp}|${a.provider}|${a.endpoint}`
+                        return !requestKeys.has(key)
+                    })
+                    
+                    combinedAnalytics.push(...otherRequests)
+                    
+                    // Combiner les références MapTiler (dédupliquer par timestamp + value)
+                    const refKeys = new Set(
+                        combinedAnalytics
+                            .filter(a => a.provider === 'maptiler_reference')
+                            .map(a => `${a.timestamp}|${a.maptilerReferenceValue}`)
+                    )
+                    
+                    const otherRefs = otherAnalytics.filter(a => {
+                        if (a.provider !== 'maptiler_reference') return false
+                        const key = `${a.timestamp}|${a.maptilerReferenceValue}`
+                        return !refKeys.has(key)
+                    })
+                    
+                    combinedAnalytics.push(...otherRefs)
+                    
+                    console.log(`📊 [getAggregatedStats] Données combinées: ${analytics.length} (base principale) + ${otherRequests.length} requêtes + ${otherRefs.length} références (base secondaire)`)
+                } catch (error) {
+                    console.warn(`⚠️ [getAggregatedStats] Impossible de combiner avec l'autre base:`, error.message)
+                    // Continuer avec les données de la base principale uniquement
+                }
+            }
 
             // Filtrer uniquement les requêtes (pas les références MapTiler)
-            const requests = analytics.filter(a => a.provider !== 'maptiler_reference')
+            const requests = combinedAnalytics.filter(a => a.provider !== 'maptiler_reference')
 
             // Filtrer les références MapTiler
-            const maptilerReferences = analytics
+            const maptilerReferences = combinedAnalytics
                 .filter(a => a.provider === 'maptiler_reference')
                 .map(a => ({
                     timestamp: new Date(a.timestamp).getTime(),
