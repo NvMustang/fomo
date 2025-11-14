@@ -224,7 +224,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
             // ===== CHARGEMENT DE L'ÉVÉNEMENT DEPUIS L'URL (avec fallback) =====
             // Cette logique est commune aux users et visitors
-            // Si l'event de l'URL n'est pas trouvé (404), on essaie evt_welcome_000000 comme fallback
+            // Si l'event de l'URL n'est pas trouvé (404), on essaie evt_tester_000000 comme fallback
             let eventFromUrl: Event | null = null
             if (eventIdFromUrl && currentUserId) {
                 console.log(`🔗 [DataContext] Lien d'événement détecté (${isVisitor ? 'visitor' : 'user'}): ${eventIdFromUrl}`)

@@ -21,7 +21,7 @@ export const ERROR_CTA = {
         label: 'Découvrir FOMO',
         onClick: () => {
             const base = window.location.origin
-            window.location.assign(`${base}/?event=evt_welcome_000000`)
+            window.location.assign(`${base}/?event=evt_tester_000000`)
         }
     },
     default: {

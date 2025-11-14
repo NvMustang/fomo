@@ -80,16 +80,19 @@ export default function App() {
  * 
  * TABLE DE DÉCISION DE ROUTAGE :
  * 
- * | isVisitor | isNewVisitor | hasEventParam | Route          | Action                                    |
- * |-----------|--------------|---------------|----------------|-------------------------------------------|
- * | true      | true         | true          | /              | OnboardingFlow avec centerOnEvent         |
- * | true      | true         | false         | /              | Rediriger vers ?event=evt_welcome_000000  |
- * | true      | false        | true          | /              | OnboardingFlow avec centerOnEvent         |
- * | true      | false        | false         | /              | OnboardingFlow                            |
- * | true      | *            | *             | /visitor       | WelcomeScreen (modal connexion)           |
- * | true      | *            | *             | /exitonboarding | WelcomeScreen (modal connexion)           |
- * | false     | *            | true          | /              | AppContent avec centerOnEvent             |
- * | false     | *            | false         | /              | AppContent normal                         |
+ * | isVisitor | isNewVisitor | hasEventParam | eventFromUrl.isPublic | Route          | Action                                    |
+ * |-----------|--------------|---------------|----------------------|----------------|-------------------------------------------|
+ * | true      | true         | true          | true                 | /              | Rediriger vers ?event=evt_tester_000000   |
+ * | true      | true         | true          | false                | /              | OnboardingFlow avec centerOnEvent         |
+ * | true      | true         | false         | -                    | /              | Rediriger vers ?event=evt_tester_000000  |
+ * | true      | false        | true          | true                 | /              | Rediriger vers ?event=evt_tester_000000   |
+ * | true      | false        | true          | false                | /              | OnboardingFlow avec centerOnEvent         |
+ * | true      | false        | false         | -                    | /              | OnboardingFlow                            |
+ * | true      | *            | *             | *                    | /visitor       | WelcomeScreen (modal connexion)           |
+ * | true      | *            | *             | *                    | /exitonboarding | WelcomeScreen (modal connexion)           |
+ * | false     | *            | true          | true                 | /              | AppContent avec centerOnEvent + mode public |
+ * | false     | *            | true          | false                | /              | AppContent avec centerOnEvent + mode privé  |
+ * | false     | *            | false         | -                    | /              | AppContent normal                         |
  */
 const AppWithAuth = () => {
     const { user, isLoggingIn } = useAuth()
@@ -149,7 +152,7 @@ const AppWithAuth = () => {
                     // Ignorer si sessionStorage indisponible
                 }
                 const base = window.location.origin
-                window.location.assign(`${base}/?event=evt_welcome_000000`)
+                window.location.assign(`${base}/?event=evt_tester_000000`)
                 return <WelcomeScreen showSpinner={true} loadingMessage="Redirection vers l'onboarding..." />
             } else {
                 // Deuxième tentative = welcome event inexistant → afficher WelcomeScreen directement
@@ -285,8 +288,24 @@ const AppWithData = () => {
 
 /**
  * Composant qui vérifie que les données sont prêtes pour OnboardingFlow
+ * Gère aussi la redirection si event public + nouveau visitor
  */
 const OnboardingFlowWithData = () => {
+    const { eventFromUrl } = useDataContext()
+    const { user } = useAuth()
+
+    // Si event public + visitor (nouveau ou existing) → rediriger vers welcome event en mode privé (plus sûr)
+    useEffect(() => {
+        if (!eventFromUrl) return
+
+        const isPublic = eventFromUrl.isPublic
+        if (isPublic) {
+            console.log(`🔄 [App] Event public détecté pour ${user.isNewVisitor ? 'nouveau' : 'existing'} visitor → redirection vers welcome event en mode privé`)
+            const base = window.location.origin
+            window.location.assign(`${base}/?event=evt_tester_000000`)
+        }
+    }, [eventFromUrl, user.isNewVisitor])
+
     return (
         <DataReadyGuard context="onboarding">
             <OnboardingFlow />
@@ -312,7 +331,20 @@ const AppContent = ({ onMapReady }: { onMapReady?: () => void }) => {
     const { isCreateEventModalOpen, toggleCreateEventModal, closeCreateEventModal, isModalOpen } = useModalManager()
 
     const { user } = useAuth()
-    const { isPublicMode } = usePrivacy()
+    const { isPublicMode, setIsPublicMode } = usePrivacy()
+    const { eventFromUrl } = useDataContext()
+
+    // Si user authentifié avec event dans l'URL → définir le mode privacy selon l'event
+    useEffect(() => {
+        if (user.isVisitor) return // Ne pas appliquer pour les visitors
+        if (!eventFromUrl) return
+
+        const shouldBePublic = eventFromUrl.isPublic ?? false
+        if (isPublicMode !== shouldBePublic) {
+            console.log(`🔄 [AppContent] Event ${eventFromUrl.isPublic ? 'public' : 'privé'} détecté → passage en mode ${shouldBePublic ? 'public' : 'privé'}`)
+            setIsPublicMode(shouldBePublic)
+        }
+    }, [eventFromUrl, user.isVisitor, isPublicMode, setIsPublicMode])
 
     // Animations : si user authentifié (pas visitor), déclencher les animations
     const shouldSlideInNavBar = !user.isVisitor

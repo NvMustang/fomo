@@ -11,6 +11,7 @@ import { useAuth } from './AuthContext'
 // ===== TYPES =====
 interface PrivacyContextType {
     isPublicMode: boolean
+    setIsPublicMode: (isPublic: boolean) => void
     togglePrivacy: () => void
     isToggleDisabled: boolean
     setToggleDisabled: (disabled: boolean) => void
@@ -109,6 +110,7 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
 
     const value = {
         isPublicMode,
+        setIsPublicMode,
         togglePrivacy,
         isToggleDisabled,
         setToggleDisabled

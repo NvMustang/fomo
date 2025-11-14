@@ -492,11 +492,22 @@ export const OnboardingStateProvider: React.FC<{ children: ReactNode }> = ({ chi
 
         // Skip visitor_modal si event public OU si existing visitor (a déjà un nom)
         if (isPublic || isExisting) {
-            // Passer directement à teasing_public ou exploring_public selon le type d'event
-            const nextStep = isPublic ? 'exploring_public' : 'teasing_public'
-            transitionTo(nextStep, `Skip visitor_modal (${isPublic ? 'event public' : 'existing visitor'})`)
+            // Attendre que le toast "thankYouOrganizer" soit affiché (délai 1s) et terminé (durée 2s)
+            // Total: 3s pour laisser le temps au toast de s'afficher complètement
+            // exploring_public uniquement si l'app est en mode public (toggle activé)
+            // Sinon, passer par teasing_public pour encourager l'activation du toggle
+            const shouldGoToExploringPublic = isPublicMode
+            const nextStep = shouldGoToExploringPublic ? 'exploring_public' : 'teasing_public'
+            const timer = setTimeout(() => {
+                transitionTo(nextStep, `Skip visitor_modal (${isPublic ? 'event public' : 'existing visitor'}) → ${shouldGoToExploringPublic ? 'exploring_public' : 'teasing_public'}`)
+            }, 3000) // 3 secondes (1s délai toast + 2s durée toast)
+
+            return () => {
+                clearTimeout(timer)
+            }
         } else if (isNewVisitor) {
-            // Nouveau visitor + event privé → afficher visitor_modal après délai de 4s
+            // Nouveau visitor + event privé → afficher visitor_modal après délai de 3s
+            // (cohérent avec la fin du toast "thankYouOrganizer" qui dure 2s avec délai 1s)
             const timer = setTimeout(() => {
                 transitionTo('visitor_modal', 'Nouveau visitor → afficher modal registration')
             }, 3000) // 3 secondes
@@ -505,7 +516,7 @@ export const OnboardingStateProvider: React.FC<{ children: ReactNode }> = ({ chi
                 clearTimeout(timer)
             }
         }
-    }, [state.step, eventFromUrl, user.isNewVisitor, state.flags.mapReady, transitionTo])
+    }, [state.step, eventFromUrl, user.isNewVisitor, state.flags.mapReady, transitionTo, isPublicMode])
 
     /**
      * Déclencher les toasts automatiquement selon l'étape
