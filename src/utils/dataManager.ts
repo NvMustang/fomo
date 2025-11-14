@@ -556,7 +556,7 @@ export class FomoDataManager {
                 initialResponse,
                 finalResponse,
                 responseMode: invitedByUserId && invitedByUserId !== 'none' ? 'invitation' : 'direct',
-                invitedByUserId,
+                ...(invitedByUserId && invitedByUserId !== 'none' && { invitedByUserId }),
             },
             userId,
             timestamp: Date.now()

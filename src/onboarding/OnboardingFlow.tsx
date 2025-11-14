@@ -12,7 +12,7 @@ import { VisitorRegistrationModal } from './modals/VisitorRegistrationModal'
 import DiscoverPage from '@/pages/DiscoverPage'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDataContext } from '@/contexts/DataContext'
-import { Header } from '@/components'
+import { Header } from '@/components/ui/Header'
 
 export const OnboardingFlow: React.FC = () => {
     const { state, actions } = useOnboardingState()
