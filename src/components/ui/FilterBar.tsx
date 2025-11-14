@@ -1,48 +1,123 @@
-import { useEffect, useState, useMemo } from 'react'
-import Select from 'react-select'
-import type { StylesConfig } from 'react-select'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import Select, { components } from 'react-select'
+import type { StylesConfig, MenuProps } from 'react-select'
 import AsyncSelect from 'react-select/async'
-import { useFilters } from '@/contexts/FiltersContext'
-import type { Periods, UserResponseValue } from '@/types/fomoTypes'
-type PeriodKey = Exclude<Periods, 'all'>
+import { useFilters } from '@/hooks'
+import { useDataContext } from '@/contexts/DataContext'
+import { DateRangePicker } from './DateRangePicker'
+import type { UserResponseValue, Event } from '@/types/fomoTypes'
 type Option = { value: string; label: string; color?: string; count?: number }
-type TagOption = { value: string; label: string; count?: number }
+type TagOption = { value: string; label: string; count?: number; popularityScore?: number }
+
+/**
+ * Convertit une valeur de réponse en label français propre
+ * Gère à la fois null (valeur réelle) et 'null' (string) pour compatibilité
+ */
+const getResponseLabel = (value: UserResponseValue | string): string => {
+    // Gérer le cas où value est null ou la string 'null'
+    if (value === null || value === 'null') {
+        return 'Nouveaux'
+    }
+
+    switch (value) {
+        case 'going':
+        case 'participe':
+            return "J'y vais"
+        case 'interested':
+            return 'Intéressé'
+        case 'maybe':
+            return 'Peut-être'
+        case 'not_interested':
+            return 'Pas intéressé'
+        case 'not_there':
+            return 'Pas là'
+        case 'cleared':
+            return 'Non répondu'
+        case 'seen':
+            return 'Vu'
+        case 'invited':
+            return 'Invité'
+        case 'linked':
+            return 'Lié'
+        case 'new':
+            return 'Nouveau'
+        default:
+            return String(value)
+    }
+}
 
 export function FilterBar() {
+    const { events } = useDataContext()
     const {
         filters,
         setFilters,
-        getLocalTags,
-        getLocalPeriods,
-        getLocalOrganizers,
-        getLocalResponses
+        getFilterOptions
     } = useFilters()
 
-    // Format options pour les périodes (avec count)
-    const periodOptions = useMemo(() => {
-        const localPeriods = getLocalPeriods()
-        return localPeriods.map(p => ({
-            value: p.value,
-            label: p.label,
-            count: p.count
-        }))
-    }, [getLocalPeriods])
+    // Valeur pour le Select de dates (pour afficher la date range sélectionnée)
+    const customDateValue = useMemo(() => {
+        if (filters.customStartDate && filters.customEndDate) {
+            const start = filters.customStartDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+            const end = filters.customEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+            return { value: 'custom', label: `${start} - ${end}` }
+        }
+        return null
+    }, [filters.customStartDate, filters.customEndDate])
 
-    const selectedPeriodOption = useMemo(() => {
-        if (!filters.period || filters.period === 'all') return null
-        const localPeriods = getLocalPeriods()
-        const period = localPeriods.find(p => p.value === filters.period)
-        return period ? { value: period.value, label: period.label, count: period.count } : null
-    }, [filters.period, getLocalPeriods])
+    // Calculer les options de filtrage basées sur les événements filtrés
+    // getFilterOptions applique tous les filtres SAUF celui qu'on calcule
+    // pour montrer le nombre d'événements disponibles pour chaque option
+    const filterOptions = useMemo(() => {
+        return getFilterOptions(events)
+    }, [events, getFilterOptions])
+
+    // Composant Menu personnalisé pour afficher le DateRangePicker
+    const CustomDateMenu = (props: MenuProps<Option, false>) => {
+        return (
+            <components.Menu {...props}>
+                <div style={{ padding: 0 }}>
+                    <DateRangePicker
+                        startDate={filters.customStartDate}
+                        endDate={filters.customEndDate}
+                        onDateChange={(start, end) => {
+                            if (start && end) {
+                                setFilters(prev => ({
+                                    ...prev,
+                                    customStartDate: start,
+                                    customEndDate: end
+                                }))
+                            } else {
+                                setFilters(prev => ({
+                                    ...prev,
+                                    customStartDate: undefined,
+                                    customEndDate: undefined
+                                }))
+                            }
+                        }}
+                        excludePastEvents={filters.excludePastEvents}
+                        onExcludePastEventsChange={(exclude) => {
+                            setFilters(prev => ({
+                                ...prev,
+                                excludePastEvents: exclude
+                            }))
+                        }}
+                    />
+                </div>
+            </components.Menu>
+        )
+    }
 
     // Format options pour les organisateurs (avec count)
     const allOrganizers = useMemo(() => {
-        return getLocalOrganizers().map(o => ({
-            value: o.value,
-            label: o.label,
-            count: o.count
-        }))
-    }, [getLocalOrganizers])
+        // Ne garder que les organisateurs avec des événements (count > 0)
+        return filterOptions.organizers.counts
+            .filter((o: { count: number }) => o.count > 0)
+            .map((o: { value: string; label: string; count: number }) => ({
+                value: o.value,
+                label: o.label,
+                count: o.count
+            }))
+    }, [filterOptions.organizers])
 
     const selectedOrganizerOption = useMemo(() => {
         if (!filters.organizerId) return null
@@ -62,49 +137,99 @@ export function FilterBar() {
 
     // Format options pour les réponses avec count
     const responseOptions = useMemo(() => {
-        const localResponses = getLocalResponses()
-        // Mapper les réponses avec leurs labels et counts
-        return localResponses.map(r => {
-            let label = r.label
-            // Pour "Non répondu", on doit gérer cleared/seen
-            if (r.value === 'cleared') {
-                label = 'Non répondu'
-            }
-            return {
-                value: r.value === null ? 'null' : (r.value === 'cleared' ? 'non_repondu' : r.value),
-                label: label,
-                count: r.count,
-                sortOrder: r.value === null ? 1 :
-                    r.value === 'going' ? 2 :
-                        r.value === 'interested' ? 3 :
-                            r.value === 'cleared' ? 4 : 5
-            }
-        }).sort((a, b) => a.sortOrder - b.sortOrder)
-    }, [getLocalResponses])
+        // Mapper les réponses avec leurs labels et counts, ne garder que celles avec count > 0
+        return filterOptions.responses.counts
+            .filter((r: { count: number }) => r.count > 0)
+            .map((r: { value: UserResponseValue; label: string; count: number }) => {
+                // Utiliser la fonction getResponseLabel pour obtenir un label français propre
+                const isNull = r.value === null
+                const label = getResponseLabel(r.value)
+                return {
+                    value: isNull ? 'null' : (r.value === 'cleared' ? 'non_repondu' : String(r.value)),
+                    label: label,
+                    count: r.count,
+                    sortOrder: isNull ? 1 :
+                        r.value === 'going' ? 2 :
+                            r.value === 'interested' ? 3 :
+                                r.value === 'cleared' ? 4 : 5
+                }
+            })
+            .sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder)
+    }, [filterOptions.responses])
 
-    const selectedResponseOption = useMemo(() => {
-        if (filters.response === undefined) return null
-        const responseValue = filters.response === null ? 'null' : (filters.response === 'cleared' ? 'non_repondu' : filters.response)
-        return responseOptions.find(opt => opt.value === responseValue) || null
-    }, [filters.response, responseOptions])
+    const selectedResponseOptions = useMemo(() => {
+        if (!filters.responses || filters.responses.includes('all')) return []
+        return filters.responses
+            .map(resp => {
+                const responseValue = resp === null ? 'null' : (resp === 'cleared' ? 'non_repondu' : String(resp))
+                return responseOptions.find(opt => opt.value === responseValue)
+            })
+            .filter(Boolean) as Option[]
+    }, [filters.responses, responseOptions])
 
     // Vérifier si les filtres doivent être désactivés (pas d'options ou tous les counts à 0)
-    const isResponseDisabled = useMemo(() => {
+    const isResponsesDisabled = useMemo(() => {
         return responseOptions.length === 0 || responseOptions.every(opt => (opt.count || 0) === 0)
     }, [responseOptions])
 
-    const isPeriodDisabled = useMemo(() => {
-        return periodOptions.length === 0 || periodOptions.every(opt => (opt.count || 0) === 0)
-    }, [periodOptions])
-
     const isTagsDisabled = useMemo(() => {
-        const tags = getLocalTags()
-        return tags.length === 0 || tags.every(tag => (tag.count || 0) === 0)
-    }, [getLocalTags])
+        return filterOptions.tags.counts.length === 0 || filterOptions.tags.counts.every((tag: { count: number }) => (tag.count || 0) === 0)
+    }, [filterOptions.tags])
 
     const isOrganizerDisabled = useMemo(() => {
         return allOrganizers.length === 0 || allOrganizers.every(org => (org.count || 0) === 0)
     }, [allOrganizers])
+
+    // Calculer la popularité globale des tags sur TOUS les événements (DB complète)
+    // Cette métrique montre si un tag est globalement populaire, indépendamment des filtres
+    const tagGlobalPopularity = useMemo(() => {
+        const popularityMap: Record<string, number> = {}
+        // Compter les occurrences de chaque tag dans TOUS les événements
+        events.forEach((evt: Event) => {
+            (evt.tags || []).forEach(tag => {
+                const normalized = typeof tag === 'string' ? tag.trim().toLowerCase() : ''
+                if (normalized) {
+                    popularityMap[normalized] = (popularityMap[normalized] || 0) + 1
+                }
+            })
+        })
+        return popularityMap
+    }, [events])
+
+    // Calculer le score de popularité (1-5) basé sur la fréquence globale
+    const getPopularityScore = useCallback((tagValue: string): number => {
+        const count = tagGlobalPopularity[tagValue] || 0
+        if (count === 0) return 0
+        const maxCount = Math.max(...Object.values(tagGlobalPopularity), 1)
+        // Score de 1 à 5 basé sur le pourcentage du max
+        const score = Math.ceil((count / maxCount) * 5)
+        return Math.max(1, Math.min(5, score))
+    }, [tagGlobalPopularity])
+
+    // Format options pour les tags :
+    // - count : nombre d'événements FILTRÉS qui ont ce tag (dynamique)
+    // - popularityScore : fréquence globale du tag sur TOUS les événements (statique)
+    const tagOptions = useMemo(() => {
+        const options = filterOptions.tags.counts
+            // Ne garder que les tags présents dans les événements filtrés (count > 0)
+            .filter((t: { count: number }) => t.count > 0)
+            .map((t: { value: string; label: string; count: number }) => {
+                const popularityScore = getPopularityScore(t.value)
+                return {
+                    value: t.value,
+                    label: t.label,
+                    count: t.count, // Nombre d'événements visibles (filtrés) avec ce tag
+                    popularityScore // Popularité globale (sur tous les événements)
+                }
+            })
+        // Trier par popularité globale décroissante, puis par nom alphabétique
+        return options.sort((a, b) => {
+            if (b.popularityScore !== a.popularityScore) {
+                return b.popularityScore - a.popularityScore
+            }
+            return a.label.localeCompare(b.label)
+        })
+    }, [filterOptions.tags, getPopularityScore])
 
     const [q, setQ] = useState(filters.searchQuery || '')
 
@@ -206,21 +331,31 @@ export function FilterBar() {
     const activeFilterBadges = useMemo(() => {
         const badges: Array<{ id: string; label: string; onRemove: () => void }> = []
 
-        // Réponse
-        if (selectedResponseOption) {
-            badges.push({
-                id: 'response',
-                label: selectedResponseOption.label,
-                onRemove: () => setFilters(prev => ({ ...prev, response: undefined }))
-            })
-        }
+        // Réponses (multiples)
+        const activeResponses = (filters.responses || []).filter(r => r !== 'all')
+        activeResponses.forEach(resp => {
+            const responseValue = resp === null ? 'null' : (resp === 'cleared' ? 'non_repondu' : String(resp))
+            const option = responseOptions.find(opt => opt.value === responseValue)
+            if (option) {
+                badges.push({
+                    id: `response-${responseValue}`,
+                    label: option.label,
+                    onRemove: () => {
+                        const newResponses = activeResponses.filter(r => r !== resp)
+                        setFilters(prev => ({ ...prev, responses: newResponses.length ? newResponses : ['all'] }))
+                    }
+                })
+            }
+        })
 
-        // Période
-        if (selectedPeriodOption) {
+        // Dates personnalisées
+        if (filters.customStartDate && filters.customEndDate) {
+            const start = filters.customStartDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+            const end = filters.customEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
             badges.push({
-                id: 'period',
-                label: selectedPeriodOption.label,
-                onRemove: () => setFilters(prev => ({ ...prev, period: 'all' }))
+                id: 'custom-dates',
+                label: `${start} - ${end}`,
+                onRemove: () => setFilters(prev => ({ ...prev, customStartDate: undefined, customEndDate: undefined }))
             })
         }
 
@@ -247,10 +382,8 @@ export function FilterBar() {
         }
 
         return badges
-    }, [selectedResponseOption, selectedPeriodOption, selectedOrganizerOption, filters.tags, setFilters])
+    }, [selectedResponseOptions, selectedOrganizerOption, filters.tags, filters.responses, filters.customStartDate, filters.customEndDate, responseOptions, setFilters])
 
-    // Note: L'animation pop de la filterbar est gérée dans DiscoverPage.tsx
-    // via la classe 'filterbar-pop' sur 'filterbar-overlay'
 
     return (
         <div
@@ -271,6 +404,13 @@ export function FilterBar() {
                         // Reset immédiat si vide (pas de debounce pour le reset)
                         if (!e.target.value.trim()) {
                             setFilters(prev => ({ ...prev, searchQuery: '' }))
+                        }
+                    }}
+                    onKeyDown={(e) => {
+                        // Masquer les filtres lors de la validation avec Enter (même comportement que clic sur carte)
+                        if (e.key === 'Enter') {
+                            e.currentTarget.blur()
+                            setIsExpanded(false)
                         }
                     }}
                 />
@@ -302,97 +442,30 @@ export function FilterBar() {
             </div>
 
             <div className="filterbar__expandable">
-                {/* Réponse - Priorité 1 (le plus utilisé) */}
-                <Select
-                    options={responseOptions}
-                    value={selectedResponseOption}
-                    onChange={(opt) => {
-                        if (!opt) {
-                            setFilters(prev => ({ ...prev, response: undefined }))
-                            return
-                        }
-                        const responseValue = opt.value
-                        // Convertir les valeurs d'option en UserResponseValue
-                        let response: UserResponseValue
-                        if (responseValue === 'null') {
-                            response = null
-                        } else if (responseValue === 'non_repondu') {
-                            // Pour "Non répondu", utiliser 'cleared' comme valeur
-                            // (peut aussi être 'seen', mais 'cleared' est plus représentatif)
-                            response = 'cleared'
-                        } else {
-                            response = responseValue as UserResponseValue
-                        }
-                        setFilters(prev => ({ ...prev, response }))
-                    }}
-                    onMenuOpen={() => {
-                        // Si une valeur est déjà sélectionnée, effacer au lieu d'ouvrir le menu
-                        if (selectedResponseOption) {
-                            setFilters(prev => ({ ...prev, response: undefined }))
-                        }
-                    }}
-                    formatOptionLabel={({ label, count }: Option) => (
-                        <div className="filterbar-tag-option">
-                            <span>{label}</span>
-                            {count !== undefined && (
-                                <span className="filterbar-tag-count">
-                                    {count}
-                                </span>
-                            )}
-                        </div>
-                    )}
-                    placeholder="Réponse"
-                    isSearchable={false}
-                    isClearable
-                    isDisabled={isResponseDisabled}
-                    menuPortalTarget={menuPortalTarget}
-                    menuPosition="fixed"
-                    styles={secondaryMenuPortalStylesSingle}
-                />
-
-                {/* Période - Priorité 2 */}
-                <Select
-                    options={periodOptions}
-                    value={selectedPeriodOption}
-                    onChange={(opt) => setFilters(prev => ({
-                        ...prev,
-                        period: (opt?.value ? ((opt.value as PeriodKey) as Periods) : 'all')
-                    }))}
-                    onMenuOpen={() => {
-                        // Si une valeur est déjà sélectionnée, effacer au lieu d'ouvrir le menu
-                        if (selectedPeriodOption) {
-                            setFilters(prev => ({ ...prev, period: 'all' }))
-                        }
-                    }}
-                    formatOptionLabel={({ label, count }: Option) => (
-                        <div className="filterbar-tag-option">
-                            <span>{label}</span>
-                            {count !== undefined && (
-                                <span className="filterbar-tag-count">
-                                    {count}
-                                </span>
-                            )}
-                        </div>
-                    )}
-                    placeholder="Période"
-                    isSearchable={false}
-                    isClearable
-                    isDisabled={isPeriodDisabled}
-                    menuPortalTarget={menuPortalTarget}
-                    menuPosition="fixed"
-                    styles={secondaryMenuPortalStylesSingle}
-                />
-
-                {/* Tags - Priorité 3 */}
+                {/* Réponses - Priorité 1 (le plus utilisé) - Multi-sélection */}
                 <Select
                     isMulti
-                    options={getLocalTags()}
-                    value={(filters.tags || []).filter(t => t !== 'all').map(id => ({ value: id, label: id }))}
+                    options={responseOptions}
+                    value={selectedResponseOptions}
                     onChange={(opts) => {
-                        const ids = (opts as Option[] | null)?.map(o => o.value) || []
-                        setFilters(prev => ({ ...prev, tags: ids.length ? ids : ['all'] }))
+                        if (!opts || opts.length === 0) {
+                            setFilters(prev => ({ ...prev, responses: ['all'] }))
+                            return
+                        }
+                        // Convertir les valeurs d'options en UserResponseValue[]
+                        const responses = (opts as Option[]).map(opt => {
+                            const responseValue = opt.value
+                            if (responseValue === 'null') {
+                                return null
+                            } else if (responseValue === 'non_repondu') {
+                                return 'cleared'
+                            } else {
+                                return responseValue as UserResponseValue
+                            }
+                        })
+                        setFilters(prev => ({ ...prev, responses }))
                     }}
-                    formatOptionLabel={({ label, count }: TagOption) => (
+                    formatOptionLabel={({ label, count }: Option) => (
                         <div className="filterbar-tag-option">
                             <span>{label}</span>
                             {count !== undefined && (
@@ -403,6 +476,80 @@ export function FilterBar() {
                         </div>
                     )}
                     closeMenuOnSelect={false}
+                    placeholder="Réponses"
+                    isDisabled={isResponsesDisabled}
+                    menuPortalTarget={menuPortalTarget}
+                    menuPosition="fixed"
+                    styles={secondaryMenuPortalStylesMulti}
+                />
+
+                {/* Dates personnalisées - Priorité 2 */}
+                <Select
+                    options={[]}
+                    value={customDateValue}
+                    onChange={() => {
+                        // Reset des dates via le clear button
+                        setFilters(prev => ({
+                            ...prev,
+                            customStartDate: undefined,
+                            customEndDate: undefined
+                        }))
+                    }}
+                    components={{ Menu: CustomDateMenu }}
+                    placeholder="Dates"
+                    isClearable={customDateValue !== null}
+                    menuPortalTarget={menuPortalTarget}
+                    menuPosition="fixed"
+                    styles={secondaryMenuPortalStylesSingle}
+                />
+
+                {/* Tags - Priorité 3 */}
+                <Select
+                    isMulti
+                    options={tagOptions}
+                    value={(filters.tags || []).filter(t => t !== 'all').map(id => {
+                        const tagOption = tagOptions.find(opt => opt.value === id)
+                        return {
+                            value: id,
+                            label: id,
+                            popularityScore: tagOption?.popularityScore
+                        }
+                    })}
+                    onChange={(opts) => {
+                        const ids = (opts as Option[] | null)?.map(o => o.value) || []
+                        setFilters(prev => ({ ...prev, tags: ids.length ? ids : ['all'] }))
+                    }}
+                    formatOptionLabel={({ label, count, popularityScore }: TagOption & { popularityScore?: number }) => {
+                        const score = popularityScore || 0
+                        const stars = Array.from({ length: 5 }, (_, i) => i < score)
+                        return (
+                            <div className="filterbar-tag-option">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                    <span>{label}</span>
+                                    <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                        {stars.map((filled, i) => (
+                                            <span
+                                                key={i}
+                                                style={{
+                                                    fontSize: '0.75rem',
+                                                    color: filled ? '#fbbf24' : '#d1d5db',
+                                                    lineHeight: 1
+                                                }}
+                                            >
+                                                ★
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                {count !== undefined && (
+                                    <span className="filterbar-tag-count">
+                                        {count}
+                                    </span>
+                                )}
+                            </div>
+                        )
+                    }}
+                    closeMenuOnSelect={false}
                     placeholder="Tags"
                     isDisabled={isTagsDisabled}
                     menuPortalTarget={menuPortalTarget}
@@ -412,7 +559,7 @@ export function FilterBar() {
 
                 {/* Organisateur - Priorité 4 */}
                 <AsyncSelect
-                    key={`org-${filters.period || 'all'}`}
+                    key={`org-${filters.organizerId || 'all'}`}
                     defaultOptions
                     loadOptions={loadOrganizerOptions}
                     value={selectedOrganizerOption}
@@ -442,45 +589,6 @@ export function FilterBar() {
                     menuPosition="fixed"
                     styles={secondaryMenuPortalStylesSingle}
                 />
-
-                {/* Toggle "Inclure les événements passés" */}
-                <div className="filterbar__toggle-past">
-                    <label htmlFor="filterbar-past-toggle" className="filterbar__toggle-label">
-                        Inclure les événements passés
-                    </label>
-                    <button
-                        type="button"
-                        id="filterbar-past-toggle"
-                        role="switch"
-                        aria-checked={filters.includePastEvents}
-                        aria-label={filters.includePastEvents ? 'Masquer les événements passés' : 'Afficher les événements passés'}
-                        onClick={() => setFilters(prev => ({ ...prev, includePastEvents: !prev.includePastEvents }))}
-                        className="filterbar__toggle-switch"
-                        style={{
-                            backgroundColor: filters.includePastEvents ? 'var(--success, #10b981)' : 'var(--text-muted, #9ca3af)',
-                            width: '44px',
-                            height: '24px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            position: 'relative',
-                            transition: 'background-color var(--transition-fast)',
-                            flexShrink: 0
-                        }}
-                    >
-                        <div style={{
-                            position: 'absolute',
-                            top: '2px',
-                            left: filters.includePastEvents ? '22px' : '2px',
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            backgroundColor: '#fff',
-                            transition: 'left var(--transition-fast)',
-                            boxShadow: 'var(--shadow)'
-                        }} />
-                    </button>
-                </div>
             </div>
 
 

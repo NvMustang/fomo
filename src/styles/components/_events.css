@@ -29,7 +29,7 @@
     -webkit-backdrop-filter: blur(var(--glass-blur-strong));
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: var(--md);
+    padding: var(--sm);
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
         0 0 0 1px rgba(255, 255, 255, 0.2) inset;
     border-left: 3px solid var(--current-color);
@@ -187,6 +187,38 @@
     background: var(--bg);
 }
 
+/* Bouton de fermeture sur le banner - bouton circulaire blanc */
+.event-card-banner-close {
+    position: absolute;
+    top: var(--xs);
+    right: var(--xs);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    z-index: 2;
+    cursor: pointer;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    color: var(--text);
+    font-size: var(--text-lg);
+    line-height: 1;
+    padding: 0;
+}
+
+.event-card-banner-close:hover {
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.event-card-banner-close:active {
+    transform: scale(0.98);
+}
+
 /* Event response buttons */
 .event-response-buttons-container {
     display: flex;
@@ -195,8 +227,13 @@
     padding-top: var(--sm);
     border-top: 1px solid var(--border);
     margin-top: var(--sm);
+}
 
-
+/* ButtonGroup dans event-response-buttons-container */
+.event-response-button-group {
+    display: flex;
+    gap: var(--sm);
+    width: 100%;
 }
 
 /* Event edit buttons */
@@ -284,7 +321,7 @@
     transform: translateY(-10px);
     flex: 0;
     pointer-events: none;
-    transition: 
+    transition:
         max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
         transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -298,7 +335,8 @@
     margin-top: var(--sm);
     padding-top: var(--sm);
     border-top-color: var(--border);
-    max-height: 1000px; /* Valeur suffisamment grande pour contenir le contenu */
+    max-height: 1000px;
+    /* Valeur suffisamment grande pour contenir le contenu */
     opacity: 1;
     transform: translateY(0);
     flex: 1;
@@ -334,6 +372,26 @@
 .info-item strong {
     color: var(--text);
     font-weight: 500;
+}
+
+/* Tags de l'événement */
+.event-tags-container {
+    display: flex;
+    gap: var(--xs);
+    flex-wrap: wrap;
+    margin-top: var(--sm);
+}
+
+.event-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--text-sm);
+    padding: var(--xs) var(--sm);
+    border-radius: var(--radius-full);
+    background: var(--current-color-10);
+    color: var(--current-color);
+    border: 1px solid var(--border);
+    user-select: none;
 }
 
 /* Animation de suppression pour EventCard */

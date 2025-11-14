@@ -101,38 +101,45 @@ async function checkAnalyticsState() {
         }
     }
 
-    // Vérifier PRODUCTION
+    // Vérifier PRODUCTION (source de vérité unique)
+    console.log('📊 PRODUCTION (source de vérité unique):')
     const prodData = await checkDB(productionSpreadsheetId, 'PRODUCTION')
 
-    // Vérifier TEST
+    // Vérifier TEST (optionnel, pour diagnostic uniquement)
     let testData = { requests: [], maptilerRefs: [], refDates: [] }
     if (testSpreadsheetId) {
+        console.log('📊 TEST (diagnostic uniquement, non utilisé par l\'application):')
         testData = await checkDB(testSpreadsheetId, 'TEST')
     } else {
         console.log('📊 TEST: non configuré\n')
     }
 
-    // Résumé combiné
+    // Résumé PRODUCTION (source de vérité unique)
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('📊 RÉSUMÉ COMBINÉ (ce que voit le dashboard):')
-    console.log(`   - Total requêtes: ${prodData.requests.length + testData.requests.length}`)
-    console.log(`   - Total références: ${prodData.maptilerRefs.length + testData.maptilerRefs.length}`)
+    console.log('📊 RÉSUMÉ PRODUCTION (source de vérité unique - ce que voit le dashboard):')
+    console.log(`   - Total requêtes: ${prodData.requests.length}`)
+    console.log(`   - Total références: ${prodData.maptilerRefs.length}`)
     
-    const allRefs = [...prodData.refDates, ...testData.refDates].sort((a, b) => a.date - b.date)
-    if (allRefs.length > 0) {
-        console.log(`   - Première référence: ${allRefs[0].date.toLocaleString('fr-FR')} (${allRefs[0].value.toLocaleString()})`)
-        console.log(`   - Dernière référence: ${allRefs[allRefs.length - 1].date.toLocaleString('fr-FR')} (${allRefs[allRefs.length - 1].value.toLocaleString()})`)
+    if (prodData.refDates.length > 0) {
+        console.log(`   - Première référence: ${prodData.refDates[0].date.toLocaleString('fr-FR')} (${prodData.refDates[0].value.toLocaleString()})`)
+        console.log(`   - Dernière référence: ${prodData.refDates[prodData.refDates.length - 1].date.toLocaleString('fr-FR')} (${prodData.refDates[prodData.refDates.length - 1].value.toLocaleString()})`)
         
         const today = new Date()
         today.setHours(0, 0, 0, 0)
-        const oldRefs = allRefs.filter(ref => ref.date < today)
+        const oldRefs = prodData.refDates.filter(ref => ref.date < today)
         if (oldRefs.length > 0) {
             console.log(`\n   ⚠️  ATTENTION: ${oldRefs.length} référence(s) datant d'avant aujourd'hui détectée(s)!`)
-            console.log(`   Ces références proviennent probablement d'une base qui n'a pas été nettoyée.`)
+            console.log(`   Ces références proviennent probablement d'avant un clean-all.`)
         } else {
             console.log(`\n   ✅ Toutes les références sont d'aujourd'hui ou plus récentes.`)
         }
     }
+    
+    if (testData.requests.length > 0 || testData.maptilerRefs.length > 0) {
+        console.log(`\n   ⚠️  NOTE: La base TEST contient encore des données (${testData.requests.length} requêtes, ${testData.maptilerRefs.length} références)`)
+        console.log(`   Ces données ne sont PAS utilisées par l'application (source de vérité = PROD uniquement)`)
+    }
+    
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 }
 

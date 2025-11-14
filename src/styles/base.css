@@ -154,6 +154,7 @@
     /* Transitions */
     --transition-fast: 0.15s ease-in-out;
     --transition-medium: 0.25s ease-in-out;
+    --transition-slow: 0.5s ease-in-out;
     --transition-xl: 1s ease-in-out;
 
     /* Glassmorphism effects - Only used variables */

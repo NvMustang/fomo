@@ -285,6 +285,67 @@
         toastBounce 1.5s ease-in-out infinite;
 }
 
+/* Animation d'entrée pour boutons centrés (préserve translateX(-50%)) */
+@keyframes buttonSlideUpBounce {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(50px) scale(0.7) rotate(-2deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-10px) scale(1.05) rotate(1deg);
+    }
+
+    80% {
+        transform: translateX(-50%) translateY(5px) scale(0.98) rotate(-0.5deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+/* Animation de pulse pour boutons centrés (préserve translateX(-50%)) */
+@keyframes buttonToastPulse {
+    0% {
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+
+    15% {
+        transform: translateX(-50%) translateY(0) scale(1.008) rotate(0deg);
+    }
+
+    30% {
+        transform: translateX(-50%) translateY(0) scale(1.018) rotate(0deg);
+    }
+
+    45% {
+        transform: translateX(-50%) translateY(0) scale(1.025) rotate(0deg);
+    }
+
+    60% {
+        transform: translateX(-50%) translateY(0) scale(1.03) rotate(0deg);
+    }
+
+    70% {
+        transform: translateX(-50%) translateY(0) scale(1.02) rotate(0deg);
+    }
+
+    80% {
+        transform: translateX(-50%) translateY(0) scale(1.01) rotate(0deg);
+    }
+
+    90% {
+        transform: translateX(-50%) translateY(0) scale(1.005) rotate(0deg);
+    }
+
+    100% {
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+}
+
 /* Overlay pour permettre le scroll et réduire les barres du navigateur */
 .viewport-scroll-overlay {
     position: fixed;
@@ -330,6 +391,14 @@
     animation: welcomeAuthFadeIn 1s ease-out 1.5s forwards;
 }
 
+/* Wrapper pour le contenu du welcome screen (modal + CTA) */
+.welcome-screen-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    align-items: center;
+}
+
 /* Variante pour mode partiel (partialHeight) */
 .loading-screen-partial .welcome-screen-overlay {
     position: fixed;
@@ -351,8 +420,192 @@
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* ========================
+   CTA GLASSMORPHISM
+   Style glassmorphisme pour CTA onboarding et WelcomeScreen
+   ======================== */
+
+.cta-glassmorphism {
+    /* Glassmorphism effect inspiré des toasts */
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+    padding: var(--md) var(--xl);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    color: var(--text);
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-semibold);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.cta-glassmorphism:hover {
+    background: rgba(255, 255, 255, 0.35);
+    transform: scale(1.02);
+}
+
+.cta-glassmorphism:active {
+    transform: scale(0.98);
+}
+
+/* Bordure dégradé pour CTA (comme les toasts) */
+.cta-glassmorphism::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    background: linear-gradient(-135deg, var(--color-public) 0%, var(--color-private) 100%);
+    opacity: 0.7;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Animation d'entrée CTA : slide up depuis le bas + bounce (comme toasts) */
+@keyframes ctaSlideUpFromBottom {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(100px) scale(0.7) rotate(-2deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-10px) scale(1.05) rotate(1deg);
+    }
+
+    80% {
+        transform: translateX(-50%) translateY(5px) scale(0.98) rotate(-0.5deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+/* Animation de pulse subtile pour CTA (comme toasts) */
+@keyframes ctaPulse {
+    0% {
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+
+    15% {
+        transform: translateX(-50%) translateY(0) scale(1.008) rotate(0deg);
+    }
+
+    30% {
+        transform: translateX(-50%) translateY(0) scale(1.018) rotate(0deg);
+    }
+
+    45% {
+        transform: translateX(-50%) translateY(0) scale(1.025) rotate(0deg);
+    }
+
+    60% {
+        transform: translateX(-50%) translateY(0) scale(1.03) rotate(0deg);
+    }
+
+    70% {
+        transform: translateX(-50%) translateY(0) scale(1.02) rotate(0deg);
+    }
+
+    80% {
+        transform: translateX(-50%) translateY(0) scale(1.01) rotate(0deg);
+    }
+
+    90% {
+        transform: translateX(-50%) translateY(0) scale(1.003) rotate(0deg);
+    }
+
+    100% {
+        transform: translateX(-50%) translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+/* Variante pour CTA centré (onboarding) */
+.cta-glassmorphism.cta-centered {
+    animation: ctaSlideUpFromBottom 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+        ctaPulse 4s cubic-bezier(0.33, 0, 0.67, 1) 0.6s infinite;
+}
+
+/* Variante pour CTA dans WelcomeScreen (sans translateX) */
+@keyframes ctaSlideUpFromBottomWelcome {
+    0% {
+        opacity: 0;
+        transform: translateY(100px) scale(0.7) rotate(-2deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateY(-10px) scale(1.05) rotate(1deg);
+    }
+
+    80% {
+        transform: translateY(5px) scale(0.98) rotate(-0.5deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+@keyframes ctaPulseWelcome {
+    0% {
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+
+    15% {
+        transform: translateY(0) scale(1.008) rotate(0deg);
+    }
+
+    30% {
+        transform: translateY(0) scale(1.018) rotate(0deg);
+    }
+
+    45% {
+        transform: translateY(0) scale(1.025) rotate(0deg);
+    }
+
+    60% {
+        transform: translateY(0) scale(1.03) rotate(0deg);
+    }
+
+    70% {
+        transform: translateY(0) scale(1.02) rotate(0deg);
+    }
+
+    80% {
+        transform: translateY(0) scale(1.01) rotate(0deg);
+    }
+
+    90% {
+        transform: translateY(0) scale(1.003) rotate(0deg);
+    }
+
+    100% {
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+}
+
+.cta-glassmorphism.cta-welcome {
+    animation: ctaSlideUpFromBottomWelcome 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+        ctaPulseWelcome 4s cubic-bezier(0.33, 0, 0.67, 1) 0.6s infinite;
 }

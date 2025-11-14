@@ -2,9 +2,11 @@
  * FOMO MVP - Privacy Context
  *
  * Contexte pour la gestion de la confidentialité
+ * Lit le mode visitor depuis AuthContext pour déterminer l'état initial
  */
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react'
+import { useAuth } from './AuthContext'
 
 // ===== TYPES =====
 interface PrivacyContextType {
@@ -20,11 +22,12 @@ export const PrivacyContext = createContext<PrivacyContextType | undefined>(unde
 // ===== PROPS =====
 interface PrivacyProviderProps {
     children: ReactNode
-    defaultPublicMode?: boolean // Permet de forcer une valeur par défaut (pour mode visitor par exemple)
 }
 
 // ===== PROVIDER =====
-export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ children, defaultPublicMode }) => {
+export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ children }) => {
+    const { user } = useAuth()
+
     // Fonction helper pour changer les variables CSS
     const updateCSSVariables = useCallback((isPublicMode: boolean) => {
         const root = document.documentElement
@@ -32,32 +35,33 @@ export const PrivacyProvider: React.FC<PrivacyProviderProps> = React.memo(({ chi
         root.style.setProperty('--current-toggle-position', isPublicMode ? '50%' : '-50%')
     }, [])
 
-    // Initialiser l'état depuis le localStorage ou utiliser defaultPublicMode si fourni
+    // Initialiser l'état depuis le localStorage ou mode visitor
     const [isPublicMode, setIsPublicMode] = useState(() => {
-        // Si defaultPublicMode est fourni, l'utiliser (ignorer localStorage)
-        if (defaultPublicMode !== undefined) {
-            console.log('🔍 [PrivacyContext] Initialisation avec defaultPublicMode:', defaultPublicMode)
-            return defaultPublicMode
+        // Visitors commencent en mode private (false) par défaut
+        if (user.isVisitor) {
+            console.log('🔍 [PrivacyContext] Visitor détecté: mode private par défaut')
+            return false
         }
-        // Sinon, charger depuis localStorage
+
+        // Users authentifiés: charger depuis localStorage
         try {
             const savedPrivacy = localStorage.getItem('fomo-privacy')
             if (savedPrivacy !== null) {
                 const parsed = JSON.parse(savedPrivacy)
-                console.log('🔍 [PrivacyContext] Initialisation depuis localStorage:', parsed)
+                console.log('🔍 [PrivacyContext] User authentifié: chargement localStorage:', parsed)
                 return parsed
             }
         } catch (error) {
             console.warn('Erreur lors du chargement de l\'état privacy:', error)
         }
-        console.log('🔍 [PrivacyContext] Initialisation avec valeur par défaut: true')
-        return true // Valeur par défaut
+
+        // Valeur par défaut pour users authentifiés: public (true)
+        console.log('🔍 [PrivacyContext] User authentifié: mode public par défaut')
+        return true
     })
 
-    // État pour désactiver le toggle (utilisé en mode visitor avant complétion du formulaire)
+    // État pour désactiver le toggle (peut être contrôlé depuis l'extérieur via setToggleDisabled)
     const [isToggleDisabled, setIsToggleDisabled] = useState(false)
-
-
 
     // Initialiser les variables CSS au démarrage et quand isPublicMode change
     useEffect(() => {

@@ -7,7 +7,7 @@ import React, { useMemo, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useAuth } from '@/contexts/AuthContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useDataContext } from '@/contexts/DataContext'
 import type { Event, UserResponseValue } from '@/types/fomoTypes'
 
 interface ActivityItem {
@@ -37,7 +37,7 @@ const getResponseLabel = (response: UserResponseValue): string => {
 
 export const LastActivities: React.FC = () => {
     const { user } = useAuth()
-    const { responses, events, dataReady } = useFomoDataContext()
+    const { responses, events, dataReady } = useDataContext()
 
     // Calculer l'activité récente en utilisant initialResponse/finalResponse du système d'historique
     const recentActivity = useMemo(() => {

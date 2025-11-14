@@ -3,17 +3,98 @@ import type { Event, UserResponseValue } from '@/types/fomoTypes'
 import { Button } from '@/components'
 import ButtonGroup from '@/components/ui/ButtonGroup'
 import { ShareContent } from '@/components/ui/ShareContent'
-import { format } from 'date-fns'
+import { format, isPast } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useDataContext } from '@/contexts/DataContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePrivacy } from '@/contexts/PrivacyContext'
-import { setStylingPin } from '@/map/stylingPinsController'
 import { getUser } from '@/utils/filterTools'
+import { useStarsAnimation } from '@/onboarding/hooks/useStarsAnimation'
+import type { Venue } from '@/types/fomoTypes'
 
 // notifyResponseChange supprimé : LastActivities lit directement initialResponse/finalResponse depuis le contexte
+
+/**
+ * Formate l'adresse du venue de manière concise pour l'affichage
+ * Affiche : venue name OU (rue, numéro, ville)
+ * Exclut : région et pays
+ */
+function formatVenueAddress(venue: Venue | undefined): string {
+    if (!venue) {
+        return 'Lieu non spécifié'
+    }
+
+    // Priorité 1 : Utiliser venue.name si disponible
+    if (venue.name && venue.name.trim()) {
+        return venue.name.trim()
+    }
+
+    // Priorité 2 : Utiliser les composants structurés si disponibles
+    if (venue.components) {
+        const parts: string[] = []
+
+        // Ajouter la rue et le numéro
+        if (venue.components.street) {
+            const street = venue.components.street.trim()
+            const number = venue.components.address_number?.trim()
+            if (number) {
+                parts.push(`${number} ${street}`)
+            } else {
+                parts.push(street)
+            }
+        }
+
+        // Ajouter la ville
+        if (venue.components.place) {
+            parts.push(venue.components.place.trim())
+        }
+
+        if (parts.length > 0) {
+            return parts.join(', ')
+        }
+    }
+
+    // Priorité 3 : Parser l'adresse complète pour extraire seulement rue, numéro, ville
+    if (venue.address && venue.address.trim()) {
+        const address = venue.address.trim()
+
+        // Si l'adresse contient des virgules, prendre les 2-3 premières parties
+        // Format typique : "rue, ville, région, pays" ou "rue, numéro, ville, région, pays"
+        if (address.includes(',')) {
+            const parts = address.split(',').map(p => p.trim())
+
+            // Prendre les 2-3 premières parties (généralement rue, numéro, ville)
+            // Exclure les parties qui ressemblent à des régions ou pays (généralement les dernières)
+            const filteredParts: string[] = []
+            const regionPattern = /^(Île-de-France|Hauts-de-France|Normandie|Bretagne|Pays de la Loire|Centre-Val de Loire|Bourgogne-Franche-Comté|Grand Est|Auvergne-Rhône-Alpes|Nouvelle-Aquitaine|Occitanie|Provence-Alpes-Côte d'Azur|Corse|Belgique|France|Belgium)$/i
+
+            // Parcourir les parties de gauche à droite, s'arrêter à la première région/pays
+            for (const part of parts) {
+                if (regionPattern.test(part)) {
+                    // Rencontré une région/pays, arrêter
+                    break
+                }
+                filteredParts.push(part)
+                // Limiter à 3 parties max (rue, numéro, ville)
+                if (filteredParts.length >= 3) {
+                    break
+                }
+            }
+
+            if (filteredParts.length > 0) {
+                return filteredParts.join(', ')
+            }
+        }
+
+        // Si pas de virgules, retourner l'adresse telle quelle
+        return address
+    }
+
+    // Fallback
+    return 'Lieu non spécifié'
+}
 
 interface EventCardProps {
     event: Event
@@ -52,19 +133,34 @@ export const EventCard = React.memo<EventCardProps>(({
         }
     }, [isDetailsExpandedProp])
 
-    // État local pour l'activation des boutons (géré localement dans EventCard)
-    const [buttonsActivated, setButtonsActivated] = useState(!responseButtonsDisabled)
+    // Activation des boutons : directement basée sur la prop (pas d'état local)
+    const buttonsActivated = !responseButtonsDisabled
+
+    // Animation des étoiles pour les réponses
+    const { triggerStars, StarsAnimation } = useStarsAnimation({
+        duration: 2000
+    })
 
     // État pour l'expansion de la zone de partage (uniquement sur page profile)
     const [isShareExpanded, setIsShareExpanded] = useState(false)
 
-    // Réponse choisie pendant l'ouverture de la carte (finalResponse local, non envoyée) - stockée en ref (synchrone)
-    const localFinalResponseRef = useRef<'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null>(null)
+    // Réponse choisie pendant l'ouverture de la carte (en attente de sauvegarde) - stockée en ref pour éviter re-render
+    const pendingResponseRef = useRef<UserResponseValue>(null)
 
 
-    const { responses, updateEvent, users, addEventResponse, currentUserId } = useFomoDataContext()
+    const { responses, updateEvent, users, addEventResponse, currentUserId, getInitialResponseSource } = useDataContext()
     const { user } = useAuth()
     const { isPublicMode } = usePrivacy()
+
+    // Calculer si l'événement est passé (basé sur endsAt)
+    const eventIsPast = (() => {
+        if (event.endsAt) {
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+            const endDate = toZonedTime(event.endsAt, userTimezone)
+            return isPast(endDate)
+        }
+        return false
+    })()
 
     // Options de réponses affichées sous la carte (selon le mode privé/public)
     const RESPONSE_OPTIONS = isPublicMode
@@ -110,11 +206,6 @@ export const EventCard = React.memo<EventCardProps>(({
             setIsDetailsExpandedInternal(!isDetailsExpandedInternal)
         }
 
-        // Activer les boutons si pas déjà activés (géré localement)
-        if (!buttonsActivated && responseButtonsDisabled) {
-            setButtonsActivated(true)
-        }
-
         // Appeler le callback au clic sur l'étiquette (pour déclencher le toast impatience en visitor mode)
         // Indépendant de l'état des boutons - juste un clic sur l'étiquette
         onLabelClick?.()
@@ -123,21 +214,58 @@ export const EventCard = React.memo<EventCardProps>(({
     // Handler pour confirmer le nom visitor
     // Suppression du flux visitor: un userId doit exister en amont
 
-    // Helper: récupérer la réponse courante (local si défini, sinon dernière du contexte)
+    /**
+     * Helper: récupérer la réponse courante avec ordre de priorité
+     * 
+     * ORDRE DE PRIORITÉ (du plus récent au plus ancien) :
+     * 
+     * 1. pendingResponseRef : Réponse choisie pendant l'ouverture de l'EventCard (en attente de sauvegarde)
+     *    → Priorité absolue : c'est l'intention actuelle de l'utilisateur
+     *    → Exemple : utilisateur vient de cliquer "J'y vais" → retourne "participe"
+     * 
+     * 2. responses : Réponses sauvegardées dans le backend (état persisté)
+     *    → Si l'utilisateur a déjà répondu, retourne sa dernière réponse
+     *    → Exemple : utilisateur a déjà répondu "maybe" → retourne "maybe"
+     * 
+     * 3. getInitialResponseSource : Source d'origine (linked/invited) non sauvegardée
+     *    → Fallback : indique comment l'utilisateur est arrivé, mais pas encore ce qu'il a fait
+     *    → Exemple : visitor arrive via lien → retourne "linked"
+     * 
+     * Cette fonction est utilisée par :
+     * - handleOpen() : pour capturer l'état initial (initialResponseRef)
+     * - handleClose() : pour comparer initial vs current et décider quoi envoyer
+     * - Rendu des boutons : pour afficher le bon bouton sélectionné
+     */
     const getLocalResponse = (): UserResponseValue => {
-        let response: UserResponseValue = null
-        if (localFinalResponseRef.current !== null && localFinalResponseRef.current !== undefined) {
-            response = localFinalResponseRef.current
-        } else {
-            // Utiliser currentUserId (fonctionne pour visitor et user authentifié)
-            const uid = currentUserId || user?.id
-            if (!uid) return null
+        // PRIORITÉ 1 : Réponse en attente (choisie pendant l'ouverture, pas encore sauvegardée)
+        // C'est la valeur la plus "fraîche" - l'utilisateur vient de cliquer
+        if (pendingResponseRef.current !== null && pendingResponseRef.current !== undefined) {
+            return pendingResponseRef.current
+        }
+
+        // PRIORITÉ 2 : Réponses sauvegardées dans le backend (état persisté)
+        // Si l'utilisateur a déjà répondu à cet événement, on retourne sa dernière réponse
+        const uid = currentUserId || user?.id
+        if (uid) {
             const latest = responses
                 .filter(r => r.userId === uid && r.eventId === event.id)
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-            response = latest ? latest.finalResponse : null
+
+            if (latest) {
+                return latest.finalResponse
+            }
         }
-        return response
+
+        // PRIORITÉ 3 : Source d'origine (linked/invited) - fallback temporaire
+        // Indique comment l'utilisateur est arrivé, mais pas encore ce qu'il a fait
+        // Cette valeur sera utilisée comme initialResponse lors de la création de la réponse
+        const initialSource = getInitialResponseSource(event.id)
+        if (initialSource) {
+            return initialSource
+        }
+
+        // Aucune réponse trouvée
+        return null
     }
 
     const handleOpen = () => {
@@ -146,13 +274,13 @@ export const EventCard = React.memo<EventCardProps>(({
             // Capturer systématiquement l'état initial
             // Normaliser : convertir undefined en null pour cohérence (pas d'entrée = null)
             initialResponseRef.current = current ?? null
-            // Initialiser le final local à l'état initial (brut)
+            // Initialiser la réponse en attente à l'état initial (brut)
             const initialForLocal: UserResponseValue = initialResponseRef.current ?? null
-            localFinalResponseRef.current = initialForLocal
+            pendingResponseRef.current = initialForLocal
         } catch (e) {
             // En cas d'erreur, initialiser à null (pas d'entrée dans l'historique)
             initialResponseRef.current = null
-            localFinalResponseRef.current = null
+            pendingResponseRef.current = null
         }
     }
 
@@ -163,54 +291,73 @@ export const EventCard = React.memo<EventCardProps>(({
             return
         }
 
-        // En mode visitor, vérifier s'il y a une réponse en attente dans sessionStorage
-        // (réponse sélectionnée mais pas encore envoyée car formulaire pas rempli)
-        let pendingResponse: UserResponseValue = null
-        try {
-            const storedResponse = sessionStorage.getItem('fomo-visit-pending-response')
-            if (storedResponse) {
-                pendingResponse = storedResponse as UserResponseValue
-                // Nettoyer sessionStorage après utilisation
-                sessionStorage.removeItem('fomo-visit-pending-response')
-            }
-        } catch {
-            // Ignorer si sessionStorage indisponible
-        }
-
-        // NOUVEAU SYSTÈME : Comparer initial (à l'ouverture) avec current (à la fermeture)
+        // Comparer initial (à l'ouverture) avec current (à la fermeture)
         // pour déterminer si on doit envoyer 'seen'
-        // Prendre d'abord le final local, sinon relire depuis le contexte
-        let current = getLocalResponse()
-
-        // En mode visitor, si on a une réponse en attente, l'utiliser
-        if (pendingResponse && !user?.id) {
-            current = pendingResponse
-        }
+        const current = getLocalResponse()
 
         // Normaliser initial : convertir undefined en null (pas d'entrée = null)
         // initial peut être undefined si handleOpen n'a pas été appelé
         const initial = initialResponseRef.current ?? null
 
         // LOGIQUE : Envoyer 'seen' uniquement si l'utilisateur n'a pas interagi (initial === current)
-        // et que l'état est null (pas d'entrée dans l'historique) ou 'invited' (pas d'interaction visible)
+        // et que l'état est null (pas d'entrée dans l'historique), 'invited', ou 'linked' (pas d'interaction confirmée)
 
         // Cas 1: pas d'entrée → pas d'entrée → envoie 'seen' (pas d'interaction)
         // initial et current sont tous les deux null (aucune entrée dans l'historique)
+        // initialResponse='new', finalResponse='seen' (première fois que l'utilisateur voit l'événement)
         if (initial === null && current === null) {
-            addEventResponse(event.id, 'seen')
+            addEventResponse(event.id, 'seen', {
+                initialResponse: 'new'
+            })
+            // Mettre à jour le feature-state de la carte pour colorer le pin
+            window.setStylingPin?.(event.id, 'seen')
             return
         }
 
         // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen' (a vu l'invitation mais n'a pas répondu)
+        // initialResponse='invited', finalResponse='seen'
         if (initial === 'invited' && current === 'invited') {
-            addEventResponse(event.id, 'seen')
+            addEventResponse(event.id, 'seen', {
+                initialResponse: 'invited'
+            })
+            // Mettre à jour le feature-state de la carte pour colorer le pin
+            window.setStylingPin?.(event.id, 'seen')
             return
         }
 
-        // Cas 3: initial !== current → l'utilisateur a interagi → envoyer la réponse finale maintenant
+        // Cas 3: 'linked' → 'linked' (sans changement) → envoie 'seen' (a vu via lien mais n'a pas répondu)
+        // 'linked' = visitor arrivé via URL d'un event, mais n'a pas encore interagi
+        // initialResponse='linked', finalResponse='seen'
+        if (initial === 'linked' && current === 'linked') {
+            addEventResponse(event.id, 'seen', {
+                initialResponse: 'linked'
+            })
+            // Mettre à jour le feature-state de la carte pour colorer le pin
+            window.setStylingPin?.(event.id, 'seen')
+            return
+        }
+
+        // Cas 4: initial !== current → l'utilisateur a interagi → envoyer la réponse finale maintenant
+        // IMPORTANT : Si initial === null (première fois), utiliser 'new' comme initialResponse
+        // Exemples :
+        // - initial="maybe", current="participe" → initialResponse="maybe", finalResponse="participe"
+        // - initial="linked", current="participe" → initialResponse="linked", finalResponse="participe"
+        // - initial=null, current="participe" → initialResponse="new", finalResponse="participe" (première réponse)
+        // IMPORTANT : La réponse est sauvegardée avec l'ID visitor existant (même si le visitor n'a pas encore de nom).
+        // Cela permet à l'hôte de voir la réponse immédiatement, et le nom peut être ajouté plus tard via le formulaire.
+        // C'est le "meilleur des deux mondes" : réponse sauvegardée + pas de frustration UX (le visitor peut continuer).
         if (current !== initial) {
-            // Envoyer la réponse finale
-            addEventResponse(event.id, current)
+            // Si c'est la première fois (initial === null), utiliser 'new' comme initialResponse
+            const effectiveInitial = initial === null ? 'new' : initial
+            // Envoyer la réponse finale avec initialResponse pour tracker le changement
+            addEventResponse(event.id, current, {
+                initialResponse: effectiveInitial
+            })
+            // Mettre à jour le feature-state de la carte pour colorer le pin
+            // Note: current peut être null, dans ce cas on ne met pas à jour (le pin garde sa couleur de base)
+            if (current !== null) {
+                window.setStylingPin?.(event.id, current)
+            }
             return
         }
     }
@@ -261,10 +408,8 @@ export const EventCard = React.memo<EventCardProps>(({
         if (event.isOnline === false) {
             return
         }
-        // Toggle la zone expandable (uniquement sur page profile)
-        if (isProfilePage) {
-            setIsShareExpanded(!isShareExpanded)
-        }
+        // Toggle la zone expandable (disponible partout)
+        setIsShareExpanded(!isShareExpanded)
     }
 
     // Fermer la zone de partage quand on ferme via ShareContent
@@ -328,6 +473,21 @@ export const EventCard = React.memo<EventCardProps>(({
                             }}
                         />
                     )}
+                    {/* Bouton de fermeture */}
+                    <button
+                        className="event-card-banner-close"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            // Utiliser la fonction globale de fermeture (logique centralisée)
+                            if (window.closeEventCard) {
+                                window.closeEventCard()
+                            }
+                        }}
+                        aria-label="Fermer"
+                        title="Fermer"
+                    >
+                        ×
+                    </button>
                 </div>
 
                 {/* Zone fixe 2 - Titre (hauteur fixe) */}
@@ -354,9 +514,36 @@ export const EventCard = React.memo<EventCardProps>(({
                 )}
 
                 {/* Zone fixe 3 - Meta (hauteur fixe) */}
-                <div className="event-card-meta" style={{ flexShrink: 0 }}>
-                    <div className="meta-row">📍 {event.venue?.address || 'Lieu non spécifié'} </div>
-                    <div className="meta-row">📅 {format(toZonedTime(event.startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone), 'PPP à p', { locale: fr })}</div>
+                <div className="event-card-meta" style={{ flexShrink: 0, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'var(--sm)' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--xs)' }}>
+                        <div className="meta-row">📍 {formatVenueAddress(event.venue)} </div>
+                        <div className="meta-row">📅 {format(toZonedTime(event.startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone), 'PPP à p', { locale: fr })}</div>
+                    </div>
+                    {/* Bouton de partage (mode user + mode public, événement non passé) */}
+                    {!user?.isVisitor && isPublicMode && !eventIsPast && (
+                        <Button
+                            variant="ghost"
+                            onClick={handleShare}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 'var(--xs)',
+                                minWidth: 'auto',
+                                flexShrink: 0
+                            }}
+                            title="Partager l'événement"
+                            aria-label="Partager l'événement"
+                        >
+                            <img
+                                src="/share-icon.svg"
+                                alt="Partager"
+                                width="16"
+                                height="16"
+                                className={isShareExpanded ? 'share-icon-rotated' : ''}
+                            />
+                        </Button>
+                    )}
                 </div>
 
                 {/* Zone scrollable - contenu expandable */}
@@ -367,66 +554,72 @@ export const EventCard = React.memo<EventCardProps>(({
                         minHeight: 0 // Important pour que flex: 1 fonctionne correctement
                     }}
                 >
-                        {event.description && (
-                            <div className="event-description">
-                                <p>{event.description}</p>
-                            </div>
-                        )}
-
-                        {/* Organisateur - affiché seulement lors de l'expansion, après la description */}
-                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                            👤 {(() => {
-                                const organizer = getUser(users || [], event.organizerId)
-                                return organizer?.name || event.organizerName || event.organizerId || 'Organisateur inconnu'
-                            })()}
+                    {event.description && (
+                        <div className="event-description">
+                            <p>{event.description}</p>
                         </div>
+                    )}
 
-                        {/* Lien source (Facebook, etc.) - affiché seulement si source existe */}
-                        {event.source && event.source.trim() && (
-                            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--xs)' }}>
-                                <a 
-                                    href={event.source} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{ 
-                                        color: 'var(--primary)', 
-                                        textDecoration: 'none',
-                                        wordBreak: 'break-all'
-                                    }}
-                                >
-                                    🔗 {event.source}
-                                </a>
-                            </div>
-                        )}
-
-                        <div className="event-info-grid">
-                            {event.price && (
-                                <div className="info-item">
-                                    <strong>Prix:</strong> {event.price}
-                                </div>
-                            )}
-                            {event.capacity && (
-                                <div className="info-item">
-                                    <strong>Capacité:</strong> {event.capacity} personnes
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Statistiques de participation */}
-                        <div style={{ display: 'flex', gap: 'var(--md)', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                            <span style={{ color: 'var(--success)' }}>
-                                <strong>{event.stats?.goingCount || 0}</strong> participent
-                            </span>
-                            <span style={{ color: 'var(--warning)' }}>
-                                <strong>{event.stats?.interestedCount || 0}</strong> intéressés
-                            </span>
-                        </div>
+                    {/* Organisateur - affiché seulement lors de l'expansion, après la description */}
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                        👤 {(() => {
+                            const organizer = getUser(users || [], event.organizerId)
+                            return organizer?.name || event.organizerName || event.organizerId || 'Organisateur inconnu'
+                        })()}
                     </div>
+
+                    {/* Lien source (Facebook, etc.) - affiché seulement si source existe */}
+                    {event.source && event.source.trim() && (
+                        <div style={{ marginTop: 'var(--xs)' }}>
+                            <Button
+                                as="a"
+                                href={event.source}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    fontSize: 'var(--text-sm)',
+                                    padding: 'var(--xs) var(--sm)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--xs)'
+                                }}
+                            >
+                                🔗 Facebook
+                            </Button>
+                        </div>
+                    )}
+
+                    <div className="event-info-grid">
+                        {event.price && (
+                            <div className="info-item">
+                                <strong>Prix:</strong> {event.price}
+                            </div>
+                        )}
+                        {event.capacity && (
+                            <div className="info-item">
+                                <strong>Capacité:</strong> {event.capacity} personnes
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Tags de l'événement */}
+                    {event.tags && event.tags.length > 0 && (
+                        <div className="event-tags-container">
+                            {event.tags.map((tag, index) => (
+                                <span key={index} className="event-tag-chip">
+                                    #{tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Zone fixe 4 - boutons de réponses toujours visibles */}
-            {showToggleResponse && !event.isPast && (() => {
+            {showToggleResponse && !eventIsPast && (() => {
                 const current = getLocalResponse()
                 // Vérifier que la réponse courante est dans les options disponibles
                 const availableTypes = RESPONSE_OPTIONS.map(opt => opt.type)
@@ -438,6 +631,7 @@ export const EventCard = React.memo<EventCardProps>(({
                 return (
                     <>
                         <div
+                            className="event-response-buttons-container"
                             onClick={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                         >
@@ -455,18 +649,25 @@ export const EventCard = React.memo<EventCardProps>(({
                                     }
                                     const nextFinal: 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' =
                                         next === null ? 'cleared' : next
-                                    localFinalResponseRef.current = nextFinal
+                                    pendingResponseRef.current = nextFinal
                                     // Mettre à jour le style du pin instantanément (UI)
-                                    setStylingPin(event.id, nextFinal)
+                                    window.setStylingPin?.(event.id, nextFinal)
 
                                     // Si une réponse est sélectionnée (pas cleared)
                                     if (next !== null) {
-                                        // Notifier le parent pour afficher les étoiles (si callback fourni)
+                                        // Déclencher l'animation des étoiles
+                                        const responseType = next === 'going' ? 'participe' :
+                                            next === 'interested' ? 'maybe' :
+                                                next === 'not_interested' ? 'not_there' :
+                                                    next as 'participe' | 'maybe' | 'not_there'
+                                        triggerStars(responseType)
+
+                                        // Notifier le parent (si callback fourni)
                                         onResponseClick?.(next)
                                     }
                                     // Ne pas envoyer ici. L'envoi est géré dans handleClose (au démontage)
                                 }}
-                                className="event-response-buttons-container"
+                                className="event-response-button-group"
                                 buttonClassName="response-button"
                                 ariaLabel="Choix de réponse"
                             />
@@ -529,17 +730,35 @@ export const EventCard = React.memo<EventCardProps>(({
                             style={{ marginRight: 0, opacity: event.isOnline === false ? 0.5 : 1 }}
                         />
                     </Button>
-                </div>
-            )}
-
-            {/* Zone expandable de partage (uniquement sur page profile) */}
-            {isProfilePage && shouldShowEdit && (
-                <div className={`event-share-section ${isShareExpanded ? 'expanded' : ''}`}>
                     {isShareExpanded && (
-                        <ShareContent event={event} onClose={handleShareClose} />
+                        <div
+                            className={`event-share-section ${isShareExpanded ? 'expanded' : ''}`}
+                            style={{
+                                overflowY: isShareExpanded ? 'auto' : 'hidden',
+                                minHeight: 0 // Important pour que flex: 1 fonctionne correctement
+                            }}
+                        >
+                            <ShareContent event={event} onClose={handleShareClose} />
+                        </div>
                     )}
                 </div>
             )}
+
+            {/* Zone expandable de partage (disponible partout) */}
+            {isShareExpanded && (
+                <div
+                    className={`event-share-section ${isShareExpanded ? 'expanded' : ''}`}
+                    style={{
+                        overflowY: isShareExpanded ? 'auto' : 'hidden',
+                        minHeight: 0 // Important pour que flex: 1 fonctionne correctement
+                    }}
+                >
+                    <ShareContent event={event} onClose={handleShareClose} />
+                </div>
+            )}
+
+            {/* Animation des étoiles */}
+            {StarsAnimation}
         </div>
     )
 

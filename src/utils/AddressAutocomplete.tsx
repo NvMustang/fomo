@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useFomoData } from '@/utils/dataManager'
 import type { AddressSuggestion } from '@/types/fomoTypes'
 
 interface AddressAutocompleteProps {
@@ -12,6 +12,7 @@ interface AddressAutocompleteProps {
     disabled?: boolean
     minLength?: number
     debounceDelay?: number // Délai de debounce en millisecondes (défaut: 600ms)
+    bbox?: [number, number, number, number] // Bounding box optionnelle [west, south, east, north]
 }
 
 export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
@@ -23,9 +24,10 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     className = "",
     disabled = false,
     minLength = 3,
-    debounceDelay = 600
+    debounceDelay = 600,
+    bbox
 }) => {
-    const { searchAddresses } = useFomoDataContext()
+    const fomoData = useFomoData()
     const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([])
     const [showSuggestions, setShowSuggestions] = useState(false)
     // Loading local supprimé (non utilisé)
@@ -38,19 +40,20 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     const suppressNextSearchRef = useRef<boolean>(false)
     const hasSelectedRef = useRef<boolean>(false)
     const clickingSuggestionRef = useRef<boolean>(false)
+    const hasValidAddressRef = useRef<boolean>(false) // Suivre si une adresse Mapbox valide a été sélectionnée
 
-    // Recherche d'adresses avec géocodage mondial
+    // Recherche d'adresses avec géocodage mondial ou limité par bbox
     const searchAddressesLocal = async (query: string): Promise<AddressSuggestion[]> => {
-        console.log('🔍 searchAddressesLocal appelé avec:', query, 'minLength:', minLength)
+        console.log('🔍 searchAddressesLocal appelé avec:', query, 'minLength:', minLength, 'bbox:', bbox)
         if (!query.trim() || query.length < minLength) {
             console.log('❌ Query trop court ou vide')
             return []
         }
 
         try {
-            console.log('🌐 Recherche d\'adresses pour:', query)
-            // Recherche mondiale (pas de restriction de pays)
-            const results = await searchAddresses(query, { limit: 8 })
+            console.log('🌐 Recherche d\'adresses pour:', query, bbox ? `(bbox: [${bbox.join(', ')}])` : '(mondiale)')
+            // Recherche avec ou sans bbox selon disponibilité
+            const results = await fomoData.searchAddresses(query, { limit: 8, bbox })
             console.log('✅ Résultats reçus:', results)
             return results
         } catch (error) {
@@ -66,6 +69,11 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         onChange(newValue)
         // L'utilisateur modifie le texte: permettre l'auto-select à nouveau au prochain blur
         hasSelectedRef.current = false
+        // Réinitialiser la validation si l'utilisateur modifie manuellement le texte
+        if (hasValidAddressRef.current) {
+            hasValidAddressRef.current = false
+            onValidationChange?.(false)
+        }
     }
 
     // Gestion du focus
@@ -115,8 +123,10 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         suppressNextSearchRef.current = true
         hasSelectedRef.current = true
         clickingSuggestionRef.current = false
+        hasValidAddressRef.current = true // Marquer qu'une adresse Mapbox valide a été sélectionnée
         onChange(address)
         onAddressSelect?.({ name, address, lat, lng })
+        onValidationChange?.(true) // Notifier que l'adresse est valide
 
         // Fermer les suggestions et vider la liste
         setShowSuggestions(false)
@@ -192,12 +202,20 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 clearTimeout(debounceRef.current)
             }
         }
-    }, [value, minLength, debounceDelay, isFocused])
+    }, [value, minLength, debounceDelay, isFocused, bbox])
 
-    // Remonter un état de validation basique si demandé
+    // Remonter l'état de validation : true uniquement si une adresse Mapbox valide a été sélectionnée
     useEffect(() => {
-        onValidationChange?.(value.trim().length >= minLength)
-    }, [value, minLength, onValidationChange])
+        // Réinitialiser si la valeur est vide
+        if (!value.trim() && hasValidAddressRef.current) {
+            hasValidAddressRef.current = false
+        }
+        // Si onValidationChange est fourni, on notifie uniquement quand une adresse valide est sélectionnée
+        // Sinon, on ne fait rien (pour ne pas casser les usages existants qui ne passent pas cette prop)
+        if (onValidationChange !== undefined) {
+            onValidationChange(hasValidAddressRef.current)
+        }
+    }, [value, onValidationChange])
 
 
     // Fermer les suggestions quand on clique ailleurs

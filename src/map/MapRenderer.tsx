@@ -15,423 +15,22 @@ import Map, { MapRef, Source, Layer } from 'react-map-gl/maplibre'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { MapViewProps } from './types'
-import { attachStylingPinsController, detachStylingPinsController } from '@/map/stylingPinsController'
 import type { Event } from '@/types/fomoTypes'
 import { usePrivacy } from '@/contexts/PrivacyContext'
-import { useFilters } from '@/contexts/FiltersContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useDataContext } from '@/contexts/DataContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { userResponsesMapper } from '@/utils/filterTools'
+import { getDefaultViewState } from './utils'
+import { MAP_CONFIG, CLUSTER_CONFIG } from './config'
+import { createEventsSource, addTemporaryEvent } from './sources'
+import { getEventLayers, getFakeEventLayers } from './layers'
 
 
-// ===== UTILITAIRES DE COULEURS =====
-const warnedCssVars = new Set<string>()
-/**
- * Récupère une variable CSS du root avec log si fallback utilisé
- */
-const getCSSVariable = (varName: string, fallback: string): string => {
-  const color = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
-  if (!color) {
-    if (!warnedCssVars.has(varName)) {
-      console.warn(`[MapRenderer] CSS variable "${varName}" not found, using fallback`)
-      warnedCssVars.add(varName)
-    }
-    return fallback
-  }
-  return color
-}
-
-/**
- * Récupère la couleur selon le mode public/private
- * Utilisée par les pins et les clusters
- */
-const getPrivacyColor = (isPublicMode: boolean, varSuffix: string = ''): string => {
-  const colorVar = isPublicMode ? `--pin-color-public${varSuffix}` : `--pin-color-private${varSuffix}`
-  const fallback = isPublicMode ? '#ed4141' : '#3b82f6'
-  return getCSSVariable(colorVar, fallback)
-}
-
-
-// Position par défaut de la carte (Belgique ou ville de l'utilisateur si définie)
-const getDefaultViewState = (userLat?: number | null, userLng?: number | null) => {
-  if (userLat && userLng) {
-    return {
-      latitude: userLat,
-      longitude: userLng,
-      zoom: 10, // Zoom plus proche pour la ville de l'utilisateur
-      bearing: 0,
-      pitch: 0,
-    }
-  }
-  // Fallback : Belgique
-  return {
-    latitude: 50.5,
-    longitude: 5,
-    zoom: 7,
-    bearing: 0,
-    pitch: 0,
-  }
-}
-
-
-
-// ===== CONFIGURATION =====
-const MAP_CONFIG = {
-  // Configuration simple et directe
-  defaultStyle: {
-    version: 8 as const,
-    name: "FOMO Winter",
-    sources: {
-      "maptiler-winter": {
-        type: "raster" as const,
-        tiles: [
-          `https://api.maptiler.com/maps/pastel/{z}/{x}/{y}.png?key=${import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN}`
-        ],
-        tileSize: 256,
-        attribution: "© MapTiler © OpenStreetMap contributors",
-      },
-    },
-    layers: [
-      {
-        id: "maptiler-winter",
-        type: "raster" as const,
-        source: "maptiler-winter",
-        paint: {
-          "raster-opacity": 1,
-        },
-      },
-    ],
-    glyphs: `https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=${import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN}`,
-  },
-
-  defaultRegion: {
-    latitude: 50.5000, // Bastogne, Belgique
-    longitude: 5,
-    latitudeDelta: 1,
-    longitudeDelta: 1,
-  },
-}
-
-// ===== CRÉATION DE SOURCE EN GEOJSON===== 
-/**
- * Crée une source GeoJSON avec les événements et leurs réponses utilisateur initiales.
- * Les réponses sont incluses dans properties.userResponse pour le styling initial des pins.
- */
-const createEventsSource = (eventsToShow: Event[], userResponsesMap: Record<string, string> = {}, disableClustering: boolean = false) => {
-
-  const features = eventsToShow.map((e) => {
-    // Récupérer la réponse initiale depuis le mapping (ou '' si aucune)
-    const initialResponse = userResponsesMap[e.id] || ''
-
-    const feature = {
-      type: "Feature" as const,
-      id: e.id, // nécessaire pour setFeatureState
-      properties: {
-        id: e.id,
-        score: (e.stats?.going || 0) + (e.stats?.interested || 0),
-        isPublic: e.isPublic || 'false',
-        // Réponse initiale pour le styling au montage (priorité inférieure à feature-state)
-        userResponse: initialResponse,
-      },
-      geometry: {
-        type: "Point" as const,
-        coordinates: [e.venue?.lng || 0, e.venue?.lat || 0]
-      },
-    }
-
-    return feature
-  });
-
-  const source = {
-    type: "geojson" as const,
-    data: { type: "FeatureCollection" as const, features },
-    promoteId: 'id',
-    cluster: !disableClustering && CLUSTER_CONFIG.source.enabled,
-    ...(!disableClustering && {
-      clusterRadius: CLUSTER_CONFIG.source.radius,
-      clusterMaxZoom: CLUSTER_CONFIG.source.maxZoom,
-      clusterProperties: CLUSTER_CONFIG.source.properties,
-    }),
-  }
-
-  return source
-}
-// ===== DÉFINITION DES COUCHES =====
-interface Layer {
-  id: string
-  type: string
-  source: string
-  filter?: any[]
-  paint?: Record<string, any>
-  layout?: Record<string, any>
-  [key: string]: any
-}
-
-// ===== FONCTIONS UTILITAIRES =====
-/**
- * Ajoute un événement temporaire à la map
- */
-const addTemporaryEvent = (map: any, event: Event, isPublicMode: boolean = true) => {
-  if (!map || !map.isStyleLoaded()) return
-  try {
-    if (!map.hasImage?.('pin')) return
-  } catch { /* noop */ }
-
-  // Ajouter la source temporaire
-  map.addSource(`temp-${event.id}`, {
-    type: 'geojson',
-    data: {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature" as const,
-          id: event.id,
-          properties: {
-            id: event.id,
-            score: (event.stats?.going ?? 0) + (event.stats?.interested ?? 0),
-          },
-          geometry: {
-            type: "Point" as const,
-            coordinates: [event.venue?.lng ?? 0, event.venue?.lat ?? 0]
-          },
-        }
-      ]
-    }
-  })
-
-  // Ajouter le layer temporaire (copie de events-unclustered)
-  map.addLayer({
-    id: 'tempLayer',
-    type: 'symbol',
-    source: `temp-${event.id}`,
-    layout: {
-      "icon-image": "pin",
-      "icon-anchor": "bottom",
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true
-    },
-    paint: {
-      "icon-color": getPrivacyColor(isPublicMode),
-      "icon-opacity": 1.0
-    }
-  })
-
-  // silence: éviter le bruit de logs à chaque ajout temporaire
-}
-
-// ===== GÉNÉRATION DES COUCHES =====
-/**
- * Configuration commune pour les clusters (layers ET sources)
- */
-const CLUSTER_CONFIG = {
-  // Configuration de la source GeoJSON
-  source: {
-    enabled: true,
-    radius: 30,      // Rayon très réduit : les pins doivent être très proches pour se clusteriser
-    maxZoom: 10,      // Zoom maximum augmenté : les clusters disparaissent plus tard pour moins d'agrégation
-    properties: {
-      scoreSum: ["+", ["get", "score"]], // Cumule un indicateur d'intérêt
-    },
-  },
-  // Configuration des layers de rendu
-  layers: {
-    radius: [
-      "interpolate",
-      ["linear"],
-      ["get", "point_count"],
-      2, 16,    // 2 événements = 16px
-      5, 20,    // 5 événements = 20px
-      10, 28,   // 10 événements = 28px
-      25, 36,   // 25 événements = 36px
-      50, 44,   // 50 événements = 44px
-      100, 52,  // 100+ événements = 52px
-      250, 60   // 250+ événements = 60px
-    ],
-    opacity: 0.3,
-    blur: 0.6,
-    textSize: 14,
-  },
-}
-
-/**
- * Génère les 3 layers pour une source de clustering (cluster, cluster-count, unclustered)
- * @param sourceId - ID de la source GeoJSON (ex: "events", "fake-events")
- * @param layerPrefix - Préfixe pour les IDs des layers (ex: "events", "fake-events")
- * @param clusterColor - Couleur pour les clusters
- * @param pinColor - Expression MapLibre pour la couleur des pins (ou couleur simple)
- * @param pinOpacity - Expression MapLibre pour l'opacité des pins (ou valeur simple)
- * @returns Tableau de 3 layers : [cluster, cluster-count, unclustered]
- */
-const createClusterLayers = (
-  sourceId: string,
-  layerPrefix: string,
-  clusterColor: string,
-  pinColor: any,
-  pinOpacity: any
-): Layer[] => {
-  return [
-    // CLUSTERS (cercles)
-    {
-      id: `${layerPrefix}-cluster`,
-      type: "circle",
-      source: sourceId,
-      filter: ["has", "point_count"],
-      paint: {
-        "circle-color": ['step', ['get', 'point_count'], clusterColor, 100, clusterColor, 750, clusterColor],
-        "circle-radius": CLUSTER_CONFIG.layers.radius,
-        "circle-opacity": CLUSTER_CONFIG.layers.opacity,
-        "circle-blur": CLUSTER_CONFIG.layers.blur,
-      },
-      layout: {},
-    },
-    // TEXTE DES CLUSTERS
-    {
-      id: `${layerPrefix}-cluster-count`,
-      type: "symbol",
-      source: sourceId,
-      filter: ["has", "point_count"],
-      paint: {
-        "text-color": "#FFFFFF",
-        "text-halo-color": "rgba(0, 0, 0, 0.5)",
-        "text-halo-width": 1,
-        "text-opacity": 1,
-      },
-      layout: {
-        "text-field": "{point_count}",
-        "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-        "text-size": CLUSTER_CONFIG.layers.textSize,
-        "text-allow-overlap": true,
-        "text-ignore-placement": true
-      },
-    },
-    // PINS individuels (non clusterisés)
-    // Note: "unclustered" signifie "pins qui ne sont pas dans un cluster", pas "éléments qui ne clusterisent pas"
-    {
-      id: `${layerPrefix}-${layerPrefix === "events" ? "unclustered" : "pins"}`,
-      type: "symbol",
-      source: sourceId,
-      filter: ["!", ["has", "point_count"]],
-      layout: {
-        "icon-image": "pin",
-        "icon-anchor": "bottom",
-        "icon-allow-overlap": true,
-        "icon-ignore-placement": true
-      },
-      paint: {
-        "icon-color": pinColor,
-        "icon-opacity": pinOpacity
-      }
-    },
-  ]
-}
-
-/**
- * Génère l'expression de couleur des pins avec logique de réponses utilisateur.
- * Supporte les deux formats : ancien (not_interested) et nouveau (not_there)
- */
-const getPinColorExpression = (basePinColor: string) => [
-  "case",
-  [
-    "any",
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"],
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"],
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"]
-  ],
-  getCSSVariable('--pin-color-seen', '#64748b'),
-  basePinColor
-]
-
-/**
- * Génère l'expression d'opacité des pins avec logique de réponses utilisateur.
- * Supporte les deux formats : ancien (going/interested/not_interested) et nouveau (participe/maybe/not_there)
- */
-const getPinOpacityExpression = () => [
-  "case",
-  // Format nouveau : participe
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "participe"], 0.8,
-  // Format ancien : going
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "going"], 0.8,
-  // Format nouveau : maybe
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "maybe"], 0.6,
-  // Format ancien : interested
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "interested"], 0.6,
-  // seen et cleared
-  [
-    "any",
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "seen"],
-    ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "cleared"]
-  ], 0.8,
-  // Format nouveau : not_there
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_there"], 0.2,
-  // Format ancien : not_interested
-  ["==", ["coalesce", ["feature-state", "userResponse"], ["get", "userResponse"]], "not_interested"], 0.2,
-  1.0
-]
-/**
- * Génère les couches pour les événements réels (avec gestion des réponses utilisateur)
- */
-const getEventLayers = (
-  isPublicMode: boolean = true
-): Layer[] => {
-  const clusterColor = getPrivacyColor(isPublicMode)
-  const basePinColor = getPrivacyColor(isPublicMode)
-  const pinColor = getPinColorExpression(basePinColor)
-  const pinOpacity = getPinOpacityExpression()
-
-  return createClusterLayers("events", "events", clusterColor, pinColor, pinOpacity)
-}
-
-/**
- * Génère les couches pour les fake pins (avec logique de réponses utilisateur)
- * Utilise feature-state 'pop' pour l'animation de pulsation via icon-opacity
- * et feature-state 'userResponse' pour la couleur et l'opacité selon les réponses
- */
-const getFakeEventLayers = (
-  isPublicMode: boolean = true
-): Layer[] => {
-  const clusterColor = getPrivacyColor(isPublicMode)
-  const basePinColor = getPrivacyColor(isPublicMode)
-  const pinColor = getPinColorExpression(basePinColor)
-  const basePinOpacity = getPinOpacityExpression()
-
-  // Pour les fake pins, utiliser createClusterLayers avec la logique de réponses
-  const baseLayers = createClusterLayers("fake-events", "fake-events", clusterColor, pinColor, basePinOpacity)
-
-  // Modifier le layer pins pour combiner l'opacité basée sur userResponse avec l'animation 'pop'
-  // pop varie de 0 à 1 (cosinus), on l'utilise pour animer l'opacité avec un effet subtil
-  const pinsLayer = baseLayers.find(l => l.id === 'fake-events-pins')
-  if (pinsLayer && pinsLayer.paint) {
-    // Combiner l'opacité de base (userResponse) avec l'animation pop
-    // Animation d'opacité réduite : de 0.7 à 1.0 avec maintien de l'opacité max plus longtemps
-    // Plateau à 1.0 entre 0.3 et 0.7 (40% du cycle reste à opacité maximale)
-    // Utiliser coalesce pour éviter null si pop n'est pas encore défini
-    const popMultiplier = [
-      'interpolate',
-      ['linear'],
-      ['coalesce', ['feature-state', 'pop'], 0],
-      0, 0.7,    // pop = 0 → multiplier = 0.7 (réduit pour effet plus subtil)
-      0.3, 1.0,  // pop = 0.3 → multiplier = 1.0 (début du plateau)
-      0.7, 1.0,  // pop = 0.7 → multiplier = 1.0 (fin du plateau - maintien à 1.0 pendant 40% du cycle)
-      1, 0.7     // pop = 1 → multiplier = 0.7 (retour au minimum)
-    ]
-
-    // Multiplier l'opacité de base par le multiplicateur pop
-    pinsLayer.paint['icon-opacity'] = [
-      '*',
-      basePinOpacity,
-      popMultiplier
-    ]
-  }
-
-  return baseLayers
-}
-
-
-// ===== IMPLÉMENTATION WEB =====
+// ===== COMPOSANT =====
 const MapRendererComponent: React.FC<MapViewProps> = (
   {
     events,
+    filteredEventIds,
     onPinClick,
     onClusterClick,
     onMapReady,
@@ -439,16 +38,16 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
   }
 ) => {
+
   // Ne pas monter la carte si la clé MapTiler est manquante pour éviter des 403
   const mapTilerKey = import.meta.env.VITE_MAPLIBRE_ACCESS_TOKEN
   const isKeyMissing = !mapTilerKey || mapTilerKey.trim().length === 0
   // Récupérer isPublicMode du contexte PrivacyContext
   const { isPublicMode } = usePrivacy()
-  const { getMapFilterIds } = useFilters()
 
   // Récupérer les réponses utilisateur UNIQUEMENT pour la ref initiale (pas pour le render)
-  // Les mises à jour sont gérées par stylingPinsController via feature-state
-  const { responses, currentUserId } = useFomoDataContext()
+  // Les mises à jour instantanées sont gérées via window.setStylingPin (feature-state)
+  const { responses, currentUserId, dataReady } = useDataContext()
 
   // Récupérer l'utilisateur pour la position par défaut de la carte
   const { user } = useAuth()
@@ -457,52 +56,48 @@ const MapRendererComponent: React.FC<MapViewProps> = (
   const [mapLoaded, setMapLoaded] = useState(false)
   const popAnimationFrameRef = useRef<number | null>(null)
   const popPhasesRef = useRef<globalThis.Map<string, number>>(new globalThis.Map<string, number>())
+  const pulseAnimationFrameRef = useRef<number | null>(null)
+  const pulseAnimationStartedRef = useRef<boolean>(false) // Track si l'animation a déjà été démarrée
   const fakePinsSourceRef = useRef<any>(null)
-
-  // Ref pour capturer les réponses initiales une seule fois (quand events ou currentUserId change)
-  // La source ne sera recréée que si events ou currentUserId change, pas si responses change
-  const initialResponsesRef = useRef<typeof responses>(responses)
-  const prevEventsIdsRef = useRef<string>('')
-  const prevUserIdRef = useRef(currentUserId)
+  const mapReadyCalledRef = useRef(false) // Garde pour n'appeler onMapReady qu'une seule fois
 
   // Comparer events par IDs (pas par référence) pour éviter les recréations inutiles
   const eventsIds = useMemo(() => {
     return events?.map(e => e.id).sort().join(',') || ''
   }, [events])
 
-  // Ref pour stocker events et ne recréer la source que si les IDs changent
+  // Ref pour stocker events
   const eventsRef = useRef(events)
   eventsRef.current = events
 
-  // Mettre à jour les refs uniquement quand events (par IDs) ou currentUserId change vraiment
-  // Utiliser useEffect pour éviter que cela déclenche un re-render
+  // Capturer les réponses initiales (snapshot stable)
+  const initialResponsesRef = useRef(responses)
+
+  // Mettre à jour le snapshot des réponses uniquement quand events ou user change
   useEffect(() => {
-    if (eventsIds !== prevEventsIdsRef.current || currentUserId !== prevUserIdRef.current) {
-      initialResponsesRef.current = responses
-      prevEventsIdsRef.current = eventsIds
-      prevUserIdRef.current = currentUserId
-    }
+    initialResponsesRef.current = responses
   }, [eventsIds, currentUserId, responses])
 
-  // Source stable : créer une fois avec TOUS les événements de getDiscoverEvents() et leurs réponses initiales
-  // Le filtrage se fait uniquement via setFilter() sur les layers, pas via setData()
-  // Exclure les fake events de la source principale (ils ont leur propre source)
-  // MÉMORISER avec useMemo en comparant par IDs (pas par référence) pour éviter la recréation à chaque render
+  // Séparer les vrais événements des fake events
   const realEventsOnly = useMemo(() => {
-    return eventsRef.current?.filter((e: Event) => !(e as any).isFake && !e.id.startsWith('fake-')) || []
-  }, [eventsIds]) // Utiliser uniquement eventsIds : si les IDs sont les mêmes, réutiliser le résultat précédent
+    return events?.filter((e: Event) => !(e as any).isFake && !e.id.startsWith('fake-')) || []
+  }, [eventsIds, events])
 
+  // Mapper les réponses utilisateur pour la source
+  // Utiliser responses directement (pas la ref) pour que le useMemo se recalcule quand responses change
   const userResponsesMapForSource = useMemo(() => {
-    return userResponsesMapper(realEventsOnly, initialResponsesRef.current, currentUserId || undefined)
-  }, [realEventsOnly, currentUserId]) // Dépendre de realEventsOnly qui est déjà mémorisé
+    return userResponsesMapper(realEventsOnly, responses, currentUserId || undefined)
+  }, [realEventsOnly, currentUserId, responses])
 
   // Désactiver le clustering en mode visitor (un seul événement réel)
   const isVisitorMode = useMemo(() => realEventsOnly.length === 1, [realEventsOnly.length])
+
+  // Créer la source GeoJSON pour MapLibre
   const eventsSource = useMemo(() => {
-    return realEventsOnly && realEventsOnly.length > 0
+    return realEventsOnly.length > 0
       ? createEventsSource(realEventsOnly, userResponsesMapForSource, isVisitorMode)
       : null
-  }, [realEventsOnly, userResponsesMapForSource, isVisitorMode]) // Dépendre des valeurs mémorisées
+  }, [realEventsOnly, userResponsesMapForSource, isVisitorMode])
 
   // Fonction helper pour centrer sur un événement avec flyTo
   // flyTo crée une animation de "vol" avec arc qui gère automatiquement la séquence
@@ -512,7 +107,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     if (mapRef.current?.getMap && event.venue) {
       const map = mapRef.current.getMap()
       const targetZoom = 12 // Marge de 2 niveaux par rapport au maxZoom du clustering (10) pour stabilité
-      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 1400]
+      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 500]
 
       map.flyTo({
         center: targetCenter,
@@ -526,18 +121,20 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
 
 
-  // Fonction helper pour zoom out
-  const zoomOut = useCallback((targetZoom?: number, duration?: number) => {
+  // Fonction helper pour zoom out avec easing ease-out (appelée à la fermeture d'une EventCard)
+  const zoomOutOnPin = useCallback((zoomLevels?: number, duration?: number) => {
     if (mapRef.current?.getMap) {
       const map = mapRef.current.getMap()
       const currentZoom = map.getZoom()
-      // Si targetZoom fourni, l'utiliser, sinon réduire de 1 niveau seulement
-      const newZoom = targetZoom ?? Math.max(10, currentZoom - 1)
+      // Réduire de quelques niveaux (par défaut 2-3 niveaux)
+      const levelsToReduce = zoomLevels ?? 2.5
+      const newZoom = Math.max(10, currentZoom - levelsToReduce)
       map.easeTo({
         zoom: newZoom,
         pitch: 0, // Maintenir la vue zénithale
         bearing: 0, // Maintenir l'orientation nord
-        duration: duration,
+        duration: duration ?? 2000, // 2s par défaut
+        easing: (t: number) => t * (2 - t) // Ease-out
       })
     }
   }, [])
@@ -586,10 +183,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
       // Ajouter ou mettre à jour la source fake-events
       try {
         if (map.getSource('fake-events')) {
-          console.info('[Map] Updating fake-events source with setData', { features: fakeFeatures.length })
-            ; (map.getSource('fake-events') as any).setData(fakeGeoJSON)
+          ; (map.getSource('fake-events') as any).setData(fakeGeoJSON)
         } else {
-          console.info('[Map] Adding fake-events source with clustering')
           map.addSource('fake-events', {
             type: 'geojson',
             data: fakeGeoJSON,
@@ -601,7 +196,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           })
 
           // Ajouter les layers pour fake pins avec clustering - seulement si l'icône est disponible
-          console.info('[Map] Adding fake-events layers (cluster + pins)')
           try {
             // Utiliser la fonction unifiée pour générer les layers
             const fakeLayers = getFakeEventLayers(isPublicMode)
@@ -617,8 +211,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
                 layout: layer.layout,
               })
             })
-
-            console.info('[Map] fake-events layers added successfully')
           } catch (err: any) {
             console.error('[Map] Error adding fake-events layers', {
               name: err?.name || 'UnknownError',
@@ -645,9 +237,8 @@ const MapRendererComponent: React.FC<MapViewProps> = (
         }
       })
 
-      // Démarrer l'animation pop si prefers-reduced-motion est false
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      if (!prefersReducedMotion && popAnimationFrameRef.current === null) {
+      // Démarrer l'animation pop
+      if (popAnimationFrameRef.current === null) {
         const POP_PERIOD = 5000 // Augmenté à 3 secondes pour une pulsation plus lente
         let startTime = performance.now()
 
@@ -673,16 +264,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
         }
 
         popAnimationFrameRef.current = requestAnimationFrame(tick)
-      } else if (prefersReducedMotion) {
-        // Fallback : fade-in simple pour reduced motion
-        try {
-          const layer = map.getLayer('fake-events-pins')
-          if (layer) {
-            map.setPaintProperty('fake-events-pins', 'icon-opacity', 1.0)
-          }
-        } catch (e) {
-          // Ignorer
-        }
       }
     } else {
       // Supprimer la source fake-events si plus de fake pins
@@ -717,30 +298,51 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     }
   }, [mapLoaded, events, isPublicMode])
 
+
   // Exposer les fonctions globalement
   useEffect(() => {
     if (mapLoaded && mapRef.current) {
       const map = mapRef.current.getMap()
+
         // Exposer la fonction globalement pour que CreateEventModal puisse l'utiliser
         ; (window.addTemporaryEventToMap = (event: Event, isPublicMode: boolean) => {
           addTemporaryEvent(map, event, isPublicMode)
         })
-        // Exposer la fonction zoomOut pour DiscoverPage
-        ; (window.zoomOutMap = zoomOut)
+        // Exposer la fonction zoomOutOnPin pour DiscoverPage (fermeture EventCard)
+        ; (window.zoomOutOnPin = (zoomLevels?: number, duration?: number) => {
+          zoomOutOnPin(zoomLevels, duration)
+        })
         // Exposer la fonction centerOnEvent pour LastActivities
         ; (window.centerMapOnEvent = (event: Event, duration?: number) => {
           centerOnPin(event, duration)
         })
         // Exposer getMap pour DiscoverPage
         ; (window.getMap = () => map)
+        // Exposer setStylingPin pour EventCard
+        ; (window.setStylingPin = (eventId: string, response: string | null) => {
+          if (!map) return
+          const sourceName = eventId.startsWith('fake-') ? 'fake-events' : 'events'
+          try {
+            if (!response) {
+              // Supprimer la réponse
+              map.removeFeatureState({ source: sourceName, id: eventId }, 'userResponse')
+              // Définir pulse à 1.0 (opacité normale) pour éviter les erreurs MapLibre
+              map.setFeatureState({ source: sourceName, id: eventId }, { pulse: 1.0 })
+            } else {
+              // Définir la réponse
+              map.setFeatureState({ source: sourceName, id: eventId }, { userResponse: response })
+              // Si la réponse n'est plus "linked" ou "invited", définir pulse à 1.0 (opacité normale)
+              if (response !== 'linked' && response !== 'invited') {
+                map.setFeatureState({ source: sourceName, id: eventId }, { pulse: 1.0 })
+              }
+            }
+          } catch (error) {
+            // Ignorer silencieusement si la source/feature n'existe pas encore
+          }
+        })
         // Exposer startPublicModeSequence pour DiscoverPage
         ; (window.startPublicModeSequence = (targetZoom: number, duration: number) => {
-          console.info('[Map] startPublicModeSequence called', { targetZoom, duration, mapAvailable: !!map })
           if (map) {
-            const currentZoom = map.getZoom()
-            const currentCenter = map.getCenter()
-            console.info('[Map] Current map state before flyTo', { currentZoom, currentCenter: currentCenter ? [currentCenter.lng, currentCenter.lat] : null })
-
             map.flyTo({
               zoom: targetZoom,
               pitch: 0, // Maintenir la vue zénithale
@@ -748,15 +350,6 @@ const MapRendererComponent: React.FC<MapViewProps> = (
               duration: duration,
               easing: (t: number) => t * (2 - t) // Ease-out
             })
-
-            console.info('[Map] flyTo called for Public Mode zoom-out', { targetZoom, duration })
-
-            // Tracking après injection fake pins
-            setTimeout(() => {
-              console.log('🎯 [Analytics] fake_pins_shown', { count: events?.filter((e: Event) => (e as any).isFake || e.id.startsWith('fake-')).length || 0 })
-            }, 500)
-          } else {
-            console.warn('[Map] startPublicModeSequence: map not available')
           }
         })
         // Exposer fadeOutFakePins pour DiscoverPage
@@ -837,7 +430,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           }
         })
     }
-  }, [mapLoaded, zoomOut, centerOnPin, events])
+  }, [mapLoaded, zoomOutOnPin, centerOnPin, events])
 
 
 
@@ -871,10 +464,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
         if (src && src.getClusterExpansionZoom) {
           src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
-            if (err) {
-              console.debug('[MapRenderer] Cluster expansion zoom error', err);
-              return;
-            }
+            if (err) return;
             map.easeTo({
               center: feature.geometry.coordinates as [number, number],
               zoom,
@@ -898,23 +488,10 @@ const MapRendererComponent: React.FC<MapViewProps> = (
           ? events.find((e: Event) => e.id === eventId && ((e as any).isFake || e.id.startsWith('fake-')))
           : events.find((e: Event) => e.id === eventId)
 
-        console.log('🔍 [MapRenderer] handleClick event:', {
-          eventId,
-          eventFound: !!event,
-          eventsCount: events.length,
-          hasOnPinClick: !!onPinClick
-        })
-
         if (event && onPinClick) {
           // Animer la carte vers l'événement (réutiliser la fonction helper)
           centerOnPin(event)
           onPinClick(event)
-        } else {
-          console.warn('⚠️ [MapRenderer] Event non trouvé ou onPinClick manquant:', {
-            eventId,
-            eventFound: !!event,
-            hasOnPinClick: !!onPinClick
-          })
         }
       }
     },
@@ -949,12 +526,21 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     // Note: Les requêtes MapTiler sont interceptées automatiquement via httpInterceptor
     // qui est initialisé dans main.tsx. Pas besoin d'instrumentation supplémentaire ici.
 
+    // Helper pour marquer la carte comme prête (évite duplication)
+    // Ne pas appeler onMapReady plusieurs fois même si handleMapLoad est appelé plusieurs fois
+    const markMapAsReady = () => {
+      setMapLoaded(true)
+      if (!mapReadyCalledRef.current) {
+        mapReadyCalledRef.current = true
+        onMapReady?.()
+      }
+    }
+
     // Enregistrer l'icône 'pin' dès le chargement de la carte puis marquer mapLoaded
     try {
       const has = map.hasImage && map.hasImage('pin')
       if (has) {
-        setMapLoaded(true)
-        onMapReady?.()
+        markMapAsReady()
         return
       }
     } catch { /* noop */ }
@@ -968,13 +554,11 @@ const MapRendererComponent: React.FC<MapViewProps> = (
             }
           } catch { /* noop */ }
         }
-        // Quoi qu'il arrive, marquer la carte comme prête pour déclencher le rendu
-        setMapLoaded(true)
-        onMapReady?.()
+        // Quoi qu'il arrive, marquer la carte comme prête
+        markMapAsReady()
       })
     } catch {
-      setMapLoaded(true)
-      onMapReady?.()
+      markMapAsReady()
     }
   }, [onMapReady])
 
@@ -994,24 +578,28 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     const source = map.getSource('events') as any
     if (!source || source.setData === undefined) return
 
-    // Récupérer les IDs filtrés
-    const filteredIds = getMapFilterIds()
+    // Attendre que dataReady soit true avant d'initialiser le pulse
+    if (!dataReady) return
+
+    // Récupérer les IDs filtrés depuis la prop (ou tous les IDs si pas de filtre)
+    const currentEvents = eventsRef.current || []
+    const idsToFilter = filteredEventIds || currentEvents.map(e => e.id)
 
     // Vérifier si les IDs ont changé (éviter les appels setData() inutiles)
     const idsChanged =
-      filteredIds.length !== prevFilteredIdsRef.current.length ||
-      !filteredIds.every(id => prevFilteredIdsRef.current.includes(id))
+      idsToFilter.length !== prevFilteredIdsRef.current.length ||
+      !idsToFilter.every(id => prevFilteredIdsRef.current.includes(id))
 
     if (!idsChanged) {
       // Les filtres n'ont pas changé, pas besoin de mettre à jour la source
       return
     }
 
-    prevFilteredIdsRef.current = filteredIds
-    const filteredIdsSet = new Set(filteredIds)
+    prevFilteredIdsRef.current = idsToFilter
+    const filteredIdsSet = new Set(idsToFilter)
 
     // Filtrer les événements pour ne garder que ceux qui passent les filtres
-    const filteredEvents = events.filter(e => filteredIdsSet.has(e.id))
+    const filteredEvents = currentEvents.filter(e => filteredIdsSet.has(e.id))
 
     // Mapper les réponses initiales pour les événements filtrés
     const userResponsesMapForFiltered = userResponsesMapper(filteredEvents, initialResponsesRef.current, currentUserId || undefined)
@@ -1042,30 +630,79 @@ const MapRendererComponent: React.FC<MapViewProps> = (
       // Mettre à jour la source avec les événements filtrés (MapLibre recalcule automatiquement les clusters)
       // Cela déclenche un re-rendu MapLibre (pas React) pour afficher les nouvelles données
       source.setData(filteredGeoJson)
+
+      // Initialiser le pulse pour les événements "linked" ou "invited"
+      // dataReady garantit que la map et les données sont prêtes
+      if (!pulseAnimationStartedRef.current && filteredEvents.length > 0) {
+        const linkedOrInvitedEvents = filteredEvents.filter((e: Event) => {
+          const response = userResponsesMapForFiltered[e.id]
+          return response === 'linked' || response === 'invited'
+        })
+
+        if (linkedOrInvitedEvents.length > 0) {
+          pulseAnimationStartedRef.current = true
+
+          // Attendre un court délai après setData pour que MapLibre traite les features
+          setTimeout(() => {
+            // Initialiser le feature-state pulse
+            linkedOrInvitedEvents.forEach((event: Event) => {
+              try {
+                map.setFeatureState({ source: 'events', id: event.id }, { pulse: 0.2 })
+              } catch (e) {
+                // Ignorer si le feature-state n'existe pas encore
+              }
+            })
+
+            // Démarrer l'animation pulse avec requestAnimationFrame (boucle infinie)
+            if (pulseAnimationFrameRef.current === null) {
+              const PULSE_PERIOD = 1000 // 1 seconde
+              let startTime = performance.now()
+
+              const tick = (now: number) => {
+                if (!map || !map.getSource('events')) {
+                  pulseAnimationFrameRef.current = null
+                  return
+                }
+
+                // Utiliser le modulo pour faire boucler l'animation indéfiniment
+                const elapsed = (now - startTime) % PULSE_PERIOD
+
+                // Calculer l'opacité avec une fonction sinusoïdale qui boucle (plage 0.2 à 1.0)
+                const normalizedPulse = 0.5 - 0.5 * Math.cos((elapsed / PULSE_PERIOD) * 2 * Math.PI)
+                const opacity = 0.2 + 0.8 * normalizedPulse
+
+                // Mettre à jour tous les événements linked/invited
+                linkedOrInvitedEvents.forEach((event: Event) => {
+                  try {
+                    map.setFeatureState({ source: 'events', id: event.id }, { pulse: opacity })
+                  } catch (e) {
+                    // Ignorer si le feature-state n'existe pas
+                  }
+                })
+
+                // Continuer l'animation en boucle
+                pulseAnimationFrameRef.current = requestAnimationFrame(tick)
+              }
+
+              pulseAnimationFrameRef.current = requestAnimationFrame(tick)
+            }
+          }, 100) // Délai de 100ms pour laisser MapLibre traiter setData
+        } else {
+          pulseAnimationStartedRef.current = true
+        }
+      }
     } catch (error) {
-      console.debug('[MapRenderer] setData error:', error)
+      console.error('[MapRenderer] setData error:', error)
     }
-  }, [mapLoaded, events, getMapFilterIds, currentUserId])
 
-
-
-  // Note: Le styling des pins est maintenant géré par stylingPinsController
-  // Les réponses initiales sont incluses dans properties.userResponse au montage
-  // Les mises à jour instantanées utilisent feature-state via setUserResponseFeatureState()
-
-  // Attacher/détacher le contrôleur de styling des pins
-  // Mettre à jour le getter quand la carte est chargée pour s'assurer qu'il fonctionne
-  useEffect(() => {
-    attachStylingPinsController(() => mapRef.current?.getMap())
-    return () => detachStylingPinsController()
-  }, [mapLoaded]) // Re-attacher quand la carte est chargée
-
-
-  // Note: Les filtres sont appliqués via setData() (mise à jour des données) ET setFilter() (filtrage des layers)
-  // pour maintenir le filtrage même après re-render ou fermeture d'EventCard
-
-
-
+    return () => {
+      // Cleanup : arrêter l'animation pulse si le composant est démonté ou les dépendances changent
+      if (pulseAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(pulseAnimationFrameRef.current)
+        pulseAnimationFrameRef.current = null
+      }
+    }
+  }, [mapLoaded, events, filteredEventIds, currentUserId, dataReady])
 
   // ===== RENDER =====
 
@@ -1168,24 +805,9 @@ const MapRendererComponent: React.FC<MapViewProps> = (
 
 MapRendererComponent.displayName = 'MapRendererComponent'
 
-// Mémoriser le composant pour éviter les re-renders inutiles
-// Ne re-render que si events (par IDs), currentUserId, ou les callbacks changent
-export const MapRenderer = React.memo(MapRendererComponent, (prevProps, nextProps) => {
-  // Comparer events par IDs (pas par référence)
-  const prevEventsIds = prevProps.events?.map(e => e.id).sort().join(',') || ''
-  const nextEventsIds = nextProps.events?.map(e => e.id).sort().join(',') || ''
-
-  // Re-render seulement si :
-  // - Les IDs d'événements changent
-  // - Les callbacks changent (référence)
-  // - Le style change (référence)
-  return (
-    prevEventsIds === nextEventsIds &&
-    prevProps.onPinClick === nextProps.onPinClick &&
-    prevProps.onClusterClick === nextProps.onClusterClick &&
-    prevProps.onMapReady === nextProps.onMapReady &&
-    prevProps.style === nextProps.style
-  )
-})
+// Export direct sans React.memo pour permettre les re-renders quand les filtres changent
+// Les filtres sont gérés via useFilters() à l'intérieur du composant
+// React.memo bloquait les re-renders nécessaires pour la mise à jour du filtersSnapshot
+export const MapRenderer = MapRendererComponent
 
 export { addTemporaryEvent }

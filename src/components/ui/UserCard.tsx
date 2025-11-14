@@ -66,7 +66,7 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
             style={(onExpandChange || onClick) ? { cursor: 'pointer' } : undefined}
         >
             {/* Zone fixe 1 - Header avec nom, infos et bouton expand */}
-            <div className="event-card-header user-card-header">
+            <div className="user-card-header">
                 {/* Infos utilisateur */}
                 <div className="user-card-info">
                     {/* Header avec nom et badge Public/Privé */}
@@ -113,12 +113,7 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
                         </div>
                     )}
 
-                    {/* Informations supplémentaires */}
-                    <div className="event-info-grid">
-                        <div className="info-item">
-                            <strong>Amis:</strong> {user.friendsCount || 0}
-                        </div>
-                    </div>
+
                 </div>
             </div>
 

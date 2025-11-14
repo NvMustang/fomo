@@ -5,7 +5,7 @@
  * Utilisé depuis UserConnexionModal ou visitorDiscoverPublicMode
  */
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components'
@@ -13,7 +13,7 @@ import { useModalScrollHint } from '@/hooks'
 import { getCity } from '@/utils/getSessionId'
 import { isValidEmail } from '@/utils/emailValidation'
 import { onboardingTracker } from '@/onboarding/utils/onboardingTracker'
-import { FomoDataManager } from '@/utils/dataManager'
+import { AddressAutocomplete } from '@/utils/AddressAutocomplete'
 
 interface UserRegistrationModalProps {
     isOpen: boolean
@@ -31,44 +31,79 @@ export const UserRegistrationModal: React.FC<UserRegistrationModalProps> = ({
     renderInWelcomeScreen = false
 }) => {
     const { login, isLoading } = useAuth()
-    const dataManagerRef = useRef(new FomoDataManager())
     const [name, setName] = useState('')
     const [email, setEmail] = useState(initialEmail)
     const [city, setCity] = useState('')
     const [error, setError] = useState('')
-
+    const [cityWarning, setCityWarning] = useState('')
+    const [selectedLocation, setSelectedLocation] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null })
+    const [mapBounds, setMapBounds] = useState<[number, number, number, number] | undefined>(undefined)
+    const [isAddressValid, setIsAddressValid] = useState(false) // Suivre si une adresse Mapbox valide est sélectionnée
     const modalContentRef = useModalScrollHint(isOpen)
 
-    // Charger les données depuis sessionStorage au montage
+    // Récupérer les bounds de la carte quand le modal s'ouvre
     useEffect(() => {
         if (!isOpen) {
             setName('')
             setEmail(initialEmail || '')
             setCity('')
             setError('')
+            setCityWarning('')
+            setSelectedLocation({ lat: null, lng: null })
+            setMapBounds(undefined)
+            setIsAddressValid(false)
             return
         }
 
-        // Charger email depuis sessionStorage si pas fourni
+        // Récupérer les bounds de la carte pour les passer à l'API Mapbox
+        try {
+            const map = window.getMap?.() as { getBounds?: () => { getNorth: () => number; getSouth: () => number; getEast: () => number; getWest: () => number } } | null | undefined
+
+            if (map?.getBounds) {
+                const bounds = map.getBounds()
+                const boundsArray: [number, number, number, number] = [
+                    bounds.getWest(),
+                    bounds.getSouth(),
+                    bounds.getEast(),
+                    bounds.getNorth()
+                ]
+                setMapBounds(boundsArray)
+                console.log('🗺️ [UserRegistrationModal] Bounds de la carte:', boundsArray)
+            }
+        } catch (mapError) {
+            console.warn('⚠️ [UserRegistrationModal] Impossible d\'accéder aux bounds de la carte:', mapError)
+        }
+    }, [isOpen, initialEmail])
+
+    // Charger les données depuis sessionStorage au montage
+    useEffect(() => {
+        if (!isOpen) {
+            return
+        }
+
+        // Charger email depuis localStorage si pas fourni
         if (!initialEmail) {
             try {
-                const visitorEmail = sessionStorage.getItem('fomo-visit-email')
+                const visitorEmail = localStorage.getItem('fomo-visit-email')
                 if (visitorEmail && visitorEmail.trim()) {
                     setEmail(visitorEmail.trim())
                 }
             } catch {
-                // Ignorer si sessionStorage indisponible
+                // Ignorer si localStorage indisponible
             }
         }
 
-        // Charger nom depuis sessionStorage
+        // Charger nom depuis user (visitor)
         try {
-            const visitorName = sessionStorage.getItem('fomo-visit-name')
-            if (visitorName && visitorName.trim()) {
-                setName(visitorName.trim())
+            const savedUser = localStorage.getItem('fomo-user')
+            if (savedUser) {
+                const userData = JSON.parse(savedUser)
+                if (userData.name && userData.name.trim()) {
+                    setName(userData.name.trim())
+                }
             }
         } catch {
-            // Ignorer si sessionStorage indisponible
+            // Ignorer si localStorage indisponible
         }
 
         // Charger la ville depuis storage
@@ -80,7 +115,7 @@ export const UserRegistrationModal: React.FC<UserRegistrationModalProps> = ({
         } catch {
             // Ignorer si storage indisponible
         }
-    }, [isOpen, initialEmail])
+    }, [isOpen])
 
     // Handler pour le formulaire d'inscription complet
     const handleRegistrationSubmit = async (e: React.FormEvent) => {
@@ -108,34 +143,24 @@ export const UserRegistrationModal: React.FC<UserRegistrationModalProps> = ({
             return
         }
 
+        // Vérifier qu'une adresse Mapbox valide a été sélectionnée
+        if (!isAddressValid || !selectedLocation.lat || !selectedLocation.lng) {
+            setError('Veuillez sélectionner une ville dans la liste des suggestions')
+            onboardingTracker.trackStep('user_form_city_error')
+            return
+        }
+
         try {
-            // Géocoder la ville AVANT de créer le profil
-            let lat: number | null = null
-            let lng: number | null = null
-            
-            try {
-                console.log('🌐 Géocodage de la ville:', city.trim())
-                const addresses = await dataManagerRef.current.searchAddresses(city.trim(), { limit: 1 })
-                
-                if (addresses.length > 0) {
-                    const firstResult = addresses[0]
-                    lat = parseFloat(firstResult.lat)
-                    lng = parseFloat(firstResult.lon)
-                    console.log('✅ Coordonnées trouvées:', { lat, lng })
-                } else {
-                    console.warn('⚠️ Aucune coordonnée trouvée pour:', city.trim())
-                }
-            } catch (geocodeError) {
-                console.error('❌ Erreur lors du géocodage:', geocodeError)
-                // Ne pas bloquer l'inscription si le géocodage échoue
-            }
-            
+            const lat = selectedLocation.lat
+            const lng = selectedLocation.lng
+            console.log('✅ Coordonnées sélectionnées:', { lat, lng })
+
             // Créer le profil avec toutes les données (y compris coordonnées) en une seule fois
             await login(name.trim(), city.trim(), email.trim(), undefined, lat, lng)
-            
+
             // Track création de compte réussie
             onboardingTracker.trackStep('user_account_created')
-            
+
             // Marquer le signup pour animation navbar
             try {
                 sessionStorage.setItem('fomo-just-signed-up', 'true')
@@ -192,21 +217,32 @@ export const UserRegistrationModal: React.FC<UserRegistrationModalProps> = ({
                                 Votre ville
                                 <span className="form-label-hint">Obligatoire</span>
                             </label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="Ex: Bruxelles, New York, Paris..."
+                            <AddressAutocomplete
                                 value={city}
-                                onChange={(e) => {
-                                    setCity(e.target.value)
+                                onChange={(value) => {
+                                    setCity(value)
+                                    // Nettoyer les erreurs/warnings si l'utilisateur modifie la ville
+                                    if (cityWarning) setCityWarning('')
+                                    if (error && error.includes('sélectionner une ville')) setError('')
                                     // Track focus sur le premier changement (approximation)
-                                    if (!city && e.target.value) {
+                                    if (!city && value) {
                                         onboardingTracker.trackStep('user_form_city_focus')
                                     }
                                 }}
-                                onFocus={() => onboardingTracker.trackStep('user_form_city_focus')}
-                                onBlur={() => onboardingTracker.trackStep('user_form_city_blur')}
+                                onAddressSelect={(address) => {
+                                    setSelectedLocation({ lat: address.lat, lng: address.lng })
+                                    setCityWarning('') // Nettoyer le warning si une adresse est sélectionnée
+                                    if (error && error.includes('sélectionner une ville')) setError('')
+                                    onboardingTracker.trackStep('user_form_city_focus')
+                                }}
+                                onValidationChange={(isValid) => {
+                                    setIsAddressValid(isValid)
+                                }}
+                                placeholder="Ex: Bruxelles, New York, Paris..."
+                                className="form-input"
                                 disabled={isLoading}
+                                minLength={3}
+                                bbox={mapBounds}
                             />
                         </div>
 
@@ -243,7 +279,7 @@ export const UserRegistrationModal: React.FC<UserRegistrationModalProps> = ({
                             <div className="form-actions">
                                 <Button
                                     type="submit"
-                                    disabled={isLoading || !name.trim() || !city.trim() || !email.trim()}
+                                    disabled={isLoading || !name.trim() || !city.trim() || !email.trim() || !isAddressValid}
                                     variant="primary"
                                 >
                                     Créer mon profil

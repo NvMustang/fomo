@@ -41,42 +41,13 @@ interface AggregatedData {
     totalRequests: number
 }
 
-interface OnboardingStats {
-    totalSessions: number
-    completedSessions: number
-    abandonedSessions: number
-    averageDuration: number | null
-    averageSteps: number
-    abandonmentRate: number
-    stepAverages: Record<string, number>
-    abandonmentPoints: Record<string, number>
-    sessions: Array<{
-        sessionId: string
-        startTime: string
-        endTime: string | null
-        completed: boolean
-        abandonedAt: string | null
-        totalDuration: string | null
-        stepsCount: string
-        lastStep: string | null
-    }>
-    steps: Array<{
-        sessionId: string
-        step: string
-        timestamp: string
-        timeSinceStart: string
-        timeSinceLastStep: string | null
-    }>
-}
-
 const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
     const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
-    const [onboardingStats, setOnboardingStats] = useState<OnboardingStats | null>(null)
     const [selectedProvider, setSelectedProvider] = useState<ApiProvider | 'all'>('all')
     const [maptilerInputValue, setMapTilerInputValue] = useState<string>('')
     const [maptilerNote, setMapTilerNote] = useState<string>('')
     const [loading, setLoading] = useState<boolean>(false)
-    const [onboardingLoading, setOnboardingLoading] = useState<boolean>(false)
+
 
     const loadData = useCallback(async () => {
         // Charger les données agrégées depuis Google Sheets
@@ -97,33 +68,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         }
     }, [])
 
-    const loadOnboardingData = useCallback(async () => {
-        // Charger les données d'onboarding depuis Google Sheets
-        setOnboardingLoading(true)
-        try {
-            const apiUrl = getApiBaseUrl()
-            const response = await fetch(`${apiUrl}/onboarding/aggregated`)
-            const result = await response.json()
-            if (result.success) {
-                setOnboardingStats(result.data)
-            } else {
-                console.warn('⚠️ Erreur chargement données onboarding:', result.error)
-            }
-        } catch (error) {
-            console.warn('⚠️ Erreur chargement données onboarding:', error)
-        } finally {
-            setOnboardingLoading(false)
-        }
-    }, [])
-
     useEffect(() => {
         loadData()
-        loadOnboardingData()
 
         // Auto-refresh toutes les heures
         const interval = setInterval(() => {
             loadData()
-            loadOnboardingData()
         }, 60 * 60 * 1000) // 1 heure
 
         // Note: La sauvegarde automatique est gérée par autoSaveAnalytics dans main.tsx
@@ -132,7 +82,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
         return () => {
             clearInterval(interval)
         }
-    }, [loadData, loadOnboardingData])
+    }, [loadData])
 
     const handleAddMapTilerReference = async () => {
         const value = parseInt(maptilerInputValue, 10)
@@ -147,7 +97,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
 
         // Sauvegarder dans Google Sheets d'abord
         await saveAnalyticsToBackend()
-        
+
         // Puis recharger les données depuis le backend
         await loadData()
     }
@@ -602,16 +552,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                                         </LineChart>
                                     </ResponsiveContainer>
                                 </div>
-                                <div className="analytics-comparison-legend">
-                                    <div className="analytics-legend-item">
-                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--primary)' }}></div>
-                                        <span>Notre compteur (cumulatif)</span>
-                                    </div>
-                                    <div className="analytics-legend-item">
-                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--success)' }}></div>
-                                        <span>MapTiler (valeurs enregistrées)</span>
-                                    </div>
-                                </div>
                             </>
                         )
                     })()}
@@ -683,245 +623,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
                         </div>
                     )
                 })()}
-            </div>
-
-            {/* Section Onboarding */}
-            <div className="analytics-section">
-                <h3 className="analytics-section-title">📈 Onboarding - Parcours d'intégration</h3>
-                
-                {onboardingLoading ? (
-                    <div className="analytics-loading">Chargement des statistiques d'onboarding...</div>
-                ) : onboardingStats ? (
-                    <>
-                        {/* Stats globales onboarding */}
-                        <div className="analytics-stats-grid">
-                            <div className="analytics-stat-card">
-                                <div className="analytics-stat-label">Total Sessions</div>
-                                <div className="analytics-stat-value">{onboardingStats.totalSessions.toLocaleString()}</div>
-                            </div>
-                            <div className="analytics-stat-card analytics-stat-success">
-                                <div className="analytics-stat-label">Sessions Complétées</div>
-                                <div className="analytics-stat-value">{onboardingStats.completedSessions.toLocaleString()}</div>
-                                <div className="analytics-stat-percent">
-                                    {onboardingStats.totalSessions > 0 
-                                        ? ((onboardingStats.completedSessions / onboardingStats.totalSessions) * 100).toFixed(1) 
-                                        : 0}%
-                                </div>
-                            </div>
-                            <div className="analytics-stat-card analytics-stat-error">
-                                <div className="analytics-stat-label">Sessions Abandonnées</div>
-                                <div className="analytics-stat-value">{onboardingStats.abandonedSessions.toLocaleString()}</div>
-                                <div className="analytics-stat-percent">
-                                    {onboardingStats.abandonmentRate.toFixed(1)}%
-                                </div>
-                            </div>
-                            <div className="analytics-stat-card">
-                                <div className="analytics-stat-label">Durée Moyenne</div>
-                                <div className="analytics-stat-value">
-                                    {onboardingStats.averageDuration !== null
-                                        ? `${Math.round(onboardingStats.averageDuration / 1000)}s`
-                                        : 'N/A'}
-                                </div>
-                            </div>
-                            <div className="analytics-stat-card">
-                                <div className="analytics-stat-label">Étapes Moyennes</div>
-                                <div className="analytics-stat-value">{onboardingStats.averageSteps.toFixed(1)}</div>
-                            </div>
-                        </div>
-
-                        {/* Graphique des temps moyens par étape */}
-                        {Object.keys(onboardingStats.stepAverages).length > 0 && (
-                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
-                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
-                                    Temps moyen par étape (en secondes)
-                                </h4>
-                                <div className="analytics-comparison-chart">
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart
-                                            data={Object.entries(onboardingStats.stepAverages)
-                                                .map(([step, time]) => ({
-                                                    step: step.replace(/_/g, ' '),
-                                                    time: Math.round(time / 1000) // Convertir en secondes
-                                                }))
-                                                .sort((a, b) => a.time - b.time)}
-                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                            <XAxis
-                                                dataKey="step"
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={100}
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '11px' }}
-                                            />
-                                            <YAxis
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '12px' }}
-                                                label={{ value: 'Temps (s)', angle: -90, position: 'insideLeft' }}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'var(--surface)',
-                                                    border: '1px solid var(--border)',
-                                                    borderRadius: 'var(--radius)',
-                                                    color: 'var(--text)'
-                                                }}
-                                                formatter={(value: unknown) => [`${value}s`, 'Temps moyen']}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="time"
-                                                stroke="var(--primary)"
-                                                strokeWidth={2}
-                                                dot={{ r: 4 }}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Points d'abandon */}
-                        {Object.keys(onboardingStats.abandonmentPoints).length > 0 && (
-                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
-                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
-                                    Points d'abandon (où les utilisateurs quittent)
-                                </h4>
-                                <div className="analytics-comparison-chart">
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart
-                                            data={Object.entries(onboardingStats.abandonmentPoints)
-                                                .map(([step, count]) => ({
-                                                    step: step.replace(/_/g, ' '),
-                                                    count
-                                                }))
-                                                .sort((a, b) => b.count - a.count)}
-                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                            <XAxis
-                                                dataKey="step"
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={100}
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '11px' }}
-                                            />
-                                            <YAxis
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '12px' }}
-                                                label={{ value: 'Nombre d\'abandons', angle: -90, position: 'insideLeft' }}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'var(--surface)',
-                                                    border: '1px solid var(--border)',
-                                                    borderRadius: 'var(--radius)',
-                                                    color: 'var(--text)'
-                                                }}
-                                                formatter={(value: unknown) => {
-                                                    const numValue = typeof value === 'number' ? value : Number(value)
-                                                    return [isNaN(numValue) ? 'N/A' : numValue.toString(), 'Abandons']
-                                                }}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="count"
-                                                stroke="var(--error)"
-                                                strokeWidth={2}
-                                                dot={{ r: 4 }}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Graphique évolution du temps de session dans le temps */}
-                        {onboardingStats.sessions.length > 0 && (
-                            <div className="analytics-comparison-chart-container" style={{ marginTop: 'var(--lg)' }}>
-                                <h4 className="analytics-references-title" style={{ marginBottom: 'var(--md)' }}>
-                                    Évolution des durées de session (dernières sessions)
-                                </h4>
-                                <div className="analytics-comparison-chart">
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart
-                                            data={(() => {
-                                                const lastSessions = onboardingStats.sessions.slice(-50)
-                                                const startIndex = Math.max(0, onboardingStats.sessions.length - 50)
-                                                return lastSessions.map((session, index) => ({
-                                                    session: `#${startIndex + index + 1}`,
-                                                    duration: session.totalDuration ? Math.round(parseFloat(session.totalDuration) / 1000) : null,
-                                                    completed: session.completed
-                                                }))
-                                            })()}
-                                            margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                            <XAxis
-                                                dataKey="session"
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={80}
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '11px' }}
-                                            />
-                                            <YAxis
-                                                stroke="var(--text-secondary)"
-                                                style={{ fontSize: '12px' }}
-                                                label={{ value: 'Durée (s)', angle: -90, position: 'insideLeft' }}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'var(--surface)',
-                                                    border: '1px solid var(--border)',
-                                                    borderRadius: 'var(--radius)',
-                                                    color: 'var(--text)'
-                                                }}
-                                                formatter={(value: unknown) => {
-                                                    if (value === null || value === undefined) return ['N/A', 'Durée']
-                                                    const numValue = typeof value === 'number' ? value : Number(value)
-                                                    return [isNaN(numValue) ? 'N/A' : `${numValue}s`, 'Durée']
-                                                }}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="duration"
-                                                stroke="var(--primary)"
-                                                strokeWidth={2}
-                                                dot={(props: any) => {
-                                                    const { payload } = props
-                                                    return (
-                                                        <circle
-                                                            cx={props.cx}
-                                                            cy={props.cy}
-                                                            r={4}
-                                                            fill={payload.completed ? 'var(--success)' : 'var(--error)'}
-                                                        />
-                                                    )
-                                                }}
-                                                connectNulls={false}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                                <div className="analytics-comparison-legend" style={{ marginTop: 'var(--md)' }}>
-                                    <div className="analytics-legend-item">
-                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--success)' }}></div>
-                                        <span>Sessions complétées</span>
-                                    </div>
-                                    <div className="analytics-legend-item">
-                                        <div className="analytics-legend-color" style={{ backgroundColor: 'var(--error)' }}></div>
-                                        <span>Sessions abandonnées</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                ) : (
-                    <div className="analytics-empty">Aucune donnée d'onboarding disponible</div>
-                )}
             </div>
 
             {/* Historique récent */}

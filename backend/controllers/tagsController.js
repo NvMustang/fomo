@@ -17,7 +17,7 @@ class TagsController {
             console.log(`🏷️  [${requestId}] [${timestamp}] Récupération de tous les tags...`)
             console.log(`🏷️  [${requestId}] Headers:`, req.headers['user-agent'] || 'unknown')
 
-            const tags = await this._computeTagsFromEvents()
+            const tags = await TagsController._computeTagsFromEvents()
 
             console.log(`✅ [${requestId}] ${tags.length} tags récupérés`)
             res.json({ success: true, data: tags })
@@ -37,7 +37,7 @@ class TagsController {
             const limit = parseInt(req.query.limit) || 20
             console.log(`🏷️  [${requestId}] Récupération des ${limit} tags les plus populaires...`)
 
-            const tags = await this._computeTagsFromEvents()
+            const tags = await TagsController._computeTagsFromEvents()
 
             // Trier par popularité décroissante
             const sortedTags = tags.sort((a, b) => b.usage_count - a.usage_count)
@@ -70,7 +70,7 @@ class TagsController {
 
             console.log(`🏷️  [${requestId}] Recherche de tags: "${query}"`)
 
-            const tags = await this._computeTagsFromEvents()
+            const tags = await TagsController._computeTagsFromEvents()
 
             // Filtrer les tags qui correspondent à la query
             const matchingTags = tags
@@ -126,71 +126,64 @@ class TagsController {
      * @returns {Promise<Array<{tag: string, usage_count: number, last_used: string, created_at: string, created_by: string}>>}
      */
     static async _computeTagsFromEvents() {
-        // Récupérer tous les événements avec leurs tags
-        const events = await DataServiceV2.getAllActiveData(
-            'Events!A2:Q',
-            DataServiceV2.mappers.event
-        )
-
-        // Enrichir avec les tags depuis la feuille Tags
-        const tagsMap = await DataServiceV2.getTagsByEventIdMap(10)
-        if (tagsMap.size > 0) {
-            for (const evt of events) {
-                const fromSheet = tagsMap.get(evt.id)
-                if (fromSheet && fromSheet.length) {
-                    evt.tags = fromSheet
+        try {
+            // VERSION OPTIMISÉE : Lit uniquement Tags Sheet (pas besoin de charger tous les events)
+            // IMPORTANT: Utiliser sheets-config.js directement (comme dataService.js)
+            const { sheets, SPREADSHEET_ID } = require('../utils/sheets-config')
+            
+            // 1. Lire directement le sheet Tags (beaucoup plus rapide !)
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: 'Tags!A2:K'  // A = eventId, B-K = tag1..tag10
+            })
+            
+            // Vérifier que response.data existe
+            if (!response || !response.data) {
+                console.warn('⚠️ [TagsController] Réponse Google Sheets invalide (response.data manquant)')
+                return []
+            }
+            
+            const rows = response.data.values || []
+            const tagMap = new Map()
+            const normalize = (t) => (t || '').toString().trim().toLowerCase()
+            
+            // 2. Parcourir et compter les occurrences
+            for (const row of rows) {
+                if (!row || !Array.isArray(row)) continue
+                
+                const eventId = row[0]
+                if (!eventId) continue
+                
+                // Parcourir les colonnes B-K (index 1-10) pour les tags
+                for (let i = 1; i <= 10; i++) {
+                    const tag = normalize(row[i])
+                    if (!tag) continue
+                    
+                    const existing = tagMap.get(tag)
+                    if (!existing) {
+                        tagMap.set(tag, { usage_count: 1 })
+                    } else {
+                        existing.usage_count++
+                    }
                 }
             }
+            
+            // 3. Convertir en array et trier par popularité
+            const list = Array.from(tagMap.entries()).map(([tag, info]) => ({
+                tag,
+                usage_count: info.usage_count
+            }))
+            
+            list.sort((a, b) => b.usage_count - a.usage_count)
+            
+            console.log(`✅ [TagsController] ${list.length} tags calculés depuis Tags Sheet (${rows.length} events)`)
+            return list
+        } catch (error) {
+            // Gestion gracieuse : si le sheet Tags n'existe pas ou erreur Google Sheets, retourner tableau vide
+            console.warn('⚠️ [TagsController] Erreur lecture Tags Sheet (feuille absente ou illisible):', error?.message || error)
+            // Retourner un tableau vide plutôt que de planter
+            return []
         }
-
-        // Construire un index { tag -> { count, lastUsed, created_at, created_by } }
-        const tagMap = new Map()
-
-        const normalize = (t) => (t || '').toString().trim().toLowerCase()
-
-        for (const evt of events) {
-            const eventTime = evt.startsAt || ''
-            const eventCreatedAt = evt.createdAt || eventTime
-            const eventOrganizerId = evt.organizerId || ''
-
-            for (const raw of (evt.tags || [])) {
-                const t = typeof raw === 'string' ? normalize(raw) : ''
-                if (!t) continue
-
-                const existing = tagMap.get(t)
-                if (!existing) {
-                    // Première occurrence : utiliser createdAt et organizerId de l'event
-                    tagMap.set(t, {
-                        usage_count: 1,
-                        last_used: eventTime,
-                        created_at: eventCreatedAt,
-                        created_by: eventOrganizerId
-                    })
-                } else {
-                    const newer = !existing.last_used || (eventTime && eventTime > existing.last_used)
-                    tagMap.set(t, {
-                        usage_count: existing.usage_count + 1,
-                        last_used: newer ? eventTime : existing.last_used,
-                        created_at: existing.created_at, // Garder la date de création originale
-                        created_by: existing.created_by  // Garder le créateur original
-                    })
-                }
-            }
-        }
-
-        // Convertir en array et retourner
-        const list = Array.from(tagMap.entries()).map(([tag, info]) => ({
-            tag,
-            usage_count: info.usage_count,
-            last_used: info.last_used || '',
-            created_at: info.created_at || '',
-            created_by: info.created_by || ''
-        }))
-
-        // Trier par popularité décroissante
-        list.sort((a, b) => b.usage_count - a.usage_count)
-
-        return list
     }
 }
 

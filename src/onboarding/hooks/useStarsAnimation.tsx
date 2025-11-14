@@ -53,13 +53,13 @@ const getReactionEmojis = (responseType?: 'participe' | 'maybe' | 'not_there'): 
     switch (responseType) {
         case 'participe':
             // Ambiance positive, énergie, fête
-            return ['🎉', '😄', '🙌', '🥳', '💃']
+            return ['🎉', '🕺', '✨', '🥳', '💃']
         case 'maybe':
             // Curiosité, hésitation, bienveillance
-            return ['🤞', '👀', '🫶', '🤔', '✨']
+            return ['🤞', '👀', '❓', '🤔', '✨']
         case 'not_there':
             // Désolé, fatigué, bienveillant malgré le refus
-            return ['🥲', '😅', '🚫', '😴', '🙏']
+            return ['🥲', '✨', '🤷‍♂️', '🚫', '🤷‍♀️']
         default:
             // Par défaut, utiliser les émojis de "participe"
             return ['🎉', '😄', '🙌', '🥳', '💃']
@@ -77,7 +77,7 @@ export function useStarsAnimation(options?: {
     const starsRef = useRef<HTMLDivElement>(null)
     const buttonId = options?.buttonId
     const starCount = options?.starCount ?? 40
-    const duration = options?.duration ?? 3000
+    const duration = options?.duration ?? 2000
     // Utiliser un ref pour stocker le responseType dynamique
     const responseTypeRef = useRef<'participe' | 'maybe' | 'not_there' | undefined>(options?.responseType)
     // Utiliser un ref pour stocker le callback onAnimationEnd

@@ -52,7 +52,7 @@ class AnalyticsController {
             // Ne plus utiliser de valeur par défaut hardcodée - tout doit venir du sheet
             const sortedRefs = maptilerReferences.sort((a, b) => a.timestamp - b.timestamp)
             const initialRef = sortedRefs[0]
-            
+
             // Si aucune référence n'est présente, on ne peut pas calculer les valeurs cumulatives
             // Dans ce cas, on ne sauvegarde que les requêtes, pas les références
             const initialValue = initialRef?.value
@@ -119,14 +119,14 @@ class AnalyticsController {
             let savedCount = 0
             let savedReferences = 0
             const { appendDataWithDeduplication } = require('../utils/sheets-config')
-            
+
             // Sauvegarder les requêtes normales : déduplication par Timestamp + Provider + Endpoint + Method
             if (requestsToSave.length > 0) {
                 const result = await appendDataWithDeduplication('Analytics', requestsToSave, [0, 1, 2, 3], 2, 50000, requestId)
                 savedCount += result.saved
                 console.log(`✅ [${requestId}] ${result.saved} nouvelles requêtes sauvegardées (${result.duplicates} doublons ignorés)`)
             }
-            
+
             // Sauvegarder les références MapTiler : déduplication par Timestamp + Valeur (colonnes 0 et 7)
             // Cela évite les doublons même si la même valeur est sauvegardée plusieurs fois
             if (referencesToSave.length > 0) {
@@ -135,7 +135,7 @@ class AnalyticsController {
                 savedCount += result.saved
                 console.log(`✅ [${requestId}] ${result.saved} nouvelles références MapTiler sauvegardées (${result.duplicates} doublons ignorés)`)
             }
-            
+
             if (savedCount === 0) {
                 console.log(`⚠️ [${requestId}] Aucune donnée à sauvegarder`)
             }
@@ -174,100 +174,21 @@ class AnalyticsController {
     /**
      * Récupérer les statistiques agrégées depuis Google Sheets
      * Agrège toutes les données de tous les utilisateurs
-     * Combine automatiquement les données de TEST et PRODUCTION si disponibles
+     * Utilise la source de vérité unique configurée dans sheets-config.js
+     * (PROD par défaut en production, configurable via FORCE_PRODUCTION=true en local)
      */
     static async getAggregatedStats(req, res) {
         try {
-            // Lire depuis la DB configurée (test en local, prod en production)
+            // Lire depuis la DB configurée (source de vérité unique = PROD par défaut)
+            // Par défaut : utilise toujours PROD (même en local)
+            // Pour utiliser TEST en local : définir USE_TEST_DB=true dans .env
             const analytics = await DataServiceV2.getAllActiveData(
                 AnalyticsController.ANALYTICS_RANGE,
                 DataServiceV2.mappers.analytics
             )
-            
-            // Si on est en local et qu'on a une DB de test, combiner aussi avec la production
-            // Si on est en production, combiner aussi avec la DB de test si disponible
-            const isLocal = !process.env.VERCEL
-            const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
-            const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
-            
-            let combinedAnalytics = [...analytics]
-            
-            // Si on a les deux bases disponibles, combiner les données
-            if (testSpreadsheetId && productionSpreadsheetId) {
-                try {
-                    // Lire depuis l'autre base
-                    const otherSpreadsheetId = isLocal ? productionSpreadsheetId : testSpreadsheetId
-                    const { google } = require('googleapis')
-                    const path = require('path')
-                    const backendDir = path.join(__dirname, '..')
-                    
-                    const authConfig = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-                        ? {
-                            credentials: typeof process.env.GOOGLE_SERVICE_ACCOUNT_KEY === 'string' 
-                                ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
-                                : process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
-                            scopes: [
-                                'https://www.googleapis.com/auth/spreadsheets',
-                                'https://www.googleapis.com/auth/drive'
-                            ],
-                            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
-                        }
-                        : {
-                            keyFile: path.join(backendDir, 'service-account.json'),
-                            scopes: [
-                                'https://www.googleapis.com/auth/spreadsheets',
-                                'https://www.googleapis.com/auth/drive'
-                            ],
-                            subject: process.env.GOOGLE_DELEGATED_USER_EMAIL || null
-                        }
-                    
-                    const auth = new google.auth.GoogleAuth(authConfig)
-                    const sheets = google.sheets({ version: 'v4', auth })
-                    
-                    const response = await sheets.spreadsheets.values.get({
-                        spreadsheetId: otherSpreadsheetId,
-                        range: AnalyticsController.ANALYTICS_RANGE
-                    })
-                    
-                    const otherRows = response.data.values || []
-                    const otherAnalytics = otherRows.map(row => DataServiceV2.mappers.analytics(row))
-                    
-                    // Combiner les requêtes (dédupliquer par timestamp + provider + endpoint)
-                    const requestKeys = new Set(
-                        combinedAnalytics
-                            .filter(a => a.provider !== 'maptiler_reference')
-                            .map(a => `${a.timestamp}|${a.provider}|${a.endpoint}`)
-                    )
-                    
-                    const otherRequests = otherAnalytics.filter(a => {
-                        if (a.provider === 'maptiler_reference') return false
-                        const key = `${a.timestamp}|${a.provider}|${a.endpoint}`
-                        return !requestKeys.has(key)
-                    })
-                    
-                    combinedAnalytics.push(...otherRequests)
-                    
-                    // Combiner les références MapTiler (dédupliquer par timestamp + value)
-                    const refKeys = new Set(
-                        combinedAnalytics
-                            .filter(a => a.provider === 'maptiler_reference')
-                            .map(a => `${a.timestamp}|${a.maptilerReferenceValue}`)
-                    )
-                    
-                    const otherRefs = otherAnalytics.filter(a => {
-                        if (a.provider !== 'maptiler_reference') return false
-                        const key = `${a.timestamp}|${a.maptilerReferenceValue}`
-                        return !refKeys.has(key)
-                    })
-                    
-                    combinedAnalytics.push(...otherRefs)
-                    
-                    console.log(`📊 [getAggregatedStats] Données combinées: ${analytics.length} (base principale) + ${otherRequests.length} requêtes + ${otherRefs.length} références (base secondaire)`)
-                } catch (error) {
-                    console.warn(`⚠️ [getAggregatedStats] Impossible de combiner avec l'autre base:`, error.message)
-                    // Continuer avec les données de la base principale uniquement
-                }
-            }
+
+            // Utiliser uniquement la base configurée (pas de combinaison TEST/PROD)
+            const combinedAnalytics = [...analytics]
 
             // Filtrer uniquement les requêtes (pas les références MapTiler)
             const requests = combinedAnalytics.filter(a => a.provider !== 'maptiler_reference')

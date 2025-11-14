@@ -11,10 +11,9 @@
  * @version 1.0.0
  */
 
-import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction, BatchProcessResult, AddressSuggestion, UserCreatePayload } from '@/types/fomoTypes'
+import type { Event, User, Friend, UserResponse, UserResponseValue, BatchAction, BatchProcessResult, AddressSuggestion, Tag } from '@/types/fomoTypes'
 import { isFriendshipActionData } from '@/types/fomoTypes'
 import { getApiBaseUrl } from '@/config/env'
-import { format } from 'date-fns'
 import { analyticsTracker } from './analyticsTracker'
 
 
@@ -176,6 +175,10 @@ class BatchManager {
                     actions.forEach(action => {
                         if (action.type.startsWith('friendship_') && isFriendshipActionData(action.data)) {
                             cache.invalidateUser(action.data.toUserId)
+                            // Pour les demandes d'amitié, invalider aussi le cache de fromUserId
+                            if (action.type === 'friendship_request' && action.data.fromUserId) {
+                                cache.invalidateUser(action.data.fromUserId)
+                            }
                         }
                     })
                 }
@@ -301,6 +304,16 @@ class ApiClient {
         return this.makeRequest<Friend[]>(`/users/${userId}/friends?status=all`)
     }
 
+    async getFriendSuggestions(userId: string): Promise<{ suggestions: Array<Friend & { _suggestionScore?: number; _commonEvents?: number; _mutualFriends?: number; friendshipStatus?: string }>; friendsWithFriends: Friend[] }> {
+        return this.makeRequest<{ suggestions: Array<Friend & { _suggestionScore?: number; _commonEvents?: number; _mutualFriends?: number; friendshipStatus?: string }>; friendsWithFriends: Friend[] }>(
+            `/users/${userId}/friends/suggestions`
+        )
+    }
+
+    async getAllTags(): Promise<Tag[]> {
+        return this.makeRequest<Tag[]>('/tags')
+    }
+
     async sendFriendshipRequest(fromUserId: string, toUserId: string): Promise<{ id: string, status: string }> {
         return this.makeRequest<{ id: string, status: string }>('/users/friendships', {
             method: 'POST',
@@ -332,18 +345,22 @@ class ApiClient {
     }
 
     // ===== GEOCODING =====
-    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<AddressSuggestion[]> {
+    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number; bbox?: [number, number, number, number] }): Promise<AddressSuggestion[]> {
         const params = new URLSearchParams()
         if (options?.countryCode) params.set('countryCode', options.countryCode)
         if (typeof options?.limit === 'number') params.set('limit', String(options.limit))
+        if (options?.bbox && Array.isArray(options.bbox) && options.bbox.length === 4) {
+            // Format bbox: [west, south, east, north]
+            params.set('bbox', options.bbox.join(','))
+        }
         const qs = params.toString()
         const endpoint = `/geocode/search/${encodeURIComponent(query)}${qs ? `?${qs}` : ''}`
         return this.makeRequest<AddressSuggestion[]>(endpoint)
     }
 
     // ===== RESPONSES =====
-    async getResponses(): Promise<UserResponse[]> {
-        return this.makeRequest<UserResponse[]>('/responses')
+    async getResponses(userId: string): Promise<UserResponse[]> {
+        return this.makeRequest<UserResponse[]>(`/responses?userId=${encodeURIComponent(userId)}`)
     }
 
     // ===== BATCH =====
@@ -446,6 +463,21 @@ export class FomoDataManager {
     }
 
 
+    async getAllTags(): Promise<Tag[]> {
+        const cacheKey = 'all-tags'
+        let tags = cache.get<Tag[]>(cacheKey)
+
+        if (!tags) {
+            // Chargement des tags depuis l'API
+            tags = await apiClient.getAllTags()
+            cache.set(cacheKey, tags) // Cache avec TTL par défaut
+        } else {
+            console.log('💾 Tags récupérés depuis le cache')
+        }
+
+        return tags
+    }
+
     async getUserRelations(userId: string): Promise<Friend[]> {
         const cacheKey = `user-relations-${userId}`
         let relations = cache.get<Friend[]>(cacheKey)
@@ -461,8 +493,13 @@ export class FomoDataManager {
         return relations
     }
 
+    async getFriendSuggestions(userId: string): Promise<{ suggestions: Array<Friend & { _suggestionScore?: number; _commonEvents?: number; _mutualFriends?: number; friendshipStatus?: string }>; friendsWithFriends: Friend[] }> {
+        // Pas de cache pour les suggestions (calcul dynamique)
+        return apiClient.getFriendSuggestions(userId)
+    }
+
     // ===== GEOCODING =====
-    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number }): Promise<AddressSuggestion[]> {
+    async searchAddresses(query: string, options?: { countryCode?: string; limit?: number; bbox?: [number, number, number, number] }): Promise<AddressSuggestion[]> {
         return apiClient.searchAddresses(query, options)
     }
 
@@ -492,17 +529,17 @@ export class FomoDataManager {
 
     // ===== RESPONSES =====
 
-    async getResponses(): Promise<UserResponse[]> {
-        const cacheKey = 'responses'
+    async getResponses(userId: string): Promise<UserResponse[]> {
+        const cacheKey = `responses-${userId}`
         // Utiliser le cache de réponses sans TTL
         let responses = responseCache.get<UserResponse[]>(cacheKey)
 
         if (!responses) {
-            // Chargement des réponses depuis l'API
-            responses = await apiClient.getResponses()
+            // Chargement des réponses depuis l'API (filtrage backend)
+            responses = await apiClient.getResponses(userId)
             responseCache.set(cacheKey, responses)
         } else {
-            console.log('💾 Réponses récupérées depuis le cache (sans TTL)')
+            console.log(`💾 Réponses récupérées depuis le cache pour userId=${userId} (sans TTL)`)
         }
 
         return responses
@@ -518,6 +555,7 @@ export class FomoDataManager {
                 eventId,
                 initialResponse,
                 finalResponse,
+                responseMode: invitedByUserId && invitedByUserId !== 'none' ? 'invitation' : 'direct',
                 invitedByUserId,
             },
             userId,
@@ -526,6 +564,19 @@ export class FomoDataManager {
 
         batchManager.addAction(action)
         console.log(`➕ Réponse ajoutée au batch: userId ${userId} - ${initialResponse} -> ${finalResponse} pour ${eventId}${invitedByUserId !== 'none' ? ` (invitedByUserId: ${invitedByUserId})` : ''}`)
+    }
+
+    addFriendshipRequest(fromUserId: string, toUserId: string): void {
+        const action: BatchAction = {
+            id: `friendship_request_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'friendship_request',
+            data: { fromUserId, toUserId },
+            userId: fromUserId,
+            timestamp: Date.now()
+        }
+
+        batchManager.addAction(action)
+        console.log(`➕ Demande d'amitié ajoutée au batch: ${fromUserId} -> ${toUserId}`)
     }
 
     addFriendshipAction(userId: string, type: 'accept' | 'block' | 'remove', friendshipId: string, toUserId: string): void {
@@ -564,6 +615,46 @@ export class FomoDataManager {
         return userEventResponses.length > 0 ? userEventResponses[0].finalResponse : null
     }
 
+    /**
+     * MUTATIONS : Crée ou met à jour une réponse utilisateur (depuis eventResponseUtils)
+     * Cette fonction gère l'optimistic update pour améliorer la réactivité UI
+     */
+    async addOrUpdateResponse(
+        userId: string,
+        eventId: string,
+        initialResponse: UserResponseValue = null,
+        finalResponse: UserResponseValue = null,
+        responseMode: string = 'none',
+        invitedByUserId?: string
+    ): Promise<void> {
+        // Validation des inputs
+        if (!userId || !eventId) {
+            console.warn('⚠️ [addOrUpdateResponse] userId ou eventId manquant')
+            return
+        }
+
+        console.log(`📝 [addOrUpdateResponse] Ajout réponse pour event ${eventId}, user ${userId}${invitedByUserId ? `, invitedByUserId: ${invitedByUserId}` : ''}`)
+
+        // Créer l'action batch
+        const action: BatchAction = {
+            id: `response-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            type: 'event_response',
+            userId,
+            timestamp: Date.now(),
+            data: {
+                eventId,
+                initialResponse,
+                finalResponse,
+                responseMode,
+                ...(invitedByUserId && { invitedByUserId })
+            }
+        }
+
+        // Ajouter au batch manager
+        batchManager.addAction(action)
+        console.log('✅ [addOrUpdateResponse] Action ajoutée au batch')
+    }
+
     async savePendingActions(): Promise<void> {
         await batchManager.saveNow()
     }
@@ -573,51 +664,6 @@ export class FomoDataManager {
 
     // ===== AUTH =====
 
-    async checkUserByEmail(email: string): Promise<User | null> {
-        try {
-            // Normaliser l'email (trim + toLowerCase) avant l'envoi pour être cohérent avec le backend
-            const normalizedEmail = (email || '').trim().toLowerCase()
-            const apiUrl = `${API_BASE_URL}/users/email/${encodeURIComponent(normalizedEmail)}`
-
-            console.log(`🔍 [Frontend] Recherche utilisateur par email: "${normalizedEmail}"`)
-            console.log(`🔗 [Frontend] URL API: ${apiUrl}`)
-
-            const response = await fetch(apiUrl)
-
-            if (response.ok) {
-                const result = await response.json()
-                if (result.success && result.data) {
-                    console.log(`✅ [Frontend] Utilisateur trouvé: ${result.data.name} (${result.data.email})`)
-                    return result.data
-                }
-                // Utilisateur non trouvé (success: false ou data: null)
-                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (success: false)`)
-                return null
-            }
-
-            // Erreur HTTP (404, 500, etc.) - utilisateur non trouvé ou erreur serveur
-            if (response.status === 404) {
-                // Utilisateur non trouvé - c'est normal, retourner null
-                console.log(`ℹ️ [Frontend] Utilisateur non trouvé (404)`)
-                return null
-            }
-
-            // Autre erreur HTTP - logger et retourner null
-            const errorText = await response.text().catch(() => 'Unable to read error')
-            console.error(`❌ [Frontend] Erreur HTTP ${response.status} lors de la vérification utilisateur:`, errorText)
-            return null
-        } catch (error) {
-            // Erreur réseau ou autre - logger et retourner null (fallback)
-            const errorMessage = error instanceof Error ? error.message : String(error)
-            const errorStack = error instanceof Error ? error.stack : undefined
-            console.error('❌ [Frontend] Erreur vérification utilisateur:', {
-                message: errorMessage,
-                stack: errorStack,
-                apiUrl: `${API_BASE_URL}/users/email/...`
-            })
-            return null
-        }
-    }
 
     async matchByEmail(email: string): Promise<string | null> {
         try {
@@ -720,61 +766,89 @@ export class FomoDataManager {
         }
     }
 
-    async saveUserToBackend(userData: User, lastConnexion?: string): Promise<User | null> {
-        // Utiliser les coordonnées fournies dans userData (capturées depuis Mapbox via AddressAutocomplete)
-        const lat = userData.lat ?? null
-        const lng = userData.lng ?? null
+    /**
+     * Migrer les réponses d'un userId vers un autre (générique)
+     * Utilise l'endpoint générique /responses/migrate
+     */
+    async migrateResponses(sourceUserId: string, targetUserId: string): Promise<{ responsesMigrated: number }> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/responses/migrate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sourceUserId,
+                    targetUserId
+                })
+            })
 
-        // Préparer le payload avec tous les champs explicites (valeurs par défaut comme pour events)
-        const payload: UserCreatePayload = {
-            ...(userData.id && userData.id.trim() ? { id: userData.id } : {}), // Envoyer l'ID seulement s'il existe vraiment
-            name: userData.name,
-            email: userData.email,
-            city: userData.city,
-            lat: lat,
-            lng: lng,
-            friendsCount: userData.friendsCount,
-            // Valeurs par défaut pour users (écrasent les anciennes valeurs)
-            showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true,
-            privacy: { showAttendanceToFriends: userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true },
-            isPublicProfile: userData.isPublicProfile !== undefined ? userData.isPublicProfile : false,
-            isActive: true, // Toujours actif
-            isAmbassador: userData.isAmbassador !== undefined ? userData.isAmbassador : false,
-            allowRequests: userData.allowRequests !== undefined ? userData.allowRequests : true,
-            modifiedAt: new Date().toISOString(),
-            lastConnexion: lastConnexion || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
+            if (!response.ok) {
+                throw new Error(`Erreur lors de la migration: ${response.status} ${response.statusText}`)
+            }
+
+            const result = await response.json()
+            if (result.success && result.data) {
+                console.log(`✅ [Frontend] Migration réussie: ${result.data.responsesMigrated} réponse(s) migrée(s)`)
+                return result.data
+            }
+
+            throw new Error('Migration échouée: réponse invalide')
+        } catch (error) {
+            console.error('❌ [Frontend] Erreur migration réponses:', error)
+            throw error
         }
-
-        const response = await fetch(`${API_BASE_URL}/users`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
-        })
-
-        if (!response.ok) {
-            throw new Error(`Erreur lors de la sauvegarde de l'utilisateur: ${response.status} ${response.statusText}`)
-        }
-
-        const result = await response.json()
-        if (result.success && result.data) {
-            // Retourner les données du user créé depuis le backend
-            return {
-                id: result.data.id,
-                name: result.data.name,
-                email: result.data.email,
-                city: result.data.city,
-                friendsCount: result.data.friendsCount || 0,
-                showAttendanceToFriends: result.data.showAttendanceToFriends ?? true,
-                isPublicProfile: result.data.isPublicProfile ?? false,
-                isAmbassador: result.data.isAmbassador ?? false
-            } as User & { isPublicProfile: boolean }
-        }
-
-        // Si pas de data, retourner null (ne devrait pas arriver)
-        return null
     }
+
+
+    async createUser(userData: Omit<User, 'id'> & { id?: string }): Promise<User | null> {
+        try {
+            // Générer un ID si non fourni
+            const userId = userData.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+            const payload: User = {
+                id: userId,
+                name: userData.name || '',
+                email: userData.email || '',
+                city: userData.city || '',
+                lat: userData.lat ?? null,
+                lng: userData.lng ?? null,
+                friendsCount: userData.friendsCount ?? 0,
+                showAttendanceToFriends: userData.showAttendanceToFriends ?? true,
+                isPublicProfile: userData.isPublicProfile ?? false,
+                isAmbassador: userData.isAmbassador ?? false,
+                allowRequests: userData.allowRequests ?? true,
+                isVisitor: userData.isVisitor ?? false,
+                isNewVisitor: userData.isNewVisitor ?? false
+            }
+
+            console.log(`🔨 [Frontend] Création utilisateur: ${userId}`)
+
+            const response = await fetch(`${API_BASE_URL}/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+
+            if (!response.ok) {
+                throw new Error(`Erreur lors de la création de l'utilisateur: ${response.status} ${response.statusText}`)
+            }
+
+            const result = await response.json()
+            if (result.success && result.data) {
+                console.log(`✅ [Frontend] Utilisateur créé: ${result.data.id}`)
+                return result.data as User
+            }
+
+            return null
+        } catch (error) {
+            console.error('❌ Erreur createUser:', error)
+            throw error
+        }
+    }
+
 
 }
 
@@ -797,23 +871,30 @@ const fomoDataApi = {
     // Users
     getUsers: () => fomoDataManager.getUsers(),
     getUserRelations: (userId: string) => fomoDataManager.getUserRelations(userId),
+    getFriendSuggestions: (userId: string) => fomoDataManager.getFriendSuggestions(userId),
     getUserEvents: (userId: string) => fomoDataManager.getUserEvents(userId),
     sendFriendshipRequest: (fromUserId: string, toUserId: string) => fomoDataManager.sendFriendshipRequest(fromUserId, toUserId),
     searchUsersByEmail: (email: string, currentUserId: string) => fomoDataManager.searchUsersByEmail(email, currentUserId),
     searchUsers: (query: string, currentUserId: string) => fomoDataManager.searchUsers(query, currentUserId),
 
+    // Tags
+    getAllTags: () => fomoDataManager.getAllTags(),
+
     // Auth
-    checkUserByEmail: (email: string) => fomoDataManager.checkUserByEmail(email),
     matchByEmail: (email: string) => fomoDataManager.matchByEmail(email),
-    updateUser: (userId: string, userData: User, newId?: string) => fomoDataManager.updateUser(userId, userData as Partial<User>, newId),
-    saveUserToBackend: (userData: User) => fomoDataManager.saveUserToBackend(userData),
+    migrateResponses: (sourceUserId: string, targetUserId: string) => fomoDataManager.migrateResponses(sourceUserId, targetUserId),
+    createUser: (userData: Omit<User, 'id'> & { id?: string }) => fomoDataManager.createUser(userData),
+    updateUser: (userId: string, userData: Partial<User>, newId?: string) => fomoDataManager.updateUser(userId, userData, newId),
+    getUserById: (userId: string) => fomoDataManager.getUserById(userId),
 
     // Responses
-    getResponses: () => fomoDataManager.getResponses(),
+    getResponses: (userId: string) => fomoDataManager.getResponses(userId),
 
     // Batch
     addEventResponse: (userId: string, eventId: string, initialResponse: UserResponseValue, finalResponse: UserResponseValue, invitedByUserId: string) => fomoDataManager.addEventResponse(userId, eventId, initialResponse, finalResponse, invitedByUserId),
     addFriendshipAction: (userId: string, type: 'accept' | 'block' | 'remove', friendshipId: string, toUserId: string) => fomoDataManager.addFriendshipAction(userId, type, friendshipId, toUserId),
+    addFriendshipRequest: (fromUserId: string, toUserId: string) => fomoDataManager.addFriendshipRequest(fromUserId, toUserId),
+    addOrUpdateResponse: (userId: string, eventId: string, initialResponse: UserResponseValue, finalResponse: UserResponseValue, responseMode: string, invitedByUserId?: string) => fomoDataManager.addOrUpdateResponse(userId, eventId, initialResponse, finalResponse, responseMode, invitedByUserId),
 
     // Cache
     invalidateCache: () => fomoDataManager.invalidateCache(),
@@ -824,7 +905,7 @@ const fomoDataApi = {
     savePendingActions: () => fomoDataManager.savePendingActions(),
 
     // Geocoding
-    searchAddresses: (query: string, options?: { countryCode?: string; limit?: number }) => fomoDataManager.searchAddresses(query, options),
+    searchAddresses: (query: string, options?: { countryCode?: string; limit?: number; bbox?: [number, number, number, number] }) => fomoDataManager.searchAddresses(query, options),
 
 
 

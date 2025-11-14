@@ -10,11 +10,20 @@ const GeocodingService = require('../services/geocodingService')
 router.get('/search/:query', async (req, res) => {
     try {
         const { query } = req.params
-        const { countryCode, limit = 5 } = req.query
+        const { countryCode, limit = 5, bbox } = req.query
 
-        console.log(`🔍 [Geocoding Route] Recherche pour: "${query}" (limit: ${limit}${countryCode ? `, pays: ${countryCode}` : ''})`)
+        // Parser bbox si fourni (format: "west,south,east,north")
+        let bboxArray = undefined
+        if (bbox && typeof bbox === 'string') {
+            const bboxParts = bbox.split(',').map(parseFloat)
+            if (bboxParts.length === 4 && bboxParts.every(n => !isNaN(n))) {
+                bboxArray = bboxParts
+            }
+        }
 
-        const result = await GeocodingService.searchAddresses(query, { countryCode, limit })
+        console.log(`🔍 [Geocoding Route] Recherche pour: "${query}" (limit: ${limit}${countryCode ? `, pays: ${countryCode}` : ''}${bboxArray ? `, bbox: [${bboxArray.join(', ')}]` : ''})`)
+
+        const result = await GeocodingService.searchAddresses(query, { countryCode, limit, bbox: bboxArray })
         
         // Le service retourne { success: true, data: [...] } ou { success: false, error: ... }
         if (result.success && result.data) {

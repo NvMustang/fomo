@@ -21,6 +21,16 @@ class UsersController {
     }
 
     /**
+     * Normaliser une coordonnée (lat ou lng) pour toujours utiliser un point comme séparateur décimal
+     * Même logique que pour les events : parseFloat(value || 0).toFixed(6)
+     * @param {number|string|null|undefined} coord - Coordonnée à normaliser
+     * @returns {string} Coordonnée normalisée avec point (format: "48.856614")
+     */
+    static normalizeCoordinate(coord) {
+        return parseFloat(coord || 0).toFixed(6)
+    }
+
+    /**
      * Récupérer tous les utilisateurs depuis la base
      */
     static async _getAllUsersFromDb() {
@@ -132,8 +142,13 @@ class UsersController {
             // createdAt : préserver lors d'un update, définir à maintenant lors d'une création
             const createdAt = existingUser?.createdAt || new Date().toISOString()
 
-            // isVisitor : préserver si existant, sinon utiliser la valeur fournie (défaut: false pour nouveaux users)
-            const isVisitor = existingUser ? (existingUser.isVisitor ?? false) : (userData.isVisitor !== undefined ? userData.isVisitor : false)
+            // isVisitor : 
+            // - Si userData.isVisitor est explicitement fourni, l'utiliser (permet la conversion visitor → user)
+            // - Sinon, préserver la valeur existante si elle existe
+            // - Sinon, défaut: true pour nouveaux users (visitors par défaut)
+            const isVisitor = userData.isVisitor !== undefined
+                ? userData.isVisitor
+                : (existingUser ? (existingUser.isVisitor ?? true) : true)
 
             // Préparer les données pour la feuille (tous les champs explicitement, comme pour events)
             // Structure: A=ID, B=CreatedAt, C=Name, D=Email, E=City, F=Lat, G=Lng, H=FriendsCount, I=ShowAttendanceToFriends, J=isVisitor, K=isPublicProfile, L=isActive, M=isAmbassador, N=allowRequests, O=modifiedAt, P=deletedAt, Q=lastConnexion
@@ -143,8 +158,8 @@ class UsersController {
                 userData.name || '',                      // C: Name
                 normalizedEmail || '',                    // D: Email (normalisé)
                 userData.city || '',                      // E: City
-                userData.lat || '',                       // F: Latitude
-                userData.lng || '',                       // G: Longitude
+                UsersController.normalizeCoordinate(userData.lat), // F: Latitude (format avec points, même logique que events)
+                UsersController.normalizeCoordinate(userData.lng), // G: Longitude (format avec points, même logique que events)
                 userData.friendsCount !== undefined ? userData.friendsCount : 0, // H: Friends Count
                 userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : true, // I: Privacy (défaut: true)
                 isVisitor,                                // J: isVisitor (préservé si update, sinon valeur fournie)
@@ -235,8 +250,8 @@ class UsersController {
                 userData.name !== undefined ? userData.name : currentRow[2], // C: Name
                 userData.email !== undefined ? UsersController.normalizeEmail(userData.email) : currentRow[3], // D: Email
                 userData.city !== undefined ? userData.city : currentRow[4], // E: City
-                userData.lat !== undefined ? userData.lat : currentRow[5], // F: Lat
-                userData.lng !== undefined ? userData.lng : currentRow[6], // G: Lng
+                userData.lat !== undefined ? UsersController.normalizeCoordinate(userData.lat) : currentRow[5], // F: Lat (normalisée avec point)
+                userData.lng !== undefined ? UsersController.normalizeCoordinate(userData.lng) : currentRow[6], // G: Lng (normalisée avec point)
                 userData.friendsCount !== undefined ? userData.friendsCount : currentRow[7], // H: FriendsCount
                 userData.showAttendanceToFriends !== undefined ? userData.showAttendanceToFriends : currentRow[8], // I: ShowAttendanceToFriends
                 userData.isVisitor !== undefined ? userData.isVisitor : currentRow[9], // J: isVisitor (important pour transformation)
@@ -353,99 +368,6 @@ class UsersController {
         } catch (error) {
             console.error('❌ Erreur soft delete utilisateur:', error)
             throw error
-        }
-    }
-
-    /**
-     * Migrer les réponses d'un visitor temporaire vers un utilisateur existant
-     * Puis supprimer le visitor temporaire (soft delete)
-     */
-    static async migrateVisitorResponses(req, res) {
-        try {
-            const { sourceUserId, targetUserId } = req.body
-
-            if (!sourceUserId || !targetUserId) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'sourceUserId et targetUserId sont requis'
-                })
-            }
-
-            if (sourceUserId === targetUserId) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'sourceUserId et targetUserId ne peuvent pas être identiques'
-                })
-            }
-
-            console.log(`🔄 Migration visitor: ${sourceUserId} -> ${targetUserId}`)
-
-            // 1. Migrer les réponses
-            const migrationResult = await ResponsesController.migrateResponses(sourceUserId, targetUserId)
-            console.log(`✅ ${migrationResult.migrated} réponse(s) migrée(s)`)
-
-            // 2. Soft delete le visitor temporaire
-            const deleteResult = await UsersController.softDeleteUser(sourceUserId)
-            console.log(`✅ Visitor supprimé: ${sourceUserId}`)
-
-            res.json({
-                success: true,
-                message: 'Migration réussie',
-                data: {
-                    responsesMigrated: migrationResult.migrated,
-                    visitorDeleted: true,
-                    deletedAt: deleteResult.deletedAt
-                }
-            })
-        } catch (error) {
-            console.error('❌ Erreur migration visitor:', error)
-            res.status(500).json({ success: false, error: error.message })
-        }
-    }
-
-    /**
-     * Rechercher un utilisateur par email
-     */
-    static async getUserByEmail(req, res) {
-        try {
-            // Décoder l'email depuis l'URL (Express décode automatiquement, mais on s'assure)
-            const rawEmail = decodeURIComponent(req.params.email || '')
-            const email = UsersController.normalizeEmail(rawEmail)
-            console.log(`👥 Recherche utilisateur par email: "${email}" (raw: "${rawEmail}")`)
-
-            const allUsers = await UsersController._getAllUsersFromDb()
-            console.log(`📊 Total utilisateurs dans la base: ${allUsers.length}`)
-
-            // Filtrer uniquement les utilisateurs actifs qui ne sont pas des visitors
-            const user = allUsers.find(u => {
-                const userEmail = UsersController.normalizeEmail(u.email)
-                const emailMatch = userEmail === email
-                const isActive = u.isActive === true
-                const isNotVisitor = !u.id || !u.id.startsWith('visit-') // Exclure les visitors
-
-                // Log de débogage pour les premiers emails trouvés
-                if (userEmail && (userEmail.includes(email.split('@')[0]) || email.includes(userEmail.split('@')[0]))) {
-                    console.log(`  🔍 Comparaison: "${userEmail}" === "${email}" ? ${emailMatch} | isActive: ${isActive} | isNotVisitor: ${isNotVisitor}`)
-                }
-
-                return emailMatch && isActive && isNotVisitor
-            })
-
-            if (!user) {
-                // Log tous les emails actifs pour débogage
-                const activeUsers = await UsersController.getActiveUsers()
-                console.log(`❌ Utilisateur non trouvé. Emails actifs dans la base:`, activeUsers.map(u => `"${u.email}"`).join(', '))
-                return res.status(404).json({
-                    success: false,
-                    error: 'Utilisateur non trouvé'
-                })
-            }
-
-            console.log(`✅ Utilisateur trouvé: ${user.name} (${user.email})`)
-            res.json({ success: true, data: user })
-        } catch (error) {
-            console.error('❌ Erreur recherche utilisateur:', error)
-            res.status(500).json({ success: false, error: error.message })
         }
     }
 
@@ -606,6 +528,226 @@ class UsersController {
             res.json({ success: true, data: friends })
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur récupération amis:`, error)
+            res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
+    /**
+     * Récupérer les suggestions d'amis pour un utilisateur
+     * Calcule les suggestions basées sur :
+     * - Amis de mes amis (score +10 par ami commun)
+     * - Intérêts communs sur événements (score +5 par événement commun)
+     */
+    static async getFriendSuggestions(req, res) {
+        const requestId = Math.random().toString(36).substr(2, 9)
+        const timestamp = new Date().toISOString()
+        try {
+            const userId = req.params.id
+            console.log(`💡 [${requestId}] [${timestamp}] Calcul suggestions d'amis pour: ${userId}`)
+
+            // 1. Récupérer toutes les données nécessaires
+            const allFriendships = await DataServiceV2.getAllActiveData(
+                'Relations!A2:G',
+                DataServiceV2.mappers.friendship
+            )
+            const allUsers = await UsersController._getAllUsersFromDb()
+            const allResponses = await DataServiceV2.getAllActiveData(
+                'Responses!A2:G',
+                DataServiceV2.mappers.response
+            )
+
+            // 2. Récupérer les amis actifs de l'utilisateur
+            const userFriendships = allFriendships.filter(f =>
+                (f.fromUserId === userId || f.toUserId === userId) && f.status === 'active'
+            )
+
+            const currentUserFriends = []
+            const currentUserFriendIds = new Set()
+
+            for (const friendship of userFriendships) {
+                const friendId = friendship.fromUserId === userId ? friendship.toUserId : friendship.fromUserId
+                const friend = allUsers.find(u => u.id === friendId && u.isActive === true)
+                if (friend) {
+                    currentUserFriends.push(friend)
+                    currentUserFriendIds.add(friendId)
+                }
+            }
+
+            console.log(`👥 [${requestId}] ${currentUserFriends.length} amis actifs trouvés`)
+
+            // 3. Pour chaque ami, récupérer ses amis actifs (et les stocker dans friend.friends)
+            const friendsOfFriendsMap = new Map() // userId -> { friend: Friend, score: number, commonEvents: number }
+            // Map pour stocker eventId -> responseType (pour calculer les scores différenciés)
+            const userEventResponses = new Map() // eventId -> finalResponse
+
+            // Récupérer les événements d'intérêt de l'utilisateur
+            // Inclure 'going', 'interested', 'participe' et 'maybe'
+            const userResponses = allResponses
+                .filter(r => r.userId === userId && (
+                    r.finalResponse === 'going' ||
+                    r.finalResponse === 'interested' ||
+                    r.finalResponse === 'participe' ||
+                    r.finalResponse === 'maybe'
+                ))
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+            // Garder uniquement la dernière réponse par événement
+            const latestUserResponses = new Map()
+            userResponses.forEach(r => {
+                if (!latestUserResponses.has(r.eventId)) {
+                    latestUserResponses.set(r.eventId, r)
+                    userEventResponses.set(r.eventId, r.finalResponse)
+                }
+            })
+
+            console.log(`📅 [${requestId}] ${userEventResponses.size} événements d'intérêt pour l'utilisateur`)
+
+            // Pour chaque ami, récupérer ses amis et calculer les scores
+            for (const friend of currentUserFriends) {
+                const friendFriendships = allFriendships.filter(f =>
+                    (f.fromUserId === friend.id || f.toUserId === friend.id) && f.status === 'active'
+                )
+
+                const friendFriends = []
+                for (const friendship of friendFriendships) {
+                    const friendOfFriendId = friendship.fromUserId === friend.id ? friendship.toUserId : friendship.fromUserId
+                    // Exclure l'utilisateur courant et les amis déjà existants
+                    if (friendOfFriendId !== userId && !currentUserFriendIds.has(friendOfFriendId)) {
+                        const friendOfFriend = allUsers.find(u => u.id === friendOfFriendId && u.isActive === true)
+                        if (friendOfFriend) {
+                            friendFriends.push({
+                                ...friendOfFriend,
+                                friendship: {
+                                    id: friendship.id,
+                                    userId1: friendship.fromUserId,
+                                    userId2: friendship.toUserId,
+                                    status: friendship.status,
+                                    createdAt: friendship.createdAt,
+                                    updatedAt: friendship.modifiedAt,
+                                    initiatedBy: friendship.fromUserId
+                                }
+                            })
+                        }
+                    }
+                }
+
+                // Stocker les amis de cet ami dans la prop friends
+                friend.friends = friendFriends
+
+                // Pour chaque ami de mon ami, calculer le score
+                for (const friendOfFriend of friendFriends) {
+                    if (!friendsOfFriendsMap.has(friendOfFriend.id)) {
+                        // Vérifier les relations existantes (exclure pending, blocked, active)
+                        const existingRelation = allFriendships.find(f =>
+                            (f.fromUserId === userId && f.toUserId === friendOfFriend.id) ||
+                            (f.fromUserId === friendOfFriend.id && f.toUserId === userId)
+                        )
+
+                        // Ne suggérer que si pas de relation ou relation inactive/cancelled
+                        if (!existingRelation || existingRelation.status === 'inactive' || existingRelation.status === 'cancelled') {
+                            friendsOfFriendsMap.set(friendOfFriend.id, {
+                                user: friendOfFriend,
+                                score: 10, // Score de base pour "ami de mon ami"
+                                commonEvents: 0,
+                                mutualFriends: [friend.id] // Liste des amis communs
+                            })
+                        }
+                    } else {
+                        // Augmenter le score et ajouter l'ami commun
+                        const existing = friendsOfFriendsMap.get(friendOfFriend.id)
+                        existing.score += 10
+                        existing.mutualFriends.push(friend.id)
+                    }
+                }
+            }
+
+            // 4. Calculer les intérêts communs sur événements avec scores différenciés
+            for (const [suggestedUserId, suggestion] of friendsOfFriendsMap.entries()) {
+                // Récupérer les événements d'intérêt de ce utilisateur suggéré
+                // Inclure 'going', 'interested', 'participe' et 'maybe'
+                const suggestedUserResponses = allResponses
+                    .filter(r => r.userId === suggestedUserId && (
+                        r.finalResponse === 'going' ||
+                        r.finalResponse === 'interested' ||
+                        r.finalResponse === 'participe' ||
+                        r.finalResponse === 'maybe'
+                    ))
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+                // Map pour stocker eventId -> finalResponse
+                const suggestedUserEventResponses = new Map()
+                const latestSuggestedResponses = new Map()
+                suggestedUserResponses.forEach(r => {
+                    if (!latestSuggestedResponses.has(r.eventId)) {
+                        latestSuggestedResponses.set(r.eventId, r)
+                        suggestedUserEventResponses.set(r.eventId, r.finalResponse)
+                    }
+                })
+
+                // Compter les événements communs avec scores différenciés
+                let commonEventsCount = 0
+                let totalScore = 0
+
+                userEventResponses.forEach((userResponse, eventId) => {
+                    if (suggestedUserEventResponses.has(eventId)) {
+                        commonEventsCount++
+                        const suggestedResponse = suggestedUserEventResponses.get(eventId)
+
+                        // Score différencié selon le type de réponse
+                        // 'participe' et 'maybe' (événements privés) = +10 points
+                        // 'going' et 'interested' (événements publics) = +5 points
+                        if (userResponse === 'participe' || userResponse === 'maybe' ||
+                            suggestedResponse === 'participe' || suggestedResponse === 'maybe') {
+                            // Si au moins un des deux a répondu 'participe' ou 'maybe', c'est un événement privé = score élevé
+                            totalScore += 10
+                        } else {
+                            // Les deux ont répondu 'going' ou 'interested' = événement public = score normal
+                            totalScore += 5
+                        }
+                    }
+                })
+
+                if (commonEventsCount > 0) {
+                    suggestion.score += totalScore
+                    suggestion.commonEvents = commonEventsCount
+                }
+            }
+
+            // 5. Trier par score décroissant et limiter à 5
+            const suggestions = Array.from(friendsOfFriendsMap.values())
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5)
+                .map(s => {
+                    // Vérifier le statut d'amitié pour chaque suggestion
+                    const existingRelation = allFriendships.find(f =>
+                        (f.fromUserId === userId && f.toUserId === s.user.id) ||
+                        (f.fromUserId === s.user.id && f.toUserId === userId)
+                    )
+                    const friendshipStatus = existingRelation ? existingRelation.status : 'none'
+
+                    return {
+                        ...s.user,
+                        friendshipStatus, // Ajouter le statut pour le frontend
+                        _suggestionScore: s.score,
+                        _commonEvents: s.commonEvents,
+                        _mutualFriends: s.mutualFriends.length
+                    }
+                })
+
+            console.log(`✅ [${requestId}] ${suggestions.length} suggestions générées`)
+
+            // 6. Retourner les suggestions avec les amis de chaque ami (pour l'affichage)
+            const result = {
+                suggestions,
+                friendsWithFriends: currentUserFriends.map(f => ({
+                    ...f,
+                    friends: f.friends || []
+                }))
+            }
+
+            res.json({ success: true, data: result })
+        } catch (error) {
+            console.error(`❌ [${requestId}] Erreur calcul suggestions:`, error)
             res.status(500).json({ success: false, error: error.message })
         }
     }

@@ -2,108 +2,36 @@
    FilterBar (overlay + layout)
    ====================================================================== */
 .filterbar-overlay {
-   position: absolute;
+   position: fixed;
    top: 70px;
    left: 50%;
    transform: translateX(-50%);
    width: 90vw;
    z-index: var(--z-index-modal);
+   /* État initial : invisible et légèrement décalée vers le haut */
+   opacity: 0;
+   transform: translateX(-50%) translateY(-10px);
+   /* Transition harmonisée pour apparition/disparition (identique dans les deux sens) */
+   transition: opacity var(--transition-slow), transform var(--transition-slow);
 }
 
-/* Animation pop pour FilterBar lors de la transition VM → normal */
-/* Effet de cercle centré qui se déroule horizontalement - phases accélérées au début */
-@keyframes filterbarPop {
-   0% {
-      transform: translateX(-50%) scaleY(1) scaleX(0);
-      opacity: 0;
-      border-radius: 50%;
-   }
-
-   5% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.25);
-      opacity: 0.65;
-      border-radius: 42%;
-   }
-
-   10% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.45);
-      opacity: 0.75;
-      border-radius: 38%;
-   }
-
-   15% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.6);
-      opacity: 0.82;
-      border-radius: 32%;
-   }
-
-   20% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.7);
-      opacity: 0.87;
-      border-radius: 28%;
-   }
-
-   25% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.78);
-      opacity: 0.91;
-      border-radius: 24%;
-   }
-
-   30% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.84);
-      opacity: 0.94;
-      border-radius: 21px;
-   }
-
-   40% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.91);
-      opacity: 0.97;
-      border-radius: 18px;
-   }
-
-   50% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.95);
-      opacity: 0.99;
-      border-radius: 16px;
-   }
-
-   60% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.97);
-      opacity: 1;
-      border-radius: 14.5px;
-   }
-
-   70% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.98);
-      opacity: 1;
-      border-radius: 13.5px;
-   }
-
-   80% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.99);
-      opacity: 1;
-      border-radius: 12.8px;
-   }
-
-   90% {
-      transform: translateX(-50%) scaleY(1) scaleX(0.995);
-      opacity: 1;
-      border-radius: 12.3px;
-   }
-
-   100% {
-      transform: translateX(-50%) scaleY(1) scaleX(1);
-      opacity: 1;
-      border-radius: 12px;
-   }
+/* FilterBar visible (quand EventCard est fermée OU après animation d'entrée) */
+/* Utilise la même transition que la réapparition après fermeture EventCard */
+/* Une fois filterbar-overlay--visible ajoutée, elle reste et contrôle l'affichage */
+.filterbar-overlay.filterbar-overlay--visible:not(.filterbar-overlay--hidden) {
+   opacity: 1;
+   transform: translateX(-50%);
 }
 
-.filterbar-pop {
-   animation: filterbarPop 3s linear forwards;
-   transform-origin: center center;
+/* Masquer la FilterBar quand EventCard est ouverte (mobile) */
+.filterbar-overlay.filterbar-overlay--hidden {
+   opacity: 0;
+   pointer-events: none;
+   transform: translateX(-50%) translateY(-10px);
 }
 
 .filterbar {
+   display: block;
    align-items: center;
    margin-top: 10px;
    background: var(--bg, #f9fafb);
@@ -255,19 +183,87 @@
    font-weight: normal;
 }
 
-/* Toggle "Inclure les événements passés" */
-.filterbar__toggle-past {
-   display: flex;
-   align-items: center;
-   justify-content: space-between;
-   gap: var(--md);
-   padding: var(--sm) var(--md);
-   min-height: 32px;
+/* ======================================================================
+   DateRangePicker dans le Menu react-select
+   ====================================================================== */
+.date-range-picker {
+   background: transparent;
+   padding: var(--md);
+   width: 100%;
 }
 
-.filterbar__toggle-label {
-   font-size: 0.875rem;
-   color: var(--text);
+.date-range-picker__checkbox {
+   padding: var(--sm) var(--md);
+   border-bottom: var(--border-width-thin) solid var(--border);
+   margin-bottom: var(--sm);
+}
+
+.date-range-picker__checkbox-label {
+   display: flex;
+   align-items: center;
+   gap: var(--sm);
    cursor: pointer;
    user-select: none;
+}
+
+.date-range-picker__checkbox-input {
+   width: var(--input-checkbox-size);
+   height: var(--input-checkbox-size);
+   cursor: pointer;
+   accent-color: var(--current-color);
+}
+
+.date-range-picker__checkbox-text {
+   font-size: var(--text-sm);
+   color: var(--text);
+   line-height: 1.4;
+}
+
+/* Styles pour react-day-picker */
+.date-range-picker .rdp {
+   --rdp-cell-size: 36px;
+   --rdp-accent-color: var(--current-color);
+   --rdp-background-color: var(--current-color-10);
+   margin: 0;
+}
+
+
+.date-range-picker .rdp-caption {
+   display: flex;
+   justify-content: center;
+   padding: var(--sm) 0;
+   font-weight: 600;
+   color: var(--text);
+}
+
+.date-range-picker .rdp-day {
+   border-radius: 50%;
+   transition: background var(--transition-fast);
+}
+
+.date-range-picker .rdp-day:hover:not(.rdp-day_disabled) {
+   background: var(--current-color-10);
+}
+
+.date-range-picker .rdp-day_selected {
+   background: var(--current-color);
+   color: #fff;
+}
+
+.date-range-picker .rdp-day_disabled {
+   opacity: 0.3;
+   cursor: not-allowed;
+}
+
+/* ======================================================================
+   Responsive Mobile
+   ====================================================================== */
+@media (max-width: 640px) {
+   .date-range-picker {
+      padding: var(--sm);
+   }
+
+   .date-range-picker .rdp {
+      --rdp-cell-size: 32px;
+   }
 }

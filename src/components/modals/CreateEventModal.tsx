@@ -9,13 +9,12 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components'
 import { usePrivacy } from '@/contexts/PrivacyContext'
 import type { Event } from '@/types/fomoTypes'
-import { AddressAutocomplete } from '@/components/AddressAutocomplete'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
-import type { Tag } from '@/types/fomoTypes'
+import { AddressAutocomplete } from '@/utils/AddressAutocomplete'
+import { useDataContext } from '@/contexts/DataContext'
 import { useToast, useModalScrollHint } from '@/hooks'
 import { useAuth } from '@/contexts/AuthContext'
 import { getUser } from '@/utils/filterTools'
-import { StockImagePicker } from '@/components/ui/StockImagePicker'
+import { ImagePicker } from '@/components/ui/ImagePicker'
 import { FomoDatePicker } from '@/components/ui/DatePicker'
 import { format, addHours, setMinutes, setSeconds } from 'date-fns'
 import CreatableSelect from 'react-select/creatable'
@@ -31,8 +30,9 @@ interface CreateEventModalProps {
 
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, editMode = false, initialEvent }) => {
   const { isPublicMode } = usePrivacy()
-  const { user, isPublicUser } = useAuth()
-  const { createEvent, updateEvent, getTags, addEventResponse, users } = useFomoDataContext()
+  const { user } = useAuth()
+  const isPublicUser = user?.isPublicProfile ?? false
+  const { createEvent, updateEvent, addEventResponse, users, tags } = useDataContext()
   const { showToast } = useToast()
 
   // Animation de scroll à l'ouverture du modal
@@ -124,18 +124,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
       : []
   )
 
-  // Tags depuis la feuille Google (via data manager, avec cache localStorage)
-  const [allTags, setAllTags] = useState<Tag[]>([])
-
-  useEffect(() => {
-    let mounted = true
-    if (isOpen) {
-      getTags()
-        .then(tags => { if (mounted) setAllTags(tags || []) })
-        .catch(() => { /* silencieux: suggestions vides si échec */ })
-    }
-    return () => { mounted = false }
-  }, [isOpen, getTags])
+  // Tags depuis DataContext (calculés au chargement)
+  const allTags = tags || []
 
   const tagSuggestionOptions: TagOption[] = useMemo(() => {
     const set = new Set<string>()
@@ -456,9 +446,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
           throw new Error('Événement non créé - réponse invalide du serveur')
         }
 
-        // Ajouter automatiquement la réponse de l'utilisateur créateur avec statut "invited"
+        // Ajouter automatiquement la réponse de l'utilisateur créateur avec statut "participe"
         if (user?.id && addEventResponse) {
-          addEventResponse(newEvent.id, 'invited')
+          addEventResponse(newEvent.id, 'participe')
         }
       }
 
@@ -835,7 +825,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Stock Image Picker Modal */}
-        <StockImagePicker
+        <ImagePicker
           isOpen={isImagePickerOpen}
           onImageSelect={(imageUrl) => {
             setCoverImageUrl(imageUrl)

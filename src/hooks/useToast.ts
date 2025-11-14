@@ -3,7 +3,7 @@
  * Hook simple pour afficher des toasts dans l'application
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ToastMessage } from '@/components/ui/Toast'
 
 // État global du toast (singleton)
@@ -24,12 +24,12 @@ export const useToast = () => {
     }, [])
 
     // Ajouter le listener au montage
-    useState(() => {
+    useEffect(() => {
         globalListeners.push(handleToastChange)
         return () => {
             globalListeners = globalListeners.filter(listener => listener !== handleToastChange)
         }
-    })
+    }, [handleToastChange])
 
     const showToast = useCallback((toast: ToastMessage) => {
         notifyListeners(toast)

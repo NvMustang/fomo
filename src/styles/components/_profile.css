@@ -20,8 +20,19 @@
     box-shadow: var(--shadow);
 }
 
+.stats-grid {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    gap: var(--md);
+    flex-wrap: wrap;
+}
+
 .stat {
     text-align: center;
+    flex: 1;
+    min-width: 80px;
 }
 
 .stat-value {

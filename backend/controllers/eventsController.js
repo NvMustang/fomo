@@ -11,20 +11,129 @@ class EventsController {
     static EVENTS_RANGE = 'Events!A2:R'
 
     /**
-     * Récupérer tous les événements actifs
+     * Helper: Obtenir les eventIds avec réponses pour un userId
+     * Optimisé: tri une fois + première occurrence = plus récente
+     */
+    static getEventIdsWithResponses(allResponses, userId) {
+        // Filtrer les réponses de l'utilisateur et trier par date décroissante
+        const userResponses = allResponses
+            .filter(r => r.userId === userId)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))  // Plus récent en premier
+
+        // Set pour tracker les eventIds déjà vus (première occurrence = plus récente)
+        const eventIdsSet = new Set()
+
+        for (const response of userResponses) {
+            eventIdsSet.add(response.eventId)
+        }
+
+        return eventIdsSet
+    }
+
+    /**
+     * Récupérer tous les événements actifs avec filtrage optionnel
+     * Query params:
+     * - mode: 'visitor' | 'user' (obligatoire)
+     * - privacy: 'public' | 'private' (si mode=user)
+     * - userId: string (si mode=visitor OU privacy=private)
+     * - onlineOnly: 'true' | 'false' (optionnel, default: true)
      */
     static async getAllEvents(req, res) {
         const requestId = Math.random().toString(36).substr(2, 9)
         const timestamp = new Date().toISOString()
         try {
+            const { mode, privacy, userId, onlineOnly } = req.query
+
+            // Parser onlineOnly (default: true)
+            const shouldFilterOnline = onlineOnly !== 'false' // true sauf si explicitement 'false'
+
             console.log(`📋 [${requestId}] [${timestamp}] Récupération des événements (overwrite)...`)
+            console.log(`📋 [${requestId}] Mode: ${mode}, Privacy: ${privacy}, UserId: ${userId}, OnlineOnly: ${shouldFilterOnline}`)
             console.log(`📋 [${requestId}] Headers:`, req.headers['user-agent'] || 'unknown')
             console.log(`📋 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
-            const events = await DataServiceV2.getAllActiveData(
+            // Validation des paramètres
+            if (!mode || (mode !== 'visitor' && mode !== 'user')) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Le paramètre "mode" est requis et doit être "visitor" ou "user"'
+                })
+            }
+
+            if (mode === 'visitor' && privacy !== 'public' && !userId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Le paramètre "userId" est requis en mode visitor (sauf en mode public)'
+                })
+            }
+
+            if (mode === 'user' && privacy === 'private' && !userId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Le paramètre "userId" est requis en mode user avec privacy=private'
+                })
+            }
+
+            // Charger tous les événements
+            let events = await DataServiceV2.getAllActiveData(
                 EventsController.EVENTS_RANGE,
                 DataServiceV2.mappers.event
             )
+
+            // Filtrage selon le mode et la privacy
+            if (mode === 'visitor' && privacy === 'public') {
+                // SÉCURITÉ : Visitor en mode public ne voit AUCUN event réel
+                // Frontend affichera des fake events
+                events = []
+                console.log(`🔒 [${requestId}] Filtrage visitor/public: 0 événements (fake events côté frontend)`)
+            } else if (mode === 'visitor') {
+                // Visitor en mode private : UNIQUEMENT events avec réponse
+
+                // Charger les responses
+                const allResponses = await DataServiceV2.getAllActiveData(
+                    'Responses!A2:G',
+                    DataServiceV2.mappers.response
+                )
+
+                // Obtenir les eventIds avec réponses (optimisé)
+                const eventIdsWithResponses = EventsController.getEventIdsWithResponses(allResponses, userId)
+
+                // Filtrer les events : garder uniquement ceux avec responses
+                events = events.filter(evt => eventIdsWithResponses.has(evt.id))
+
+                console.log(`🔒 [${requestId}] Filtrage visitor/private: ${events.length} événements avec réponses pour userId=${userId}`)
+            } else if (mode === 'user' && privacy === 'private') {
+                // Users en mode private : events avec réponses ET qui sont privés (isPublic !== true)
+                // IMPORTANT : Exclure les événements publics même si l'utilisateur y a répondu
+
+                // Charger les responses
+                const allResponses = await DataServiceV2.getAllActiveData(
+                    'Responses!A2:G',
+                    DataServiceV2.mappers.response
+                )
+
+                // Obtenir les eventIds avec réponses (optimisé)
+                const eventIdsWithResponses = EventsController.getEventIdsWithResponses(allResponses, userId)
+
+                // Filtrer les events : uniquement ceux avec réponses ET qui sont privés
+                events = events.filter(evt => 
+                    eventIdsWithResponses.has(evt.id) && 
+                    evt.isPublic !== true  // Exclure les événements publics (isPublic === true ou undefined)
+                )
+
+                console.log(`🔒 [${requestId}] Filtrage user/private: ${events.length} événements privés avec réponses pour userId=${userId}`)
+            } else if (mode === 'user' && privacy === 'public') {
+                // Users en mode public : tous les événements publics
+                events = events.filter(evt => evt.isPublic === true)
+                console.log(`🌍 [${requestId}] Filtrage user/public: ${events.length} événements publics`)
+            }
+
+            // Filtrage isOnline (si onlineOnly=true, par défaut)
+            if (shouldFilterOnline) {
+                const beforeOnlineFilter = events.length
+                events = events.filter(evt => evt.isOnline !== false) // Garder true et undefined
+                console.log(`🌐 [${requestId}] Filtrage online: ${events.length}/${beforeOnlineFilter} événements (${beforeOnlineFilter - events.length} offline exclus)`)
+            }
 
             // Enrichir avec la feuille Tags si disponible (limite 10)
             const tagsMap = await DataServiceV2.getTagsByEventIdMap(10)
@@ -37,10 +146,60 @@ class EventsController {
                 }
             }
 
-            console.log(`✅ [${requestId}] ${events.length} événements récupérés`)
+            console.log(`✅ [${requestId}] ${events.length} événements récupérés et filtrés`)
             res.json({ success: true, data: events })
         } catch (error) {
             console.error(`❌ [${requestId}] Erreur récupération événements:`, error)
+            res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
+    /**
+     * Récupérer MES événements (créés par moi)
+     * Query params:
+     * - userId: string (obligatoire)
+     * Retourne TOUS les events créés par userId (online + offline)
+     */
+    static async getMyEvents(req, res) {
+        const requestId = Math.random().toString(36).substr(2, 9)
+        try {
+            const { userId } = req.query
+
+            console.log(`👤 [${requestId}] Récupération MES événements pour userId=${userId}`)
+
+            // Validation
+            if (!userId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Le paramètre "userId" est requis'
+                })
+            }
+
+            // Charger tous les événements
+            let events = await DataServiceV2.getAllActiveData(
+                EventsController.EVENTS_RANGE,
+                DataServiceV2.mappers.event
+            )
+
+            // Filtrer uniquement ceux créés par cet utilisateur
+            events = events.filter(evt => evt.organizerId === userId)
+
+            console.log(`✅ [${requestId}] ${events.length} événements créés par userId=${userId}`)
+
+            // Enrichir avec tags
+            const tagsMap = await DataServiceV2.getTagsByEventIdMap(10)
+            if (tagsMap.size > 0) {
+                for (const evt of events) {
+                    const fromSheet = tagsMap.get(evt.id)
+                    if (fromSheet && fromSheet.length) {
+                        evt.tags = fromSheet
+                    }
+                }
+            }
+
+            res.json({ success: true, data: events })
+        } catch (error) {
+            console.error(`❌ [${requestId}] Erreur récupération MES événements:`, error)
             res.status(500).json({ success: false, error: error.message })
         }
     }

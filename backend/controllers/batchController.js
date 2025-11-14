@@ -55,6 +55,9 @@ class BatchController {
                         case 'event_response':
                             result = await BatchController.processEventResponse(action, userId)
                             break
+                        case 'friendship_request':
+                            result = await BatchController.processFriendshipRequest(action, userId)
+                            break
                         case 'friendship_accept':
                         case 'friendship_block':
                         case 'friendship_remove':
@@ -136,6 +139,47 @@ class BatchController {
             initialResponse,
             finalResponse,
             response: result
+        }
+    }
+
+    /**
+     * Traiter une demande d'amitié
+     */
+    static async processFriendshipRequest(action, userId) {
+        const { toUserId, fromUserId } = action.data
+
+        // Utiliser fromUserId de l'action si disponible, sinon userId global
+        const actualFromUserId = fromUserId || userId
+
+        if (!toUserId || !actualFromUserId) {
+            throw new Error('fromUserId et toUserId sont requis pour les demandes d\'amitié')
+        }
+
+        console.log(`👥 [BatchController] Traitement demande d'amitié: ${actualFromUserId} -> ${toUserId}`)
+
+        const mockReq = {
+            body: {
+                fromUserId: actualFromUserId,
+                toUserId,
+                status: 'pending'
+            }
+        }
+        const mockRes = {
+            json: (data) => data,
+            status: (code) => ({ json: (data) => data })
+        }
+
+        const result = await UsersController.upsertFriendship(mockReq, mockRes)
+
+        console.log(`✅ [BatchController] Demande d'amitié créée/mise à jour: ${result?.data?.id || 'unknown'}, ${actualFromUserId} -> ${toUserId}`)
+
+        return {
+            type: 'friendship_request',
+            action: result?.action || 'created',
+            toUserId,
+            fromUserId: actualFromUserId,
+            friendshipId: result?.data?.id,
+            result
         }
     }
 

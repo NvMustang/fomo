@@ -10,6 +10,9 @@ const EventsController = require('../controllers/eventsController')
 // GET /api/events - Récupérer tous les événements
 router.get('/', EventsController.getAllEvents)
 
+// GET /api/events/my - Récupérer MES événements (créés par moi)
+router.get('/my', EventsController.getMyEvents)
+
 // GET /api/events/:id - Récupérer un événement par ID
 router.get('/:id', EventsController.getEventById)
 

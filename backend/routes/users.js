@@ -19,9 +19,6 @@ router.put('/', UsersController.updateUser)
 // POST /api/users/friendships - Créer une amitié
 router.post('/friendships', UsersController.upsertFriendship)
 
-// GET /api/users/email/:email - Récupérer un utilisateur par email
-router.get('/email/:email', UsersController.getUserByEmail)
-
 // GET /api/users/match-email/:email - Rechercher un utilisateur par email et retourner uniquement l'ID
 router.get('/match-email/:email', UsersController.matchByEmail)
 
@@ -34,7 +31,7 @@ router.get('/:id', UsersController.getUserById)
 // GET /api/users/:id/friends - Récupérer les amis d'un utilisateur
 router.get('/:id/friends', UsersController.getUserFriends)
 
-// POST /api/users/migrate-responses - Migrer les réponses d'un visitor temporaire vers un utilisateur existant
-router.post('/migrate-responses', UsersController.migrateVisitorResponses)
+// GET /api/users/:id/friends/suggestions - Récupérer les suggestions d'amis
+router.get('/:id/friends/suggestions', UsersController.getFriendSuggestions)
 
 module.exports = router

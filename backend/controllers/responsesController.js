@@ -19,14 +19,26 @@ class ResponsesController {
         const requestId = Math.random().toString(36).substr(2, 9)
         const timestamp = new Date().toISOString()
         try {
-            console.log(`📝 [${requestId}] [${timestamp}] Récupération des réponses (overwrite)...`)
+            const { userId } = req.query
+
+            console.log(`📝 [${requestId}] [${timestamp}] Récupération des réponses${userId ? ` (userId=${userId})` : ''}...`)
             console.log(`📝 [${requestId}] Headers:`, req.headers['user-agent'] || 'unknown')
             console.log(`📝 [${requestId}] IP:`, req.ip || req.connection.remoteAddress)
 
-            const responses = await DataServiceV2.getAllActiveData(
+            let responses = await DataServiceV2.getAllActiveData(
                 RESPONSES_RANGE,
                 DataServiceV2.mappers.response
             )
+
+            // SÉCURITÉ : Filtrer par userId (obligatoire)
+            if (userId) {
+                responses = responses.filter(r => r.userId === userId)
+                console.log(`🔒 [${requestId}] Filtrage userId=${userId}: ${responses.length} réponses`)
+            } else {
+                // Si pas de userId, retourner vide (sécurité)
+                console.warn(`⚠️ [${requestId}] Pas de userId fourni, retour vide`)
+                responses = []
+            }
 
             console.log(`✅ [${requestId}] ${responses.length} réponses récupérées`)
             res.json({ success: true, data: responses })
@@ -82,7 +94,7 @@ class ResponsesController {
             }
 
             // Validation des réponses
-            const validResponses = ['going', 'participe', 'interested', 'maybe', 'not_interested', 'not_there', 'cleared', 'seen', 'invited', null]
+            const validResponses = ['going', 'participe', 'interested', 'maybe', 'not_interested', 'not_there', 'cleared', 'seen', 'invited', 'linked', 'new', null]
             if (initialResponse !== null && !validResponses.includes(initialResponse)) {
                 return res.status(400).json({
                     success: false,

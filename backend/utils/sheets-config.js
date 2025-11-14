@@ -57,19 +57,20 @@ const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
 
 // Détection automatique de l'environnement :
-// - Local (développement) : utilise toujours la DB de test si GOOGLE_SPREADSHEET_ID_TEST est défini
-// - Vercel (production) : utilise GOOGLE_SPREADSHEET_ID (production)
-// - Force production : si FORCE_PRODUCTION=true, utilise toujours GOOGLE_SPREADSHEET_ID
+// - Par défaut : utilise toujours PROD (source de vérité unique)
+// - Local avec TEST : si USE_TEST_DB=true, utilise GOOGLE_SPREADSHEET_ID_TEST
+// - Vercel (production) : utilise toujours GOOGLE_SPREADSHEET_ID (production)
+// 
+// Stratégie : Source de vérité unique = PROD par défaut
+// Pour utiliser TEST en local, définir USE_TEST_DB=true dans .env
 const isLocal = !process.env.VERCEL
-const forceProduction = process.env.FORCE_PRODUCTION === 'true'
+const useTestDb = process.env.USE_TEST_DB === 'true'
 const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
 const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
 
-const SPREADSHEET_ID = forceProduction
-    ? productionSpreadsheetId  // Force production
-    : (isLocal && testSpreadsheetId
-        ? testSpreadsheetId  // Local : toujours utiliser la DB de test si disponible
-        : productionSpreadsheetId)  // Vercel/Production : utiliser la DB de production
+const SPREADSHEET_ID = (isLocal && useTestDb && testSpreadsheetId)
+    ? testSpreadsheetId  // Local avec USE_TEST_DB=true : utiliser la DB de test
+    : productionSpreadsheetId  // Par défaut : toujours utiliser PROD (source de vérité unique)
 
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
@@ -95,8 +96,9 @@ async function validateSpreadsheet() {
         })
 
         // Déterminer l'environnement pour l'affichage
-        const envType = isLocal && testSpreadsheetId ? '🧪 TEST' : '📊 PRODUCTION'
-        console.log(`${envType} - Feuille trouvée: ${spreadsheet.data.properties.title}`)
+        const envType = (isLocal && useTestDb && testSpreadsheetId) ? '🧪 TEST' : '📊 PRODUCTION'
+        const sourceNote = envType === '📊 PRODUCTION' ? ' (source de vérité unique)' : ' (mode test)'
+        console.log(`${envType}${sourceNote} - Feuille trouvée: ${spreadsheet.data.properties.title}`)
         return spreadsheet.data
     } catch (error) {
         throw new Error(`Impossible d'accéder à la feuille de calcul: ${error.message}`)

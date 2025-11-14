@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
+import { useDataContext } from '@/contexts/DataContext'
 import { UserCard } from '@/components'
 import { useToast, useModalScrollHint } from '@/hooks'
-import type { User } from '@/types/fomoTypes'
+import { useFomoData } from '@/utils/dataManager'
+import type { User, Friend } from '@/types/fomoTypes'
 
 interface AddFriendModalProps {
     isOpen: boolean
@@ -31,7 +32,9 @@ const searchResultToUser = (result: SearchResult): User => ({
     showAttendanceToFriends: false,
     isPublicProfile: result.isPublicProfile ?? true,
     isAmbassador: result.isAmbassador ?? false,
-    allowRequests: true
+    allowRequests: true,
+    isVisitor: false, // Les résultats de recherche sont des users authentifiés
+    isNewVisitor: false
 })
 
 export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
@@ -40,19 +43,50 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
     currentUserId: _currentUserId,
     onFriendAdded
 }) => {
-    const { searchUsers, sendFriendshipRequest } = useFomoDataContext()
+    const { refreshRelations } = useDataContext()
+    const fomoData = useFomoData()
     const { showToast } = useToast()
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState<SearchResult[]>([])
     const [allSearchResults, setAllSearchResults] = useState<SearchResult[]>([])
     const [isSearching, setIsSearching] = useState(false)
-    const [isLoading, setIsLoading] = useState(false)
     const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
+    // Stocker les demandes en attente (Set pour éviter les doublons)
+    const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
+
+    // Suggestions d'amis
+    const [suggestions, setSuggestions] = useState<Array<Friend & { _suggestionScore?: number; _commonEvents?: number; _mutualFriends?: number; friendshipStatus?: string }>>([])
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
 
     // Animation de scroll à l'ouverture du modal
     const modalContentRef = useModalScrollHint(isOpen)
 
-    // Debounce de la recherche (comme FilterBar)
+    // Charger les suggestions à l'ouverture du modal
+    useEffect(() => {
+        if (!isOpen || !_currentUserId) return
+
+        setIsLoadingSuggestions(true)
+        fomoData.getFriendSuggestions(_currentUserId)
+            .then(result => {
+                // Limiter à 5 suggestions pour l'affichage
+                setSuggestions(result.suggestions.slice(0, 5))
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des suggestions:', error)
+                showToast({
+                    title: 'Erreur',
+                    message: 'Impossible de charger les suggestions d\'amis',
+                    type: 'error',
+                    position: 'top',
+                    duration: 2000
+                })
+            })
+            .finally(() => {
+                setIsLoadingSuggestions(false)
+            })
+    }, [isOpen, _currentUserId, fomoData, showToast])
+
+    // Recherche hybride : d'abord dans les suggestions, puis dans la DB
     useEffect(() => {
         if (!searchQuery.trim() || searchQuery.length < 3) {
             setSearchResults([])
@@ -62,9 +96,36 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
         }
 
         setIsSearching(true)
+
+        // 1. Chercher d'abord dans les suggestions
+        const queryLower = searchQuery.toLowerCase().trim()
+        const suggestionsMatches = suggestions.filter(suggestion => {
+            const nameMatch = suggestion.name?.toLowerCase().includes(queryLower)
+            const emailMatch = suggestion.email?.toLowerCase().includes(queryLower)
+            return nameMatch || emailMatch
+        })
+
+        if (suggestionsMatches.length > 0) {
+            // Convertir les suggestions en SearchResult
+            const results: SearchResult[] = suggestionsMatches.map(s => ({
+                id: s.id,
+                name: s.name,
+                email: s.email,
+                city: s.city,
+                isPublicProfile: s.isPublicProfile,
+                isAmbassador: s.isAmbassador,
+                friendshipStatus: 'none' // Les suggestions sont toujours ajoutables
+            }))
+            setAllSearchResults(results)
+            setSearchResults(results)
+            setIsSearching(false)
+            return
+        }
+
+        // 2. Si pas de résultat dans les suggestions, chercher dans la DB
         const timeout = setTimeout(async () => {
             try {
-                const results = await searchUsers(searchQuery)
+                const results = await fomoData.searchUsers(searchQuery, _currentUserId)
                 setAllSearchResults(results)
                 // Filtrer les utilisateurs qui ont un statut d'amitié actif (active, pending, blocked)
                 // Permettre les statuts 'none' et 'inactive' (pour renouer une amitié)
@@ -89,58 +150,86 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
         }, 600)
 
         return () => clearTimeout(timeout)
-    }, [searchQuery, searchUsers, showToast])
+    }, [searchQuery, fomoData, _currentUserId, showToast, suggestions])
 
-    const handleSendRequest = useCallback(async (targetUserId: string) => {
-        setIsLoading(true)
-        try {
-            const success = await sendFriendshipRequest(targetUserId)
-            if (success) {
-                // Mettre à jour le statut local
-                setSearchResults(prev =>
-                    prev.map(user =>
-                        user.id === targetUserId
-                            ? { ...user, friendshipStatus: 'pending' }
-                            : user
-                    )
-                )
-                showToast({
-                    title: 'Demande envoyée',
-                    message: 'Votre demande d\'amitié a été envoyée',
-                    type: 'success',
-                    position: 'top',
-                    duration: 2000
-                })
-                onFriendAdded?.()
-            } else {
-                showToast({
-                    title: 'Erreur',
-                    message: 'Impossible d\'envoyer la demande d\'amitié',
-                    type: 'error',
-                    position: 'top',
-                    duration: 2000
-                })
-            }
-        } catch (error) {
-            console.error('Erreur lors de l\'envoi de la demande d\'amitié:', error)
-            showToast({
-                title: 'Erreur',
-                message: 'Impossible d\'envoyer la demande d\'amitié',
-                type: 'error',
-                duration: 2000
-            })
-        } finally {
-            setIsLoading(false)
-        }
-    }, [sendFriendshipRequest, onFriendAdded, showToast])
+    const handleSendRequest = useCallback((targetUserId: string) => {
+        // Ajouter à la liste des demandes en attente
+        setPendingRequests(prev => new Set(prev).add(targetUserId))
 
-    const handleClose = useCallback(() => {
+        // Mettre à jour le statut local immédiatement (optimiste)
+        setSearchResults(prev =>
+            prev.map(user =>
+                user.id === targetUserId
+                    ? { ...user, friendshipStatus: 'pending' }
+                    : user
+            )
+        )
+
+        // Réduire la carte après l'ajout
+        setExpandedCardId(null)
+    }, [])
+
+    const resetState = useCallback(() => {
         setSearchQuery('')
         setSearchResults([])
         setAllSearchResults([])
         setExpandedCardId(null)
+        setPendingRequests(new Set())
+        // Ne pas réinitialiser les suggestions (elles restent chargées)
+    }, [])
+
+    const handleSubmit = useCallback(async () => {
+        if (pendingRequests.size === 0) return
+
+        try {
+            // Ajouter toutes les demandes au batch
+            pendingRequests.forEach(toUserId => {
+                fomoData.addFriendshipRequest(_currentUserId, toUserId)
+            })
+
+            // Envoyer le batch immédiatement
+            await fomoData.savePendingActions()
+
+            // Recharger les relations
+            await refreshRelations()
+
+            // Afficher le toast avec le nombre de demandes
+            const count = pendingRequests.size
+            showToast({
+                title: 'Demandes envoyées',
+                message: `${count} demande${count > 1 ? 's' : ''} d'amitié envoyée${count > 1 ? 's' : ''}`,
+                type: 'success',
+                position: 'top',
+                duration: 3000
+            })
+
+            onFriendAdded?.()
+
+            // Réinitialiser l'état et fermer
+            resetState()
+            onClose()
+        } catch (error) {
+            console.error('Erreur lors de l\'envoi des demandes d\'amitié:', error)
+            showToast({
+                title: 'Erreur',
+                message: 'Impossible d\'envoyer les demandes d\'amitié',
+                type: 'error',
+                position: 'top',
+                duration: 3000
+            })
+        }
+    }, [pendingRequests, fomoData, _currentUserId, refreshRelations, showToast, onFriendAdded, onClose, resetState])
+
+    const handleCancel = useCallback(() => {
+        // Réinitialiser l'état et fermer sans envoyer
+        resetState()
         onClose()
-    }, [onClose])
+    }, [resetState, onClose])
+
+    const handleClose = useCallback(() => {
+        // Un clic en dehors du modal = annuler
+        handleCancel()
+    }, [handleCancel])
 
     const getStatusText = (status: string) => {
         switch (status) {
@@ -162,13 +251,19 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
 
     if (!isOpen) return null
 
+    const pendingCount = pendingRequests.size
+
     return (
         <div className="modal_overlay" onClick={handleClose}>
             <div className="modal_container">
                 <div className="modal" onClick={(e) => e.stopPropagation()}>
 
 
-                    <div ref={modalContentRef} className="modal-content modal-form">
+                    <div
+                        ref={modalContentRef}
+                        className="modal-content modal-form"
+                        style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+                    >
                         <div className="form-section">
                             <label htmlFor="friend-search" className="form-label">
                                 Rechercher par nom ou email
@@ -185,7 +280,12 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
 
                         {/* Container fixe pour les résultats ou les états vides */}
                         <div className="search-results-wrapper">
-                            {isSearching ? (
+                            {isLoadingSuggestions ? (
+                                <div className="empty-state">
+                                    <div className="empty-state-icon">💡</div>
+                                    <div className="empty-state-text">Création des suggestions d'amis...</div>
+                                </div>
+                            ) : isSearching ? (
                                 <div className="empty-state">
                                     <div className="empty-state-icon">🔍</div>
                                     <div className="empty-state-text">Recherche en cours...</div>
@@ -223,9 +323,8 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                                                                             e.stopPropagation()
                                                                             handleSendRequest(result.id)
                                                                         }}
-                                                                        disabled={isLoading}
                                                                     >
-                                                                        {isLoading ? 'Envoi...' : result.friendshipStatus === 'inactive' ? 'Renouer' : 'Ajouter'}
+                                                                        {result.friendshipStatus === 'inactive' ? 'Renouer' : 'Ajouter'}
                                                                     </button>
                                                                 </div>
                                                             ) : !canAdd ? (
@@ -262,12 +361,93 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = React.memo(({
                                         </>
                                     )}
                                 </div>
+                            ) : searchQuery.length === 0 && suggestions.length > 0 ? (
+                                <>
+                                    <h4 className="form-label">
+                                        Suggestions ({suggestions.length})
+                                    </h4>
+                                    <div className="search-results-scrollable">
+                                        <div style={{
+                                            display: 'grid',
+                                            gap: 'var(--md)',
+                                            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))'
+                                        }}>
+                                            {suggestions.map((suggestion) => {
+                                                const user: User = {
+                                                    id: suggestion.id,
+                                                    name: suggestion.name,
+                                                    email: suggestion.email,
+                                                    city: suggestion.city,
+                                                    friendsCount: suggestion.friendsCount,
+                                                    showAttendanceToFriends: suggestion.showAttendanceToFriends,
+                                                    isPublicProfile: suggestion.isPublicProfile,
+                                                    isAmbassador: suggestion.isAmbassador,
+                                                    allowRequests: suggestion.allowRequests,
+                                                    isVisitor: false,
+                                                    isNewVisitor: false
+                                                }
+                                                const isExpanded = expandedCardId === suggestion.id
+
+                                                return (
+                                                    <UserCard
+                                                        key={suggestion.id}
+                                                        user={user}
+                                                        isExpanded={isExpanded}
+                                                        onExpandChange={(userId, expanded) => {
+                                                            setExpandedCardId(expanded ? userId : null)
+                                                        }}
+                                                        actionButtons={
+                                                            isExpanded ? (
+                                                                <div className="friend-actions">
+                                                                    <button
+                                                                        className="button primary"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleSendRequest(suggestion.id)
+                                                                        }}
+                                                                    >
+                                                                        Ajouter
+                                                                    </button>
+                                                                </div>
+                                                            ) : undefined
+                                                        }
+                                                    />
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </>
                             ) : (
                                 <div className="empty-state">
                                     <div className="empty-state-icon">✉️</div>
-                                    <div className="empty-state-text">Saisissez au moins 3 caractères pour afficher les suggestions</div>
+                                    <div className="empty-state-text">Saisissez au moins 3 caractères pour rechercher, ou consultez les suggestions ci-dessus</div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+
+                    {/* Footer avec boutons */}
+                    <div className="modal-footer">
+                        <div style={{
+                            display: 'flex',
+                            gap: 'var(--sm)',
+                            justifyContent: 'flex-end'
+                        }}>
+                            <button
+                                className="button secondary"
+                                onClick={handleCancel}
+                                type="button"
+                            >
+                                Annuler
+                            </button>
+                            <button
+                                className="button primary"
+                                onClick={handleSubmit}
+                                disabled={pendingCount === 0}
+                                type="button"
+                            >
+                                Ajouter {pendingCount > 0 ? `${pendingCount}` : ''} amitié{pendingCount > 1 ? 's' : ''}
+                            </button>
                         </div>
                     </div>
                 </div>

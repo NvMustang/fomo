@@ -11,7 +11,10 @@ export interface User {
     isPublicProfile: boolean
     isAmbassador: boolean
     allowRequests?: boolean
-    isVisitor?: boolean // true pour les visiteurs, false pour les utilisateurs authentifiés
+    isVisitor: boolean // true pour les visiteurs, false pour les utilisateurs authentifiés
+    isNewVisitor: boolean // true pour les nouveaux visiteurs (première visite, pas de nom sauvegardé)
+    createdAt?: string
+    lastConnexion?: string
 }
 
 export interface Venue {
@@ -104,6 +107,7 @@ export interface Friendship {
 
 export interface Friend extends User {
     friendship: Friendship
+    friends?: Friend[] // Amis de cet ami (calculé uniquement pour les suggestions)
 }
 
 export interface Organizer extends User {
@@ -113,13 +117,12 @@ export interface Organizer extends User {
 export interface Tag {
     tag: string
     usage_count: number
-    last_used: string
-    created_at: string
-    created_by: string
+    // Note: last_used, created_at, created_by supprimés pour optimisation
+    // (non utilisés dans CreateEventModal, calcul beaucoup plus rapide)
 }
 
 // ===== USER RESPONSES =====
-export type UserResponseValue = 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | null
+export type UserResponseValue = 'going' | 'participe' | 'interested' | 'maybe' | 'not_interested' | 'not_there' | 'cleared' | 'seen' | 'invited' | 'linked' | 'new' | null
 
 export interface UserFriendshipResponse {
     userId: string
@@ -171,24 +174,26 @@ export interface BatchEventResponseData {
     eventId: string
     initialResponse: UserResponseValue
     finalResponse: UserResponseValue
+    responseMode: string
     invitedByUserId?: string
 }
 
 export interface BatchFriendshipActionData {
-    friendshipId: string
+    friendshipId?: string  // Optionnel pour les demandes (pas encore créée)
     toUserId: string
+    fromUserId?: string  // Pour les demandes d'amitié
 }
 
 export type BatchActionData = BatchEventResponseData | BatchFriendshipActionData
 
 // Type guard pour vérifier si une action d'amitié
 export function isFriendshipActionData(data: BatchActionData): data is BatchFriendshipActionData {
-    return 'friendshipId' in data && 'toUserId' in data
+    return 'toUserId' in data
 }
 
 export interface BatchAction {
     id: string
-    type: 'event_response' | 'friendship_accept' | 'friendship_block' | 'friendship_remove'
+    type: 'event_response' | 'friendship_request' | 'friendship_accept' | 'friendship_block' | 'friendship_remove'
     data: BatchActionData
     userId: string
     timestamp: number
@@ -204,25 +209,6 @@ export interface BatchProcessResult {
         friendshipId?: string
         toUserId?: string
     }>
-}
-
-// ===== API PAYLOADS =====
-export interface UserCreatePayload {
-    id?: string
-    name: string
-    email: string
-    city: string
-    lat: number | null
-    lng: number | null
-    friendsCount: number
-    showAttendanceToFriends: boolean
-    privacy: { showAttendanceToFriends: boolean }
-    isPublicProfile: boolean
-    isActive: boolean
-    isAmbassador: boolean
-    allowRequests: boolean
-    modifiedAt: string
-    lastConnexion: string
 }
 
 // ===== EMAIL VALIDATION =====

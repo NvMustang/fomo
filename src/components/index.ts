@@ -4,9 +4,6 @@
  * Index centralisé pour exporter uniquement les composants UI
  */
 
-// App Providers
-export { AppProviders } from './AppProviders'
-
 // Composants UI de base
 export { Button } from './ui/Button'
 export { Header } from './ui/Header'
@@ -25,10 +22,10 @@ export { default as CreateEventModal } from './modals/CreateEventModal'
 export { UserConnexionModal } from '@/onboarding/modals/UserConnexionModal'
 export { VisitorRegistrationModal } from '@/onboarding/modals/VisitorRegistrationModal'
 export { BetaModal } from './modals/BetaModal'
-export { BookmarkletBatchModal } from './modals/BookmarkletBatchModal'
 
 // Composants utilitaires
 export { LocationPicker } from './ui/LocationPicker'
-export { AddressAutocomplete } from './AddressAutocomplete'
-export { StockImagePicker } from './ui/StockImagePicker'
+export { AddressAutocomplete } from '../utils/AddressAutocomplete'
+export { ImagePicker } from './ui/ImagePicker'
 export { FomoDatePicker } from './ui/DatePicker'
+export { DateRangePicker } from './ui/DateRangePicker'

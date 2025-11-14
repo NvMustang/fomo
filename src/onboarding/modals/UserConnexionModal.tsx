@@ -8,11 +8,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
 import { Button } from '@/components'
 import { useModalScrollHint } from '@/hooks'
 import { isValidEmail } from '@/utils/emailValidation'
-import { getApiBaseUrl } from '@/config/env'
+import { useFomoData } from '@/utils/dataManager'
 
 interface UserConnexionModalProps {
   useVisitorStyle?: boolean // Si true, applique le style visitor-modal-dynamic
@@ -23,12 +22,12 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
   useVisitorStyle = false,
   onRegistrationRequested
 }) => {
-  const { login, isLoading, isAuthenticated, checkUserByEmail } = useAuth()
-  const { matchByEmail } = useFomoDataContext()
+  const { login, isLoading, user } = useAuth()
+  const fomoData = useFomoData()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const emailInputRef = useRef<HTMLInputElement>(null)
-  const prevAuthenticatedRef = useRef<boolean>(isAuthenticated)
+  const prevAuthenticatedRef = useRef<boolean>(!user.isVisitor)
 
   // Animation de scroll à l'ouverture du modal
   const modalContentRef = useModalScrollHint(true)
@@ -49,54 +48,26 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
 
     try {
       console.log('🔍 [UserConnexionModal] Vérification email pour connexion:', emailToCheck.trim())
-      const matchedId = await matchByEmail(emailToCheck.trim())
+      const matchedId = await fomoData.matchByEmail(emailToCheck.trim())
       console.log('🔍 [UserConnexionModal] Résultat matchByEmail:', matchedId || 'Aucun utilisateur trouvé')
 
       if (matchedId) {
-        // Vérifier si c'est un user authentifié (pas un visitor)
-        const existingUser = await checkUserByEmail(emailToCheck.trim())
+        // Récupérer le user complet par son ID (visitor ou user authentifié)
+        // Note: Le remplacement de l'ID dans localStorage est géré par AuthContext.login()
+        const existingUser = await fomoData.getUserById(matchedId)
 
         // Si user authentifié trouvé, vérifier s'il y a un visitor temporaire à migrer
         if (existingUser && !existingUser.isVisitor) {
-          // Détecter le visitor temporaire actif
-          let visitorUserId: string | null = null
-          try {
-            visitorUserId = sessionStorage.getItem('fomo-visit-user-id')
-          } catch (e) {
-            // Ignorer si sessionStorage indisponible
-          }
+          // Utiliser le user déjà disponible dans le scope du composant
+          const visitorUserId = user.isVisitor ? user.id : null
 
           // Si un visitor temporaire existe et est différent de l'utilisateur trouvé, migrer
           if (visitorUserId && visitorUserId !== existingUser.id) {
             console.log(`🔄 [UserConnexionModal] Migration visitor temporaire ${visitorUserId} vers ${existingUser.id}`)
             try {
-              const apiUrl = getApiBaseUrl()
-              const response = await fetch(`${apiUrl}/users/migrate-responses`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  sourceUserId: visitorUserId,
-                  targetUserId: existingUser.id
-                })
-              })
-
-              if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }))
-                console.error('❌ [UserConnexionModal] Erreur migration:', errorData)
-                // Continuer quand même avec la connexion
-              } else {
-                const result = await response.json()
-                console.log(`✅ [UserConnexionModal] Migration réussie: ${result.data.responsesMigrated} réponse(s) migrée(s)`)
-
-                // Nettoyer sessionStorage après migration réussie
-                try {
-                  sessionStorage.removeItem('fomo-visit-user-id')
-                  sessionStorage.removeItem('fomo-visit-name')
-                  sessionStorage.removeItem('fomo-visit-email')
-                } catch (e) {
-                  // Ignorer si sessionStorage indisponible
-                }
-              }
+              const migrationResult = await fomoData.migrateResponses(visitorUserId, existingUser.id)
+              console.log(`✅ [UserConnexionModal] Migration réussie: ${migrationResult.responsesMigrated} réponse(s) migrée(s)`)
+              // Note: visitor sera automatiquement remplacé par le user authentifié via AuthContext.login()
             } catch (error) {
               console.error('❌ [UserConnexionModal] Erreur lors de la migration:', error)
               // Continuer quand même avec la connexion
@@ -117,19 +88,12 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
           // Visiteur trouvé -> rediriger vers inscription
           console.log('⚠️ [UserConnexionModal] Visiteur détecté, passage à l\'inscription')
           onRegistrationRequested?.(emailToCheck.trim())
-        } else if (matchedId.startsWith('usr-')) {
-          // User trouvé (fallback pour compatibilité)
-          console.log('✅ [UserConnexionModal] User trouvé, connexion automatique...')
-          const user = await checkUserByEmail(emailToCheck.trim())
-          if (user) {
-            await login(user.name, user.city, user.email, user)
-            console.log('✅ [UserConnexionModal] Connexion réussie')
-            try {
-              sessionStorage.setItem('fomo-just-signed-up', 'true')
-            } catch (e) {
-              // Ignorer si sessionStorage indisponible
-            }
-          }
+        } else {
+          // Cas où matchedId existe mais getUserById retourne null (erreur de récupération)
+          console.error(`❌ [UserConnexionModal] ID trouvé (${matchedId}) mais utilisateur non récupérable depuis la DB`)
+          setError('Erreur lors de la récupération de votre compte. Vous pouvez continuer avec l\'inscription.')
+          // Rediriger vers l'inscription comme fallback
+          onRegistrationRequested?.(emailToCheck.trim())
         }
       } else {
         // Aucun utilisateur trouvé -> rediriger vers inscription
@@ -140,13 +104,13 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
       console.error('❌ [UserConnexionModal] Erreur de vérification:', error)
       setError('Erreur lors de la vérification de l\'email. Réessayez.')
     }
-  }, [matchByEmail, login, checkUserByEmail, onRegistrationRequested])
+  }, [fomoData, login, onRegistrationRequested, user])
 
-  // Charger l'email du visitor depuis sessionStorage si disponible
+  // Charger l'email du visitor depuis localStorage si disponible
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (user.isVisitor) {
       try {
-        const visitorEmail = sessionStorage.getItem('fomo-visit-email')
+        const visitorEmail = localStorage.getItem('fomo-visit-email')
         if (visitorEmail && visitorEmail.trim()) {
           setEmail(visitorEmail.trim())
           console.log('✅ [UserConnexionModal] Email du visitor pré-rempli:', visitorEmail.trim())
@@ -158,12 +122,12 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
       }
       setError('')
     }
-  }, [isAuthenticated])
+  }, [user.isVisitor])
 
   // Donner le focus à l'input email après déconnexion
   useEffect(() => {
     // Détecter le passage de authentifié à non-authentifié (déconnexion)
-    if (prevAuthenticatedRef.current === true && isAuthenticated === false) {
+    if (prevAuthenticatedRef.current === false && user.isVisitor === true) {
       // Délai pour s'assurer que le modal est monté
       const timeoutId = setTimeout(() => {
         emailInputRef.current?.focus()
@@ -171,8 +135,8 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
       return () => clearTimeout(timeoutId)
     }
     // Mettre à jour la référence précédente
-    prevAuthenticatedRef.current = isAuthenticated
-  }, [isAuthenticated])
+    prevAuthenticatedRef.current = !user.isVisitor
+  }, [user.isVisitor])
 
   // Fonction appelée uniquement lors du clic sur "Continuer"
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -180,10 +144,10 @@ export const UserConnexionModal: React.FC<UserConnexionModalProps> = ({
     await handleEmailLogInCheck(email.trim())
   }
 
-  if (isAuthenticated) return null
+  if (!user.isVisitor) return null
 
   // Dans WelcomeScreen, toujours utiliser modal-welcome pour le style blanc sur fond dégradé
-  const isInWelcomeScreen = !isAuthenticated
+  const isInWelcomeScreen = user.isVisitor
   const modalClass = isInWelcomeScreen
     ? 'modal modal-welcome'
     : useVisitorStyle

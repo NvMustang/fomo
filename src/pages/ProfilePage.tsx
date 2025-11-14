@@ -11,12 +11,13 @@ import { EventCard } from '@/components/ui/EventCard'
 import { CreateEventModal } from '@/components/modals/CreateEventModal'
 import { ToggleLabelsWithExpendableList } from '@/components/ui/ToggleLabelsWithExpendableList'
 import { AddFriendModal } from '@/components/modals/AddFriendModal'
-import { AddressAutocomplete } from '@/components/AddressAutocomplete'
+import { AddressAutocomplete } from '@/utils/AddressAutocomplete'
 import { LastActivities } from '@/components/ui/LastActivities'
 import { useAuth } from '@/contexts/AuthContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
-import { useFilters } from '@/contexts/FiltersContext'
-import { filterQuery } from '@/utils/filterTools'
+import { useDataContext } from '@/contexts/DataContext'
+import { usePrivacy } from '@/contexts/PrivacyContext'
+import { useFilters, useToast } from '@/hooks'
+import { filterQuery, getLatestResponsesByEvent, matchPublic } from '@/utils/filterTools'
 import { animateWindowScrollTo } from '@/hooks/useModalScrollHint'
 import type { Event } from '@/types/fomoTypes'
 
@@ -27,13 +28,15 @@ export const ProfilePageWeb: React.FC = () => {
   const hasScrolledToTodayRef = useRef(false)
 
   const { user, logout, updateUser } = useAuth()
-  const { getLatestResponsesByEvent } = useFomoDataContext()
+  const { responses, relationsError, addFriendshipAction } = useDataContext()
+  const { isPublicMode } = usePrivacy()
   const { getFriendsGroupedByFrienship } = useFilters()
-  const {
-    relationsError,
-    addFriendshipAction,
-    refreshUserRelations
-  } = useFomoDataContext()
+  const { showToast } = useToast()
+
+  // Logique public/private : user.isPublicProfile indique si l'utilisateur a un profil public
+  const isPublicUser = user?.isPublicProfile ?? false
+  // Si l'utilisateur est privé ET que l'app est en mode public, afficher une erreur
+  const shouldShowPrivacyError = !isPublicUser && isPublicMode
 
   // État pour les paramètres
   const [allowFriendshipRequests, setAllowFriendshipRequests] = useState(
@@ -54,25 +57,45 @@ export const ProfilePageWeb: React.FC = () => {
   const [expandedPendingCardId, setExpandedPendingCardId] = useState<string | null>(null)
   const [friendsSearchQuery, setFriendsSearchQuery] = useState('')
 
-  // Récupérer les événements créés par l'utilisateur via FiltersContext
-  const { getProfileEventsGroupedByPeriods } = useFilters()
-  const profileEventsGrouped = useMemo(() => getProfileEventsGroupedByPeriods(), [getProfileEventsGroupedByPeriods])
+  // Récupérer MES événements (créés par moi) depuis myEventsSource
+  const { myEvents, dataReady: myEventsReady } = useDataContext()
+  const { groupByPeriods } = useFilters()
+
+  // Filtrer les événements selon le mode pour les users publics
+  // User public + mode public → événements publics uniquement
+  // User public + mode privé → événements privés uniquement
+  // User privé → tous les événements (pas de filtrage)
+  const filteredMyEvents = useMemo(() => {
+    if (!isPublicUser) {
+      // User privé : pas de filtrage, tous les événements
+      return myEvents
+    }
+    // User public : filtrer selon le mode
+    return myEvents.filter(event => matchPublic(event, isPublicMode))
+  }, [myEvents, isPublicUser, isPublicMode])
+
+  const profileEventsGrouped = useMemo(() => groupByPeriods(filteredMyEvents), [groupByPeriods, filteredMyEvents])
   const userEvents = profileEventsGrouped.periods.flatMap(p => p.events)
-  const isLoadingUserEvents = false // getProfileEventsGroupedByPeriods n'a pas d'état de chargement pour l'instant
+  const isLoadingUserEvents = !myEventsReady
 
   // Calculer les statistiques
+  // "Créés" : filtré selon le mode (cohérent avec "Mes événements créés")
+  // "Participe" et "Intéressé" : toutes les réponses (pas de filtrage par mode)
   const stats = useMemo(() => {
     if (!user?.id) {
       return { created: 0, going: 0, interested: 0 }
     }
 
+    // "Créés" : utilise userEvents qui est déjà filtré selon le mode
     const created = userEvents.length
-    const latestResponsesMap = getLatestResponsesByEvent(user.id)
+
+    // "Participe" et "Intéressé" : toutes les réponses, indépendamment du mode
+    const latestResponsesMap = getLatestResponsesByEvent(responses, user.id)
     const going = Array.from(latestResponsesMap.values()).filter(r => r.finalResponse === 'going').length
     const interested = Array.from(latestResponsesMap.values()).filter(r => r.finalResponse === 'interested').length
 
     return { created, going, interested }
-  }, [userEvents, user?.id, getLatestResponsesByEvent])
+  }, [userEvents, user?.id, responses])
 
 
 
@@ -81,8 +104,40 @@ export const ProfilePageWeb: React.FC = () => {
     if (!user?.id) {
       return { activeFriends: [], pendingFriends: [], sentRequests: [] }
     }
-    return getFriendsGroupedByFrienship(user.id)
-  }, [user?.id, getFriendsGroupedByFrienship])
+    return getFriendsGroupedByFrienship()
+  }, [getFriendsGroupedByFrienship])
+
+  // ===== TOAST POUR MODE PRIVÉ SANS AMIS =====
+  // Afficher un toast si mode privé et aucun ami actif
+  // Note: Si le composant est rendu, DataReadyGuard a déjà validé que les données sont prêtes
+  useEffect(() => {
+    // Ne pas afficher en mode visitor
+    if (user?.isVisitor) {
+      return
+    }
+
+    // Ne pas afficher en mode public
+    if (isPublicMode) {
+      return
+    }
+
+    // Vérifier si aucun ami actif
+    if (activeFriends.length === 0) {
+      const timer = setTimeout(() => {
+        showToast({
+          title: 'Tu n\'as pas d\'amitiés actuellement 🤷‍♂️',
+          message: 'Ajoute des amis pour les inviter à tes événements!',
+          type: 'info',
+          position: 'top',
+          duration: 8000
+        })
+      }, 4000) // Délai de 4s après le chargement
+
+      return () => {
+        clearTimeout(timer)
+      }
+    }
+  }, [user?.isVisitor, isPublicMode, activeFriends.length, showToast])
 
   // Filtrer les amis actifs selon la recherche
   const filteredActiveFriends = useMemo(() => {
@@ -162,7 +217,7 @@ export const ProfilePageWeb: React.FC = () => {
           if (targetElement) {
             // Marquer que l'animation a été jouée
             hasScrolledToTodayRef.current = true
-            
+
             // Calculer la position cible (top de l'élément)
             const targetRect = targetElement.getBoundingClientRect()
             const targetY = window.scrollY + targetRect.top
@@ -286,492 +341,525 @@ export const ProfilePageWeb: React.FC = () => {
 
   return (
     <div className="page-container-fullscreen list-page" style={{ paddingTop: '30px' }}>
-      {/* UserCard - Informations utilisateur */}
-      <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-        <div className="user-card-container">
-          <UserCard
-            user={user}
-            showEditButton={false}
-          />
-        </div>
-      </div>
+      {/* Message d'erreur si profil privé en mode public */}
+      {shouldShowPrivacyError && (
+        <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '600px',
+            padding: 'var(--lg)',
+            backgroundColor: 'var(--surface)',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontWeight: 600, fontSize: '18px', marginBottom: 'var(--sm)' }}>
+                🚫 Vous ne possédez pas de profil public.
+              </div>
+              <div style={{ margin: 0, fontSize: '14px', opacity: 0.9 }}>
 
-      {/* Bouton de déconnexion */}
-      <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-        <div style={{ width: '100%', maxWidth: '600px' }}>
-          <Button variant="secondary" onClick={handleSignOut} style={{ width: '100%' }}>
-            Se déconnecter
-          </Button>
-        </div>
-      </div>
-
-      {/* Statistiques */}
-      <div className="stats-section">
-        <div className="stats-grid">
-          <div className="stat">
-            <div className="stat-value">{stats.created}</div>
-            <div className="stat-label">Créés</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">{stats.going}</div>
-            <div className="stat-label">Participe</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">{stats.interested}</div>
-            <div className="stat-label">Intéressé</div>
+                <br />
+                Passez l'app en mode privé pour voir votre profil.
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Activité récente */}
-      <LastActivities />
+      {/* Contenu du profil - seulement si pas d'erreur */}
+      {!shouldShowPrivacyError && (
+        <>
+          {/* UserCard - Informations utilisateur */}
+          <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+            <div className="user-card-container">
+              <UserCard
+                user={user}
+                showEditButton={false}
+              />
+            </div>
+          </div>
 
-      {/* Relations d'amitié (amis actifs + demandes en attente) */}
-      <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
-        <div className="friends-section-container">
-          {/* Section principale : Mes amis */}
-          <div className="friends-section">
-            {/* Header avec titre et bouton d'ajout */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
-              <h3 className="friends-title" style={{ margin: 0 }}>
-                Mes amis
-              </h3>
-              <Button
-                onClick={() => setIsAddFriendModalOpen(true)}
-                size="sm"
-                title="Ajouter un ami"
-                className="friends-add-button"
-              >
-                + Ajouter un ami
+          {/* Bouton de déconnexion */}
+          <div className="profile-section" style={{ marginBottom: 'var(--md)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+            <div style={{ width: '100%', maxWidth: '600px' }}>
+              <Button variant="secondary" onClick={handleSignOut} style={{ width: '100%' }}>
+                Se déconnecter
               </Button>
             </div>
+          </div>
 
-            {/* Affichage de l'erreur si présente */}
-            {relationsError && (
-              <div className="error">Erreur: {relationsError}</div>
-            )}
+          {/* Statistiques */}
+          <div className="stats-section">
+            <div className="stats-grid">
+              <div className="stat">
+                <div className="stat-value">{stats.created}</div>
+                <div className="stat-label">Créés</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">{stats.going}</div>
+                <div className="stat-label">Participe</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">{stats.interested}</div>
+                <div className="stat-label">Intéressé</div>
+              </div>
+            </div>
+          </div>
 
-            {/* Invitations reçues - Toggle */}
-            {pendingFriends.length > 0 && (
-              <ToggleLabelsWithExpendableList
-                label="Invitations reçues"
-                count={pendingFriends.length}
-                isExpanded={isPendingFriendsExpanded}
-                onToggle={() => setIsPendingFriendsExpanded(!isPendingFriendsExpanded)}
-              >
-                <div className="friends-grid">
-                  {pendingFriends.map((friend, index) => (
-                    <UserCard
-                      key={`${friend.id}-${index}`}
-                      user={friend}
-                      isExpanded={expandedPendingCardId === friend.id}
-                      onExpandChange={(userId, expanded) => {
-                        setExpandedPendingCardId(expanded ? userId : null)
-                      }}
-                      actionButtons={
-                        <div className="friend-actions">
-                          <button
-                            className="button primary"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAccept(friend.friendship.id, friend.id)
-                            }}
-                          >
-                            Accepter
-                          </button>
-                          <button
-                            className="button secondary"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleBlock(friend.friendship.id, friend.id)
-                            }}
-                          >
-                            Bloquer
-                          </button>
-                        </div>
-                      }
-                    />
-                  ))}
-                </div>
-              </ToggleLabelsWithExpendableList>
-            )}
+          {/* Activité récente */}
+          <LastActivities />
 
-            {/* Invitations envoyées - Toggle */}
-            {sentRequests.length > 0 && (
-              <ToggleLabelsWithExpendableList
-                label="Invitations envoyées"
-                count={sentRequests.length}
-                isExpanded={isSentRequestsExpanded}
-                onToggle={() => setIsSentRequestsExpanded(!isSentRequestsExpanded)}
-              >
-                <div className="friends-grid">
-                  {sentRequests.map((friend, index) => (
-                    <UserCard
-                      key={`${friend.id}-${index}`}
-                      user={friend}
-                    />
-                  ))}
+          {/* Relations d'amitié (amis actifs + demandes en attente) */}
+          <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
+            <div className="friends-section-container">
+              {/* Section principale : Mes amis */}
+              <div className="friends-section">
+                {/* Header avec titre et bouton d'ajout */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--md)' }}>
+                  <h3 className="friends-title" style={{ margin: 0 }}>
+                    Mes amis
+                  </h3>
+                  <Button
+                    onClick={() => setIsAddFriendModalOpen(true)}
+                    size="sm"
+                    title="Ajouter un ami"
+                    className="friends-add-button"
+                  >
+                    + Ajouter un ami
+                  </Button>
                 </div>
-              </ToggleLabelsWithExpendableList>
-            )}
 
-            {/* Liste des amitiés - Toggle */}
-            {activeFriends.length > 0 && (
-              <ToggleLabelsWithExpendableList
-                label="Amitiés"
-                count={activeFriends.length}
-                isExpanded={isActiveFriendsExpanded}
-                onToggle={() => setIsActiveFriendsExpanded(!isActiveFriendsExpanded)}
-                className="with-border-top"
-              >
-                {/* Barre de recherche pour filtrer les amis */}
-                <div style={{ marginBottom: 'var(--md)' }}>
-                  <input
-                    type="text"
-                    placeholder="Rechercher un ami..."
-                    value={friendsSearchQuery}
-                    onChange={(e) => setFriendsSearchQuery(e.target.value)}
-                    className="friends-search-input"
-                    style={{
-                      width: '100%',
-                      padding: 'var(--sm) var(--md)',
-                      fontSize: 'var(--text-sm)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      backgroundColor: 'var(--surface)',
-                      color: 'var(--text)',
-                      outline: 'none',
-                      transition: 'border-color var(--transition-fast)'
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--primary)'
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--border)'
-                    }}
-                  />
-                </div>
-                <div className="friends-grid">
-                  {filteredActiveFriends.map((friend, index) => (
-                    <UserCard
-                      key={`${friend.id}-${index}`}
-                      user={friend}
-                    />
-                  ))}
-                </div>
-                {filteredActiveFriends.length === 0 && friendsSearchQuery.trim() && (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: 'var(--lg)',
-                    color: 'var(--text-muted)',
-                    fontSize: 'var(--text-sm)'
-                  }}>
-                    Aucun ami trouvé pour "{friendsSearchQuery}"
+                {/* Affichage de l'erreur si présente */}
+                {relationsError && (
+                  <div className="error">Erreur: {relationsError}</div>
+                )}
+
+                {/* Invitations reçues - Toggle */}
+                {pendingFriends.length > 0 && (
+                  <ToggleLabelsWithExpendableList
+                    label="Invitations reçues"
+                    count={pendingFriends.length}
+                    isExpanded={isPendingFriendsExpanded}
+                    onToggle={() => setIsPendingFriendsExpanded(!isPendingFriendsExpanded)}
+                    className="has-pending-requests"
+                  >
+                    <div className="friends-grid">
+                      {pendingFriends.map((friend, index) => (
+                        <UserCard
+                          key={`${friend.id}-${index}`}
+                          user={friend}
+                          isExpanded={expandedPendingCardId === friend.id}
+                          onExpandChange={(userId, expanded) => {
+                            setExpandedPendingCardId(expanded ? userId : null)
+                          }}
+                          actionButtons={
+                            <div className="friend-actions">
+                              <button
+                                className="button primary"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleAccept(friend.friendship.id, friend.id)
+                                }}
+                              >
+                                Accepter
+                              </button>
+                              <button
+                                className="button secondary"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleBlock(friend.friendship.id, friend.id)
+                                }}
+                              >
+                                Bloquer
+                              </button>
+                            </div>
+                          }
+                        />
+                      ))}
+                    </div>
+                  </ToggleLabelsWithExpendableList>
+                )}
+
+                {/* Invitations envoyées - Toggle */}
+                {sentRequests.length > 0 && (
+                  <ToggleLabelsWithExpendableList
+                    label="Invitations envoyées"
+                    count={sentRequests.length}
+                    isExpanded={isSentRequestsExpanded}
+                    onToggle={() => setIsSentRequestsExpanded(!isSentRequestsExpanded)}
+                  >
+                    <div className="friends-grid">
+                      {sentRequests.map((friend, index) => (
+                        <UserCard
+                          key={`${friend.id}-${index}`}
+                          user={friend}
+                        />
+                      ))}
+                    </div>
+                  </ToggleLabelsWithExpendableList>
+                )}
+
+                {/* Liste des amitiés - Toggle */}
+                {activeFriends.length > 0 && (
+                  <ToggleLabelsWithExpendableList
+                    label="Amitiés"
+                    count={activeFriends.length}
+                    isExpanded={isActiveFriendsExpanded}
+                    onToggle={() => setIsActiveFriendsExpanded(!isActiveFriendsExpanded)}
+                    className="with-border-top"
+                  >
+                    {/* Barre de recherche pour filtrer les amis */}
+                    <div style={{ marginBottom: 'var(--md)' }}>
+                      <input
+                        type="text"
+                        placeholder="Rechercher un ami..."
+                        value={friendsSearchQuery}
+                        onChange={(e) => setFriendsSearchQuery(e.target.value)}
+                        className="friends-search-input"
+                        style={{
+                          width: '100%',
+                          padding: 'var(--sm) var(--md)',
+                          fontSize: 'var(--text-sm)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius)',
+                          backgroundColor: 'var(--surface)',
+                          color: 'var(--text)',
+                          outline: 'none',
+                          transition: 'border-color var(--transition-fast)'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--primary)'
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--border)'
+                        }}
+                      />
+                    </div>
+                    <div className="friends-grid">
+                      {filteredActiveFriends.map((friend, index) => (
+                        <UserCard
+                          key={`${friend.id}-${index}`}
+                          user={friend}
+                        />
+                      ))}
+                    </div>
+                    {filteredActiveFriends.length === 0 && friendsSearchQuery.trim() && (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: 'var(--lg)',
+                        color: 'var(--text-muted)',
+                        fontSize: 'var(--text-sm)'
+                      }}>
+                        Aucun ami trouvé pour "{friendsSearchQuery}"
+                      </div>
+                    )}
+                  </ToggleLabelsWithExpendableList>
+                )}
+
+                {/* Empty state si aucun ami, aucune demande */}
+                {activeFriends.length === 0 && pendingFriends.length === 0 && sentRequests.length === 0 && !relationsError && (
+                  <div className="friends-empty">
+                    <div className="empty-icon">👥</div>
+                    <h4 className="empty-title">Aucun ami pour le moment</h4>
+                    <p className="empty-description">
+                      Invite tes amis à rejoindre FOMO pour partager vos événements !
+                    </p>
                   </div>
                 )}
-              </ToggleLabelsWithExpendableList>
-            )}
+              </div>
 
-            {/* Empty state si aucun ami, aucune demande */}
-            {activeFriends.length === 0 && pendingFriends.length === 0 && sentRequests.length === 0 && !relationsError && (
-              <div className="friends-empty">
-                <div className="empty-icon">👥</div>
-                <h4 className="empty-title">Aucun ami pour le moment</h4>
+              {/* Modal d'ajout d'ami */}
+              <AddFriendModal
+                isOpen={isAddFriendModalOpen}
+                onClose={() => setIsAddFriendModalOpen(false)}
+                currentUserId={user?.id || ''}
+                onFriendAdded={() => {
+                  // La mise à jour optimiste dans DataContext suffit, pas besoin de refreshAll
+                  setIsAddFriendModalOpen(false)
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Section Paramètres */}
+          <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
+            <h3 style={{
+              fontSize: 'var(--text-lg)',
+              fontWeight: 'var(--font-weight-bold)',
+              color: 'var(--text)',
+              margin: '0 0 var(--sm) 0',
+              paddingBottom: 'var(--sm)',
+              borderBottom: '1px solid var(--border)'
+            }}>
+              Paramètres
+            </h3>
+
+            {/* Toggle: Afficher ma participation aux amis */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: 'var(--sm) 0',
+              borderBottom: '1px solid var(--border)'
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: 'var(--text-md)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--text)',
+                  marginBottom: 'var(--xs)'
+                }}>
+                  Afficher ma participation aux amis
+                </div>
+                <div style={{
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--text-muted)'
+                }}>
+                  {user.showAttendanceToFriends
+                    ? 'Vos amis peuvent voir les événements auxquels vous participez'
+                    : 'Vos amis ne peuvent pas voir votre participation aux événements'
+                  }
+                </div>
+              </div>
+              <button
+                onClick={handleToggleShowAttendance}
+                role="switch"
+                aria-checked={user.showAttendanceToFriends}
+                aria-label={user.showAttendanceToFriends ? 'Masquer la participation' : 'Afficher la participation'}
+                style={{
+                  width: '52px',
+                  height: '28px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  backgroundColor: user.showAttendanceToFriends ? 'var(--success)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'background-color var(--transition-fast)',
+                  marginLeft: 'var(--md)',
+                  flexShrink: 0
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: user.showAttendanceToFriends ? '26px' : '2px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--white)',
+                  transition: 'left var(--transition-fast)',
+                  boxShadow: 'var(--shadow)'
+                }} />
+              </button>
+            </div>
+
+            {/* Toggle: Autoriser les demandes d'amitié */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: 'var(--sm) 0',
+              borderBottom: '1px solid var(--border)'
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: 'var(--text-md)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--text)',
+                  marginBottom: 'var(--xs)'
+                }}>
+                  Autoriser les demandes d'amitié
+                </div>
+                <div style={{
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--text-muted)'
+                }}>
+                  {allowFriendshipRequests
+                    ? 'Les autres utilisateurs peuvent vous envoyer des demandes d\'amitié'
+                    : 'Les demandes d\'amitié sont bloquées'
+                  }
+                </div>
+              </div>
+              <button
+                onClick={handleToggleAllowFriendshipRequests}
+                role="switch"
+                aria-checked={allowFriendshipRequests}
+                aria-label={allowFriendshipRequests ? 'Bloquer les demandes' : 'Autoriser les demandes'}
+                style={{
+                  width: '52px',
+                  height: '28px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  backgroundColor: allowFriendshipRequests ? 'var(--success)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'background-color var(--transition-fast)',
+                  marginLeft: 'var(--md)',
+                  flexShrink: 0
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: allowFriendshipRequests ? '26px' : '2px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--white)',
+                  transition: 'left var(--transition-fast)',
+                  boxShadow: 'var(--shadow)'
+                }} />
+              </button>
+            </div>
+
+            {/* Changer la ville */}
+            <div style={{
+              padding: 'var(--sm) 0'
+            }}>
+              <div className="city-setting-header" style={{
+                marginBottom: editingCity ? 'var(--md)' : 0
+              }}>
+                <div className="city-setting-title">
+                  Lieu{user?.city ? `: ${user.city}` : ''}
+                </div>
+                {!editingCity && (
+                  <button
+                    className="city-edit-button"
+                    onClick={handleStartEditingCity}
+                    type="button"
+                  >
+                    Modifier
+                  </button>
+                )}
+              </div>
+
+              {/* Mode édition avec AddressAutocomplete */}
+              {editingCity && (
+                <div className="city-editor">
+                  <div style={{ flex: 1 }}>
+                    <AddressAutocomplete
+                      value={newCity}
+                      onChange={setNewCity}
+                      onAddressSelect={handleCitySelect}
+                      placeholder="Rechercher une ville ou adresse..."
+                      minLength={2}
+                    />
+                  </div>
+                  <div className="city-editor-actions">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCancelEditingCity}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleCityChange(newCity)}
+                      disabled={!newCity.trim()}
+                    >
+                      Enregistrer
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section Mes événements créés */}
+          <div
+            ref={myEventsSectionRef}
+            className="profile-section"
+            style={{ marginBottom: 'var(--md)' }}
+          >
+            <h3 style={{
+              fontSize: 'var(--text-lg)',
+              fontWeight: 'var(--font-weight-bold)',
+              color: 'var(--text)',
+              margin: '0 0 var(--md) 0',
+              paddingBottom: 'var(--sm)',
+              borderBottom: '1px solid var(--border)'
+            }}>
+              Mes événements créés
+              {userEvents.length > 0 && (
+                <span style={{
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--font-weight-normal)',
+                  color: 'var(--text-muted)',
+                  marginLeft: 'var(--sm)'
+                }}>
+                  ({userEvents.length})
+                </span>
+              )}
+            </h3>
+
+            {isLoadingUserEvents ? (
+              <div style={{
+                textAlign: 'center',
+                padding: 'var(--xl)',
+                color: 'var(--text-muted)'
+              }}>
+                Chargement de vos événements...
+              </div>
+            ) : profileEventsGrouped.periods.length > 0 ? (
+              <>
+                {profileEventsGrouped.periods.map((period) => (
+                  <div
+                    key={period.key}
+                    className="calendar-period"
+                    ref={(el) => {
+                      periodRefs.current[period.key] = el
+                    }}
+                  >
+                    {/* Barre de division */}
+                    <div className="calendar-period-divider"></div>
+                    {/* Label de période */}
+                    <div className="calendar-period-label">
+                      {period.label}
+                    </div>
+
+                    {/* Événements de la période */}
+                    <div className="calendar-period-events">
+                      {period.events.map((event) => (
+                        <div key={event.id} className="event-list-item">
+                          <EventCard
+                            event={event}
+                            showToggleResponse={false}
+                            isProfilePage={true}
+                            isMyEventsPage={false}
+                            onEdit={handleEditEvent}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">📅</div>
+                <h4 className="empty-title">Aucun événement créé</h4>
                 <p className="empty-description">
-                  Invite tes amis à rejoindre FOMO pour partager vos événements !
+                  Créez votre premier événement pour commencer à inviter vos amis !
                 </p>
               </div>
             )}
           </div>
 
-          {/* Modal d'ajout d'ami */}
-          <AddFriendModal
-            isOpen={isAddFriendModalOpen}
-            onClose={() => setIsAddFriendModalOpen(false)}
-            currentUserId={user?.id || ''}
-            onFriendAdded={() => {
-              refreshUserRelations()
-              setIsAddFriendModalOpen(false)
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Section Paramètres */}
-      <div className="profile-section" style={{ marginBottom: 'var(--md)' }}>
-        <h3 style={{
-          fontSize: 'var(--text-lg)',
-          fontWeight: 'var(--font-weight-bold)',
-          color: 'var(--text)',
-          margin: '0 0 var(--sm) 0',
-          paddingBottom: 'var(--sm)',
-          borderBottom: '1px solid var(--border)'
-        }}>
-          Paramètres
-        </h3>
-
-        {/* Toggle: Afficher ma participation aux amis */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: 'var(--sm) 0',
-          borderBottom: '1px solid var(--border)'
-        }}>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontSize: 'var(--text-md)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--text)',
-              marginBottom: 'var(--xs)'
-            }}>
-              Afficher ma participation aux amis
-            </div>
-            <div style={{
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-muted)'
-            }}>
-              {user.showAttendanceToFriends
-                ? 'Vos amis peuvent voir les événements auxquels vous participez'
-                : 'Vos amis ne peuvent pas voir votre participation aux événements'
-              }
-            </div>
-          </div>
-          <button
-            onClick={handleToggleShowAttendance}
-            role="switch"
-            aria-checked={user.showAttendanceToFriends}
-            aria-label={user.showAttendanceToFriends ? 'Masquer la participation' : 'Afficher la participation'}
-            style={{
-              width: '52px',
-              height: '28px',
-              borderRadius: '14px',
-              border: 'none',
-              backgroundColor: user.showAttendanceToFriends ? 'var(--success)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              position: 'relative',
-              transition: 'background-color var(--transition-fast)',
-              marginLeft: 'var(--md)',
-              flexShrink: 0
-            }}
-          >
-            <div style={{
-              position: 'absolute',
-              top: '2px',
-              left: user.showAttendanceToFriends ? '26px' : '2px',
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--white)',
-              transition: 'left var(--transition-fast)',
-              boxShadow: 'var(--shadow)'
-            }} />
-          </button>
-        </div>
-
-        {/* Toggle: Autoriser les demandes d'amitié */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: 'var(--sm) 0',
-          borderBottom: '1px solid var(--border)'
-        }}>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontSize: 'var(--text-md)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--text)',
-              marginBottom: 'var(--xs)'
-            }}>
-              Autoriser les demandes d'amitié
-            </div>
-            <div style={{
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-muted)'
-            }}>
-              {allowFriendshipRequests
-                ? 'Les autres utilisateurs peuvent vous envoyer des demandes d\'amitié'
-                : 'Les demandes d\'amitié sont bloquées'
-              }
-            </div>
-          </div>
-          <button
-            onClick={handleToggleAllowFriendshipRequests}
-            role="switch"
-            aria-checked={allowFriendshipRequests}
-            aria-label={allowFriendshipRequests ? 'Bloquer les demandes' : 'Autoriser les demandes'}
-            style={{
-              width: '52px',
-              height: '28px',
-              borderRadius: '14px',
-              border: 'none',
-              backgroundColor: allowFriendshipRequests ? 'var(--success)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              position: 'relative',
-              transition: 'background-color var(--transition-fast)',
-              marginLeft: 'var(--md)',
-              flexShrink: 0
-            }}
-          >
-            <div style={{
-              position: 'absolute',
-              top: '2px',
-              left: allowFriendshipRequests ? '26px' : '2px',
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--white)',
-              transition: 'left var(--transition-fast)',
-              boxShadow: 'var(--shadow)'
-            }} />
-          </button>
-        </div>
-
-        {/* Changer la ville */}
-        <div style={{
-          padding: 'var(--sm) 0'
-        }}>
-          <div className="city-setting-header" style={{
-            marginBottom: editingCity ? 'var(--md)' : 0
-          }}>
-            <div className="city-setting-title">
-              Lieu{user?.city ? `: ${user.city}` : ''}
-            </div>
-            {!editingCity && (
-              <button
-                className="city-edit-button"
-                onClick={handleStartEditingCity}
-                type="button"
-              >
-                Modifier
-              </button>
-            )}
-          </div>
-
-          {/* Mode édition avec AddressAutocomplete */}
-          {editingCity && (
-            <div className="city-editor">
-              <div style={{ flex: 1 }}>
-                <AddressAutocomplete
-                  value={newCity}
-                  onChange={setNewCity}
-                  onAddressSelect={handleCitySelect}
-                  placeholder="Rechercher une ville ou adresse..."
-                  minLength={2}
-                />
-              </div>
-              <div className="city-editor-actions">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleCancelEditingCity}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => handleCityChange(newCity)}
-                  disabled={!newCity.trim()}
-                >
-                  Enregistrer
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Section Mes événements créés */}
-      <div 
-        ref={myEventsSectionRef}
-        className="profile-section" 
-        style={{ marginBottom: 'var(--md)' }}
-      >
-        <h3 style={{
-          fontSize: 'var(--text-lg)',
-          fontWeight: 'var(--font-weight-bold)',
-          color: 'var(--text)',
-          margin: '0 0 var(--md) 0',
-          paddingBottom: 'var(--sm)',
-          borderBottom: '1px solid var(--border)'
-        }}>
-          Mes événements créés
-          {userEvents.length > 0 && (
-            <span style={{
-              fontSize: 'var(--text-sm)',
-              fontWeight: 'var(--font-weight-normal)',
-              color: 'var(--text-muted)',
-              marginLeft: 'var(--sm)'
-            }}>
-              ({userEvents.length})
-            </span>
-          )}
-        </h3>
-
-        {isLoadingUserEvents ? (
-          <div style={{
-            textAlign: 'center',
-            padding: 'var(--xl)',
-            color: 'var(--text-muted)'
-          }}>
-            Chargement de vos événements...
-          </div>
-        ) : profileEventsGrouped.periods.length > 0 ? (
-          <>
-            {profileEventsGrouped.periods.map((period) => (
-              <div
-                key={period.key}
-                className="calendar-period"
-                ref={(el) => {
-                  periodRefs.current[period.key] = el
-                }}
-              >
-                {/* Barre de division */}
-                <div className="calendar-period-divider"></div>
-                {/* Label de période */}
-                <div className="calendar-period-label">
-                  {period.label}
-                </div>
-
-                {/* Événements de la période */}
-                <div className="calendar-period-events">
-                  {period.events.map((event) => (
-                    <div key={event.id} className="event-list-item">
-                      <EventCard
-                        event={event}
-                        showToggleResponse={false}
-                        isProfilePage={true}
-                        isMyEventsPage={false}
-                        onEdit={handleEditEvent}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-icon">📅</div>
-            <h4 className="empty-title">Aucun événement créé</h4>
-            <p className="empty-description">
-              Créez votre premier événement pour commencer à inviter vos amis !
-            </p>
-          </div>
-        )}
-      </div>
 
 
 
 
 
+          {/* Spacer pour éviter que le contenu soit caché par la navbar */}
+          <div style={{ height: '80px' }}></div>
+        </>
+      )}
 
-      {/* Spacer pour éviter que le contenu soit caché par la navbar */}
-      <div style={{ height: '80px' }}></div>
-
-      {/* Modal d'édition d'événement */}
+      {/* Modal d'édition d'événement - toujours rendu */}
       <CreateEventModal
         isOpen={isEditEventModalOpen}
         onClose={handleCloseEditEventModal}

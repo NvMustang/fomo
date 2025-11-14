@@ -23,9 +23,10 @@
 }
 
 .friends-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sm);
 }
 
 
@@ -94,16 +95,16 @@
 }
 
 /* Bouton cliquable pour le header de subsection */
-.friends-subsection > button {
+.friends-subsection>button {
     outline: none;
     transition: opacity var(--transition-fast);
 }
 
-.friends-subsection > button:hover {
+.friends-subsection>button:hover {
     opacity: 0.8;
 }
 
-.friends-subsection > button:focus-visible {
+.friends-subsection>button:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
     border-radius: var(--radius);
@@ -437,6 +438,23 @@
     color: var(--text-secondary);
 }
 
+/* Animation pour attirer l'attention sur les demandes reçues */
+.has-pending-requests .friends-subsection-title {
+    animation: pending-requests-pulse 2s ease-in-out infinite;
+}
+
+@keyframes pending-requests-pulse {
+
+    0%,
+    100% {
+        color: var(--text-primary);
+    }
+
+    50% {
+        color: var(--current-color);
+    }
+}
+
 .pending-badge {
     background: var(--warning);
     color: var(--bg);
@@ -462,8 +480,8 @@
 /* UserCard dans la section amis - même style que le UserCard du profil */
 .friends-grid .event-card {
     /* Même style que .user-card-container .event-card dans _profile.css */
-    width: 300px;
-    max-width: 300px;
+    width: 90vw;
+    max-width: 400px;
     margin: 0;
     max-height: none;
     /* Border-left supprimé pour les UserCard dans la liste d'amitiés */
@@ -474,14 +492,17 @@
 .user-card {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: auto;
+    min-height: 0;
+
 }
 
 .user-card-header {
     display: flex;
     align-items: flex-start;
-    padding: var(--sm);
+
     flex-shrink: 0;
+
 }
 
 .user-card-info {
@@ -496,6 +517,7 @@
     justify-content: space-between;
     gap: var(--sm);
     margin-bottom: var(--xs);
+    
 }
 
 .user-card-title {
@@ -515,8 +537,7 @@
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    gap: var(--xs);
-}
+    gap: var(--xs);}
 
 .user-card-badge-public {
     background-color: var(--color-public);

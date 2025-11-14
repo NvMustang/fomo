@@ -9,7 +9,7 @@
  * 2) Types & helpers internes
  * 3) Matchers thématiques (contenu, portée, temps, relations, exclusions)
  * 4) Pipeline principal (filterEvents)
- * 5) Utilitaires UserResponses (build/group)
+ * 5) Utilitaires UserResponses (build/group/get)
  * 6) Calendrier (périodes & groupements)
  * 7) Utilitaires pour les invitations (groupUsersByResponses)
  */
@@ -186,23 +186,6 @@ export function matchPublic(event: Event, isPublic?: boolean | 'all'): boolean {
 }
 
 /**
- * Vérifie si un événement correspond au filtre online/offline.
- * 
- * @param event - L'événement à tester
- * @param isOnline - true pour online, false pour offline, 'all' pour tous (optionnel)
- * @returns true si l'événement correspond au filtre, ou si pas de filtre
- */
-export function matchOnline(event: Event, isOnline?: boolean | 'all'): boolean {
-    if (isOnline === 'all' || isOnline === undefined) return true
-    // Récupérer la valeur isOnline de l'événement (peut être undefined)
-    const eventIsOnline = event.isOnline
-    // Si l'événement n'a pas de valeur isOnline, ne pas filtrer (inclure par défaut)
-    if (eventIsOnline === undefined) return true
-    // Comparer strictement avec la valeur du filtre
-    return eventIsOnline === isOnline
-}
-
-/**
  * Vérifie si un événement appartient à un organisateur spécifique.
  * 
  * @param event - L'événement à tester
@@ -212,19 +195,6 @@ export function matchOnline(event: Event, isOnline?: boolean | 'all'): boolean {
 export function matchOrganizer(event: Event, organizerId?: string): boolean {
     if (!organizerId) return true
     return event.organizerId === organizerId
-}
-
-/**
- * Vérifie si un événement appartient à une période calendaire spécifique.
- * 
- * @param event - L'événement à tester
- * @param period - La période calendaire à vérifier (optionnelle)
- * @returns true si l'événement appartient à la période, ou si pas de filtre
- */
-export function matchPeriod(event: Event, period?: Periods): boolean {
-    if (!period || period === 'all') return true
-    const eventPeriod = getPeriod(event)
-    return eventPeriod.key === period
 }
 
 // ===== 5) UTILITAIRES USER RESPONSES =====
@@ -302,6 +272,72 @@ export function userResponsesMapper(
 }
 
 /**
+ * Obtient la dernière réponse d'un utilisateur pour un événement
+ * Fonction pure de filtrage/transformation (depuis eventResponseUtils)
+ */
+export function getLatestResponse(
+    responses: UserResponse[],
+    userId: string,
+    eventId: string
+): UserResponse | null {
+    const userEventResponses = responses
+        .filter(r => r.userId === userId && r.eventId === eventId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    return userEventResponses.length > 0 ? userEventResponses[0] : null
+}
+
+/**
+ * Obtient la réponse actuelle (finalResponse) d'un utilisateur pour un événement
+ * Fonction pure de filtrage/transformation (depuis eventResponseUtils)
+ */
+export function getCurrentResponse(
+    responses: UserResponse[],
+    userId: string,
+    eventId: string
+): UserResponseValue {
+    const latest = getLatestResponse(responses, userId, eventId)
+    return latest ? latest.finalResponse : null
+}
+
+/**
+ * Obtient un Map des dernières réponses par événement pour un utilisateur
+ * Fonction pure de filtrage/transformation (depuis eventResponseUtils)
+ */
+export function getLatestResponsesByEvent(
+    responses: UserResponse[],
+    userId: string
+): Map<string, UserResponse> {
+    const userResponses = responses.filter(r => r.userId === userId)
+    const latestMap = new Map<string, UserResponse>()
+    userResponses.forEach(r => {
+        const existing = latestMap.get(r.eventId)
+        if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+            latestMap.set(r.eventId, r)
+        }
+    })
+    return latestMap
+}
+
+/**
+ * Obtient un Map des dernières réponses par utilisateur pour un événement
+ * Fonction pure de filtrage/transformation (depuis eventResponseUtils)
+ */
+export function getLatestResponsesByUser(
+    responses: UserResponse[],
+    eventId: string
+): Map<string, UserResponse> {
+    const eventResponses = responses.filter(r => r.eventId === eventId)
+    const latestMap = new Map<string, UserResponse>()
+    eventResponses.forEach(r => {
+        const existing = latestMap.get(r.userId)
+        if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
+            latestMap.set(r.userId, r)
+        }
+    })
+    return latestMap
+}
+
+/**
  * Type pour les groupes de réponses (événements ou utilisateurs)
  */
 export type Groups<T> = {
@@ -362,7 +398,7 @@ export interface GroupEventsByUserResponseOptions {
  * @param options - Options de configuration pour le groupement
  * @returns Objet avec groupes par type de réponse
  */
-export function groupEventsByUserResponse(
+export function groupEventsByResponses(
     events: Event[],
     userResponsesMap: Record<string, string>,
     options?: GroupEventsByUserResponseOptions
@@ -396,75 +432,6 @@ export function groupEventsByUserResponse(
     return groups
 }
 
-/**
- * Transforme une liste de valeurs de réponse utilisateur en options pour React Select.
- * Gère le regroupement cleared/seen → "Non répondu" et l'ordre d'affichage.
- * 
- * @param responseValues - Liste des valeurs de réponse disponibles (UserResponseValue[])
- * @returns Options formatées pour React Select avec labels français et ordre de tri
- */
-export function mapResponseValuesToSelectOptions(
-    responseValues: UserResponseValue[]
-): Array<{ value: string; label: string; sortOrder: number }> {
-    const optionsMap = new Map<string, { value: string; label: string; sortOrder: number }>()
-
-    responseValues.forEach(response => {
-        if (response === null) {
-            // Nouveaux (null)
-            optionsMap.set('null', { value: 'null', label: 'Nouveaux', sortOrder: 1 })
-        } else if (response === 'going' || response === 'participe') {
-            // J'y vais (participe est traité comme going pour l'affichage)
-            optionsMap.set('going', { value: 'going', label: 'J\'y vais', sortOrder: 2 })
-        } else if (response === 'interested' || response === 'maybe') {
-            // Intéressé / Peut-être (mappé vers "interested" pour les filtres)
-            optionsMap.set('interested', { value: 'interested', label: 'Intéressé', sortOrder: 3 })
-        } else if (response === 'cleared' || response === 'seen') {
-            // Non répondu (regroupé pour cleared et seen)
-            if (!optionsMap.has('non_repondu')) {
-                optionsMap.set('non_repondu', { value: 'non_repondu', label: 'Non répondu', sortOrder: 4 })
-            }
-        }
-    })
-
-    // Convertir en tableau et trier par ordre
-    return Array.from(optionsMap.values()).sort((a, b) => a.sortOrder - b.sortOrder)
-}
-
-/**
- * Convertit une valeur de réponse UserResponseValue en option React Select sélectionnée.
- * Gère les conversions spéciales (null → 'null', cleared/seen → 'non_repondu').
- * 
- * @param response - Valeur de réponse à convertir
- * @param options - Liste d'options disponibles (issue de mapResponseValuesToSelectOptions)
- * @returns Option correspondante ou null si non trouvée/undefined
- */
-export function findResponseOption(
-    response: UserResponseValue | undefined,
-    options: Array<{ value: string; label: string }>
-): { value: string; label: string } | null {
-    // Vérifier explicitement undefined (null est une valeur valide pour "Nouveau")
-    if (response === undefined) return null
-
-    // Convertir la valeur sélectionnée en option
-    if (response === null) {
-        return options.find(opt => opt.value === 'null') || null
-    } else if (response === 'going' || response === 'participe') {
-        // participe est traité comme going pour l'affichage
-        return options.find(opt => opt.value === 'going') || null
-    } else if (response === 'interested' || response === 'maybe') {
-        // "maybe" est mappé vers "interested" pour les filtres
-        return options.find(opt => opt.value === 'interested') || null
-    } else if (response === 'not_interested' || response === 'not_there') {
-        // "not_there" est mappé vers "not_interested" pour les filtres
-        return options.find(opt => opt.value === 'not_interested') || null
-    } else if (response === 'cleared' || response === 'seen') {
-        // Pour "Non répondu", on peut choisir 'cleared' comme valeur par défaut
-        return options.find(opt => opt.value === 'non_repondu') || null
-    }
-
-    return null
-}
-
 // ===== 6) CALENDRIER =====
 /** Ordre de filtrage: past, today, tomorrow, thisWeekend, thisWeek, nextWeek, thisMonth, nextMonth */
 function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: string; startDate: Date; endDate: Date } {
@@ -488,16 +455,11 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
     }
 
     // 2. Today
-    // Un événement est "aujourd'hui" si aujourd'hui est entre startDate et endDate (inclus)
-    const today = startOfDay(now)
-    const eventStartDay = startOfDay(startDate)
-    const eventEndDay = startOfDay(endDate)
+    // Un événement est "aujourd'hui" si maintenant est entre startDate et endDate
+    // Vérifier si now est dans l'intervalle [startDate, endDate]
+    const isNowInRange = startDate < now && now < endDate
 
-    // Vérifier si aujourd'hui est dans l'intervalle [eventStartDay, eventEndDay]
-    // Utiliser isWithinInterval avec les dates normalisées (startOfDay)
-    const isTodayInRange = isWithinInterval(today, { start: eventStartDay, end: eventEndDay })
-
-    if (isTodayInRange) {
+    if (isNowInRange) {
         return {
             key: 'today',
             label: 'Aujourd\'hui',
@@ -507,8 +469,10 @@ function getPeriodByDate(startDate: Date, endDate: Date): { key: string; label: 
     }
 
     // 3. Tomorrow
-    // Un événement est "demain" si demain est entre startDate et endDate (inclus)
+    // Un événement est "demain" si demain est entre startDate et endDate
     const tomorrowDay = startOfDay(addDays(now, 1))
+    const eventStartDay = startOfDay(startDate)
+    const eventEndDay = startOfDay(endDate)
 
     // Vérifier si demain est dans l'intervalle [eventStartDay, eventEndDay]
     const isTomorrowInRange = isWithinInterval(tomorrowDay, { start: eventStartDay, end: eventEndDay })
@@ -660,26 +624,6 @@ export function groupEventsByPeriods(events: Event[]): { periods: CalendarPeriod
         periods,
         totalEvents: events.length
     }
-}
-
-// ===== UTILITAIRES GÉNÉRIQUES =====
-/**
- * Intersection performante d'ensembles d'identifiants d'événements.
- * Ne conserve que les ids présents dans tous les ensembles non vides fournis.
- */
-export function intersectEventIds(...sets: Array<Set<string> | undefined>): string[] {
-    const active = sets.filter((s): s is Set<string> => !!s && s.size > 0)
-    if (active.length === 0) return []
-    active.sort((a, b) => a.size - b.size)
-    const [smallest, ...rest] = active
-    const out: string[] = []
-    outer: for (const id of smallest) {
-        for (const s of rest) {
-            if (!s.has(id)) continue outer
-        }
-        out.push(id)
-    }
-    return out
 }
 
 // ===== UTILITAIRES POUR LES INVITATIONS =====
@@ -872,5 +816,260 @@ export function getUsersByIds(users: User[], userIds: string[]): User[] {
 export function getUsersMapByIds(users: User[], userIds: string[]): Map<string, User> {
     const filteredUsers = getUsersByIds(users, userIds)
     return createUsersMap(filteredUsers)
+}
+
+// ===== FONCTIONS OPTIMISÉES POUR FILTRAGE + COMPTAGE =====
+
+/**
+ * Applique tous les filtres en UN SEUL passage (optimisation performance)
+ * 
+ * @param events - Liste d'événements à filtrer
+ * @param filters - Critères de filtrage
+ * @param context - Contexte additionnel (responses, userId) pour certains filtres
+ * @returns Liste d'événements filtrés
+ */
+export function applyFilters(
+    events: Event[],
+    filters: {
+        searchQuery?: string
+        tags?: string[]
+        organizerId?: string
+        responses?: (UserResponseValue | 'all')[] // Multi-sélection
+        customStartDate?: Date
+        customEndDate?: Date
+        excludePastEvents?: boolean // Exclure les événements passés
+    },
+    context?: {
+        responses?: UserResponse[]
+        userId?: string
+    }
+): Event[] {
+    // Pré-calculer le map des réponses si nécessaire (1 seule fois)
+    let userResponsesMap: Record<string, string> | undefined
+    if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all') && context?.responses && context?.userId) {
+        userResponsesMap = userResponsesMapper(events, context.responses, context.userId)
+    }
+
+    // Filtrer en UN SEUL passage
+    const now = new Date()
+    return events.filter(evt => {
+        // Filtre par exclusion des événements passés (priorité haute)
+        // Condition: endsAt < now (ou startsAt < now si pas de endsAt)
+        if (filters.excludePastEvents) {
+            const evtEnd = evt.endsAt ? new Date(evt.endsAt) : new Date(evt.startsAt)
+            if (evtEnd < now) {
+                return false
+            }
+        }
+
+        // Filtre par query (recherche textuelle)
+        if (filters.searchQuery && !matchQuery(evt, filters.searchQuery)) {
+            return false
+        }
+
+        // Filtre par tags
+        if (filters.tags?.length && !filters.tags.includes('all') && !matchTags(evt, filters.tags)) {
+            return false
+        }
+
+        // Filtre par dates personnalisées
+        if (filters.customStartDate && filters.customEndDate) {
+            const evtStart = new Date(evt.startsAt)
+            const evtEnd = evt.endsAt ? new Date(evt.endsAt) : evtStart
+
+            // L'événement doit chevaucher la plage de dates
+            // (commence avant la fin ET termine après le début)
+            if (!(evtStart <= filters.customEndDate && evtEnd >= filters.customStartDate)) {
+                return false
+            }
+        }
+
+        // Filtre par organisateur
+        if (filters.organizerId && !matchOrganizer(evt, filters.organizerId)) {
+            return false
+        }
+
+        // Filtre par réponses utilisateur (multi-sélection)
+        if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all') && userResponsesMap) {
+            const eventResponse = userResponsesMap[evt.id] || ''
+
+            // Vérifier si la réponse de l'événement est dans le tableau des réponses sélectionnées
+            const matchesAnyResponse = filters.responses.some(selectedResponse => {
+                // Cas spécial: null = événements sans réponse (Nouveaux)
+                if (selectedResponse === null) {
+                    return eventResponse === ''
+                }
+                // Autres cas: comparaison directe
+                return eventResponse === selectedResponse
+            })
+
+            if (!matchesAnyResponse) return false
+        }
+
+        return true
+    })
+}
+
+/**
+ * Groupe ET compte les événements par période en UN SEUL passage
+ * Performance: O(n) au lieu de O(2n)
+ * 
+ * @param events - Liste d'événements à analyser
+ * @returns Objets groups (événements groupés) et counts (compteurs formatés)
+ */
+export function groupAndCountEventsByPeriod(events: Event[]): {
+    groups: Record<string, Event[]>
+    counts: Array<{ value: string; label: string; count: number }>
+} {
+    const groups: Record<string, Event[]> = {}
+    const countsMap: Record<string, number> = {}
+
+    // UN SEUL passage : grouper + compter simultanément
+    events.forEach(evt => {
+        const period = getPeriod(evt)
+        const key = period.key
+
+        // Grouper (ajouter l'événement au groupe)
+        if (!groups[key]) {
+            groups[key] = []
+        }
+        groups[key].push(evt)
+
+        // Compter (incrémenter le compteur - O(1))
+        countsMap[key] = (countsMap[key] || 0) + 1
+    })
+
+    // Formater les counts pour FilterBar
+    const counts = TIME_PERIODS.map(period => ({
+        value: period.key,
+        label: period.label,
+        count: countsMap[period.key] || 0
+    }))
+
+    return { groups, counts }
+}
+
+/**
+ * Groupe ET compte les événements par tag en UN SEUL passage
+ * Note: Un événement peut avoir plusieurs tags, donc apparaît dans plusieurs groupes
+ * 
+ * @param events - Liste d'événements à analyser
+ * @returns Objets groups et counts
+ */
+export function groupAndCountEventsByTag(events: Event[]): {
+    groups: Record<string, Event[]>
+    counts: Array<{ value: string; label: string; count: number }>
+} {
+    const groups: Record<string, Event[]> = {}
+    const countsMap: Record<string, number> = {}
+
+    // UN SEUL passage : grouper + compter simultanément
+    events.forEach(evt => {
+        (evt.tags || []).forEach(tag => {
+            const normalized = typeof tag === 'string' ? tag.trim().toLowerCase() : ''
+            if (normalized) {
+                // Grouper
+                if (!groups[normalized]) {
+                    groups[normalized] = []
+                }
+                groups[normalized].push(evt)
+
+                // Compter
+                countsMap[normalized] = (countsMap[normalized] || 0) + 1
+            }
+        })
+    })
+
+    // Formater les counts pour FilterBar
+    const counts = Object.entries(countsMap).map(([tag, count]) => ({
+        value: tag,
+        label: tag,
+        count
+    }))
+
+    return { groups, counts }
+}
+
+/**
+ * Groupe ET compte les événements par organisateur en UN SEUL passage
+ * 
+ * @param events - Liste d'événements à analyser
+ * @param users - Liste d'utilisateurs pour résoudre les noms
+ * @returns Objets groups et counts
+ */
+export function groupAndCountEventsByOrganizer(
+    events: Event[],
+    users: User[]
+): {
+    groups: Record<string, Event[]>
+    counts: Array<{ value: string; label: string; count: number }>
+} {
+    const groups: Record<string, Event[]> = {}
+    const countsMap: Record<string, number> = {}
+
+    // UN SEUL passage : grouper + compter simultanément
+    events.forEach(evt => {
+        if (evt.organizerId) {
+            const id = evt.organizerId
+
+            // Grouper
+            if (!groups[id]) {
+                groups[id] = []
+            }
+            groups[id].push(evt)
+
+            // Compter
+            countsMap[id] = (countsMap[id] || 0) + 1
+        }
+    })
+
+    // Résoudre les noms des organisateurs
+    const userIds = Object.keys(countsMap)
+    const usersMap = getUsersMapByIds(users, userIds)
+
+    // Formater les counts pour FilterBar
+    const counts = Object.entries(countsMap).map(([userId, count]) => ({
+        value: userId,
+        label: usersMap.get(userId)?.name || 'Unknown',
+        count
+    }))
+
+    return { groups, counts }
+}
+
+/**
+ * Groupe ET compte les événements par réponse utilisateur en UN SEUL passage
+ * Utilise groupEventsByResponses existant qui fait déjà le groupement
+ * 
+ * @param events - Liste d'événements à analyser
+ * @param responses - Liste de toutes les réponses utilisateur
+ * @param userId - ID de l'utilisateur concerné
+ * @returns Objets groups et counts
+ */
+export function groupAndCountEventsByResponse(
+    events: Event[],
+    responses: UserResponse[],
+    userId: string
+): {
+    groups: Groups<Event>
+    counts: Array<{ value: UserResponseValue; label: string; count: number }>
+} {
+    // Créer le map des réponses utilisateur
+    const userResponsesMap = userResponsesMapper(events, responses, userId)
+
+    // Grouper les événements (déjà optimisé)
+    const groups = groupEventsByResponses(events, userResponsesMap)
+
+    // Calculer les counts à partir des groupes (pas de re-filtrage)
+    // Performance: O(k) où k = nombre de types de réponses (~10)
+    const counts = Object.entries(groups)
+        .map(([key, evts]) => ({
+            value: key as UserResponseValue,
+            label: key,
+            count: evts.length  // Lecture simple de .length - O(1)
+        }))
+        .filter(c => c.count > 0)
+
+    return { groups, counts }
 }
 

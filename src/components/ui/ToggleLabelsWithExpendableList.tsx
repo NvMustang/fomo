@@ -59,14 +59,14 @@ export const ToggleLabelsWithExpendableList: React.FC<ToggleLabelsWithExpendable
                 <button
                     onClick={onToggle}
                     aria-expanded={isExpanded}
-                    style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                         marginBottom: 'var(--sm)',
-                        background: 'transparent', 
-                        border: 'none', 
-                        cursor: 'pointer', 
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
                         padding: 0,
                         width: '100%',
                         textAlign: 'left'

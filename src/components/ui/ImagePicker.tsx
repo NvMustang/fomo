@@ -1,5 +1,5 @@
 /**
- * FOMO MVP - Stock Image Picker
+ * FOMO MVP - Image Picker
  * 
  * Composant pour sélectionner des images gratuites depuis Pexels
  * Plus généreux qu'Unsplash (200 requêtes/heure vs 50)
@@ -20,13 +20,13 @@ interface StockImage {
   photographer_url: string
 }
 
-interface StockImagePickerProps {
+interface ImagePickerProps {
   onImageSelect: (imageUrl: string, imageData: StockImage) => void
   onClose: () => void
   isOpen: boolean
 }
 
-export const StockImagePicker: React.FC<StockImagePickerProps> = ({
+export const ImagePicker: React.FC<ImagePickerProps> = ({
   onImageSelect,
   onClose,
   isOpen
@@ -53,7 +53,7 @@ export const StockImagePicker: React.FC<StockImagePickerProps> = ({
 
     try {
       const response = await fetch(
-        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=30&orientation=landscape`,
         {
           headers: {
             'Authorization': PEXELS_API_KEY
@@ -194,4 +194,5 @@ export const StockImagePicker: React.FC<StockImagePickerProps> = ({
   return createPortal(modalContent, portalTarget)
 }
 
-export default StockImagePicker
+export default ImagePicker
+

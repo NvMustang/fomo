@@ -4,37 +4,32 @@
  * Page de découverte d'événements autour de l'utilisateur
  */
 
-import React, { useCallback, useState, useEffect, useRef } from 'react'
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { MapRenderer } from '@/map/MapRenderer'
 import { EventCard } from '@/components/ui/EventCard'
-import { useFilters } from '@/contexts/FiltersContext'
-
-import { usePrivacy } from '@/contexts/PrivacyContext'
-import type { Event } from '@/types/fomoTypes'
 import { FilterBar } from '@/components/ui/FilterBar'
-
+import { useDataContext } from '@/contexts/DataContext'
+import { usePrivacy } from '@/contexts/PrivacyContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useFilters } from '@/hooks'
+import type { Event, UserResponseValue } from '@/types/fomoTypes'
 import { useStarsAnimation } from '@/onboarding/hooks/useStarsAnimation'
 import { useDevice } from '@/contexts/DeviceContext'
 import { useToast } from '@/hooks'
+import { PREDEFINED_FAKE_EVENTS } from '@/utils/fakeEventsData'
 
 // ===== TYPES =====
 interface VisitorModeProps {
   enabled: boolean
-  event?: Event | null
-  fakeEvents?: Event[]
-  onResponseClick?: (responseType: import('@/types/fomoTypes').UserResponseValue) => void
-  onEventCardClose?: () => void
-  starsAnimation?: React.ReactNode
-  responseButtonsDisabled?: boolean
+  responseButtonsDisabled?: boolean // Désactive les boutons réponse (avant response_enabled)
   onLabelClick?: () => void
-  onEventCardOpened?: (event: Event) => void
-  onPinClick?: () => void
-  onFakeEventCardOpened?: (event: Event) => void
-  getSelectedEvent?: (getter: () => Event | null) => void // Callback pour exposer getSelectedEvent
+  onPinClick?: () => void // Callback quand un pin est cliqué (pour transition event_loaded → show_details)
+  onResponseClick?: (response: UserResponseValue) => void // Callback quand une réponse est cliquée (pour transition response_enabled → response_given)
+  onEventCardClose?: () => void // Callback quand l'EventCard est fermée (pour transition response_given → eventcard_closed)
 }
 
 interface DiscoverPageProps {
-  isModalOpen: (modalID: string) => boolean
+  isModalOpen?: (modalID: string) => boolean // Optionnel : uniquement utilisé en mode normal (pas visitor)
   onMapReady?: () => void
   visitorMode?: VisitorModeProps
 }
@@ -46,42 +41,32 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   visitorMode
 }) => {
   // ===== HOOKS CONTEXTUELS =====
-  const { getAllMapEvents } = useFilters()
+  const { events, eventFromUrl } = useDataContext()
   const { isPublicMode } = usePrivacy()
+  const { user } = useAuth()
   const { platformInfo } = useDevice()
   const { showToast, hideToast } = useToast()
+  const { getFilteredEventIds, filters } = useFilters()
 
   // ===== ÉTATS LOCAUX =====
   // Unifier les sources visitor via visitorMode si fourni
   const vmEnabled = !!visitorMode?.enabled
-  const vmEvent = visitorMode?.event || null
-  const vmFakeEvents = visitorMode?.fakeEvents ?? []
-  const vmOnResponseClick = visitorMode?.onResponseClick
-  const vmOnEventCardClose = visitorMode?.onEventCardClose
-  const vmStarsAnimation = visitorMode?.starsAnimation
   const vmResponseButtonsDisabled = visitorMode?.responseButtonsDisabled ?? false
   const vmOnLabelClick = visitorMode?.onLabelClick
-  const vmOnEventCardOpened = visitorMode?.onEventCardOpened
   const vmOnPinClick = visitorMode?.onPinClick
-  const vmOnFakeEventCardOpened = visitorMode?.onFakeEventCardOpened
+  const vmOnResponseClick = visitorMode?.onResponseClick
+  const vmOnEventCardClose = visitorMode?.onEventCardClose
+
+  // Note: eventFromUrl est déjà inclus dans events par DataContext, pas besoin de le récupérer séparément
 
   // En mode visitor, ne pas ouvrir EventCard automatiquement au démarrage
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  
-  // Exposer getSelectedEvent pour visitorMode
-  const getSelectedEvent = useCallback(() => selectedEvent, [selectedEvent])
-  
-  // Exposer getSelectedEvent via visitorMode.getSelectedEvent
-  useEffect(() => {
-    if (vmEnabled && visitorMode?.getSelectedEvent) {
-      visitorMode.getSelectedEvent(getSelectedEvent)
-    }
-  }, [vmEnabled, visitorMode, getSelectedEvent])
-  
-  // Animation des étoiles pour les réponses (mode normal)
-  // En mode visitor, utiliser l'animation fournie par visitorMode
-  const { triggerStars, StarsAnimation: normalStarsAnimation } = useStarsAnimation()
-  const StarsAnimation = vmEnabled && vmStarsAnimation ? vmStarsAnimation : normalStarsAnimation
+
+  // État pour contrôler l'animation d'entrée de la FilterBar (identique à la réapparition)
+  const [shouldShowFilterBar, setShouldShowFilterBar] = useState(false)
+
+  // Animation des étoiles pour les réponses (mode normal uniquement)
+  const { triggerStars, StarsAnimation } = useStarsAnimation()
 
   // Exposer setSelectedEvent globalement pour LastActivities
   useEffect(() => {
@@ -103,54 +88,208 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [vmEnabled])
 
-  // ===== CONSTANTES ET CALCULS SIMPLES =====
-  // Source stable pour la carte: utiliser getAllMapEvents (logique unifiée selon mode privacy)
-  // Cette fonction gère automatiquement :
-  // - Mode public : fakeEvents filtrés (si présents) OU tous les événements réels
-  // - Mode privé : visitorEvent + événements avec réponse (pas de fake pins, filtrés automatiquement avec matchPublic)
-  const filteredEvents = getAllMapEvents({
-    visitorEvent: vmEvent,
-    fakeEvents: vmFakeEvents
-  })
+  // Désactiver le scroll du viewport quand une EventCard est ouverte
+  // IMPORTANT : Utiliser seulement overflow: hidden, pas position: fixed
+  // position: fixed sur body cause une réduction du viewport sur mobile (barre d'adresse)
+  // Voir commentaire dans src/styles/components/_modals.css ligne 6
+  const savedScrollPositionRef = useRef<number>(0)
+  useEffect(() => {
+    if (selectedEvent) {
+      // Sauvegarder la position de scroll actuelle dans une ref
+      // (on ne peut plus utiliser body.style.top car on n'utilise pas position: fixed)
+      savedScrollPositionRef.current = window.scrollY
+
+      // Désactiver le scroll du body avec seulement overflow: hidden
+      // Cela évite la réduction du viewport sur mobile
+      document.body.style.overflow = 'hidden'
+      // NE PAS utiliser position: fixed car cela retire le body du flux normal
+      // et cause des problèmes de recalcul du viewport sur mobile
+    } else {
+      // Réactiver le scroll du body
+      document.body.style.overflow = ''
+
+      // Restaurer la position de scroll sauvegardée
+      // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
+      requestAnimationFrame(() => {
+        window.scrollTo(0, savedScrollPositionRef.current)
+      })
+    }
+    // Cleanup : réactiver le scroll si le composant est démonté
+    return () => {
+      document.body.style.overflow = ''
+      // Restaurer la position de scroll sauvegardée (sera 0 si jamais sauvegardée)
+      // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
+      requestAnimationFrame(() => {
+        window.scrollTo(0, savedScrollPositionRef.current)
+      })
+    }
+  }, [selectedEvent])
+
+  // Détecter la fermeture de l'EventCard en mode visitor et notifier OnboardingStateContext
+  const prevSelectedEventRef = useRef<Event | null>(null)
+  useEffect(() => {
+    // Détecter quand selectedEvent passe de non-null à null (fermeture de l'EventCard)
+    if (vmEnabled && vmOnEventCardClose && prevSelectedEventRef.current !== null && selectedEvent === null) {
+      vmOnEventCardClose()
+    }
+    prevSelectedEventRef.current = selectedEvent
+  }, [vmEnabled, vmOnEventCardClose, selectedEvent])
+
+  // ===== CALCUL DES EVENTS À AFFICHER =====
+  // Le backend filtre déjà les événements selon mode/privacy (visitor/user, public/private)
+  // DataContext ajoute déjà eventFromUrl à events (si présent)
+  // + Ajout de fake events (visitor + public uniquement, protection données)
+  const mapEvents = useMemo(() => {
+    // Cas spécial : Visitor + public → ajouter fake events (protection données)
+    // Le backend retourne un tableau vide pour ce cas
+    if (user.isVisitor && isPublicMode) {
+      return PREDEFINED_FAKE_EVENTS
+    }
+
+    // Tous les autres cas : passer TOUS les événements à MapRenderer
+    return events
+  }, [user.isVisitor, isPublicMode, events])
+
+  // ===== CALCUL DES IDS FILTRÉS =====
+  // Calculer les IDs des événements filtrés pour MapRenderer
+  // MapRenderer utilisera setData() pour mettre à jour la source et recalculer les clusters
+  const filteredEventIds = useMemo(() => {
+    if (user.isVisitor) {
+      return mapEvents.map(e => e.id)
+    }
+    const filteredIds = getFilteredEventIds(mapEvents)
+    return Array.from(filteredIds)
+  }, [user.isVisitor, mapEvents, getFilteredEventIds, filters])
+
+  // ===== TOAST POUR EXISTING VISITOR =====
+  // Afficher un toast personnalisé pour l'existing visitor sans event dans l'URL
+  useEffect(() => {
+    // Vérifier si c'est un existing visitor (visitor mais pas nouveau)
+    const isExistingVisitor = user.isVisitor && !user.isNewVisitor
+
+    // Vérifier qu'il n'y a pas de paramètre ?event= dans l'URL
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    const hasEventParam = urlParams?.get('event') !== null
+
+    // Afficher le toast uniquement si existing visitor sans event
+    if (isExistingVisitor && !hasEventParam && !vmEnabled) {
+      // Récupérer le nom du visitor depuis user
+      const visitorName = user.name && user.name.trim() ? user.name.trim() : 'visiteur'
+
+      // Afficher le toast après un court délai pour laisser la carte se charger
+      const timer = setTimeout(() => {
+        showToast({
+          title: `Bonjour ${visitorName} ! Comment ça va aujourd'hui ?`,
+          message: 'Voici les events pour lesquels tu as été invité, pour changer ta réponse, tap sur le pin !',
+          type: 'info',
+          position: 'top',
+          duration: 8000 // 8 secondes pour laisser le temps de lire
+        })
+      }, 2000) // Délai de 2s après le chargement
+
+      return () => {
+        clearTimeout(timer)
+      }
+    }
+  }, [user.isVisitor, user.isNewVisitor, vmEnabled, showToast])
+
+  // ===== TOAST POUR MODE PRIVÉ SANS ÉVÉNEMENTS =====
+  // Afficher un toast si mode privé et aucun événement privé disponible
+  // Note: Si le composant est rendu, DataReadyGuard a déjà validé que les données sont prêtes
+  useEffect(() => {
+    // Ne pas afficher en mode visitor ou en mode visitor onboarding
+    if (user.isVisitor || vmEnabled) {
+      return
+    }
+
+    // Ne pas afficher en mode public
+    if (isPublicMode) {
+      return
+    }
+
+    // Vérifier si aucun événement privé (événements de la source, pas filtrés)
+    if (events.length === 0) {
+      const timer = setTimeout(() => {
+        showToast({
+          title: '📅 Tu n\'as pas d\'événements privés actuellement.',
+          message: 'Crées-en un (➕) et invite des amis à y participer ! 🤗',
+          type: 'info',
+          position: 'top',
+          duration: 8000
+        })
+      }, 4000) // Délai de 4s après le chargement
+
+      return () => {
+        clearTimeout(timer)
+      }
+    }
+  }, [user.isVisitor, vmEnabled, isPublicMode, events.length, showToast])
 
   // ===== HANDLERS =====
+
   // Fonction helper pour fermer toutes les EventCards
-  // En mode visitor, le callback onEventCardClose est géré par le useEffect qui surveille selectedEvent
   const closeAllEventCards = useCallback(() => {
+    // Zoom out avec easing ease-out à la fermeture de l'EventCard
+    if (window.zoomOutOnPin) {
+      window.zoomOutOnPin()
+    }
     setSelectedEvent(null)
   }, [])
+
+  // Exposer la fonction de fermeture globalement (utilisée par EventCard et clics en dehors)
+  useEffect(() => {
+    window.closeEventCard = () => {
+      closeAllEventCards()
+    }
+    return () => {
+      delete window.closeEventCard
+    }
+  }, [closeAllEventCards])
 
   // Handler commun pour les clics sur les événements (mode normal et visitor)
   const handleEventClick = useCallback((event: Event | null) => {
     // Clic sur la carte (sans features) - fermer toutes les EventCards
     if (!event) {
       closeAllEventCards()
+      // En mode visitor, la fermeture est détectée via selectedEvent dans OnboardingStateContext
       return
     }
 
     // Utiliser un seul état selectedEvent pour tous les événements (vrais et fake)
-    // La synchronisation avec fakePinsLogic se fait via useEffect
-    if (vmEnabled) {
-      // Mode visitor : fermer le toast invitation immédiatement lors du clic sur le pin
-      if (vmOnPinClick) {
-        vmOnPinClick()
-      }
-      // Mode visitor : mettre à jour selectedEvent pour afficher l'EventCard
-      setSelectedEvent(event)
-    } else {
-      // Mode normal : utiliser setSelectedEvent directement
-      setSelectedEvent(event)
+    setSelectedEvent(event)
+
+    // En mode visitor, notifier l'ouverture d'un pin
+    if (vmEnabled && vmOnPinClick) {
+      vmOnPinClick()
     }
-  }, [vmEnabled, closeAllEventCards])
+  }, [vmEnabled, closeAllEventCards, vmOnPinClick])
 
   // Handler pour quand la carte est prête
   const handleMapReady = useCallback(() => {
-    // Appeler le callback original si fourni
     onMapReady?.()
-
-    // En mode visitor, le flyTo est géré dans visitorOnboarding.tsx
-    // Pas besoin de centrer ici car le flyTo est déjà déclenché
   }, [onMapReady])
+
+  // Centrer la carte sur eventFromUrl pour user authentifié avec paramètre event dans l'URL
+  const [mapReady, setMapReady] = useState(false)
+  useEffect(() => {
+    if (onMapReady) {
+      setMapReady(true)
+    }
+  }, [onMapReady])
+
+  useEffect(() => {
+    // Centrer uniquement pour user authentifié (pas visitor) avec eventFromUrl
+    if (!user.isVisitor && mapReady && eventFromUrl && typeof window !== 'undefined') {
+      const centerMapOnEvent = window.centerMapOnEvent
+      if (centerMapOnEvent) {
+        const timer = setTimeout(() => {
+          centerMapOnEvent(eventFromUrl, 3000)
+        }, 500)
+
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [user.isVisitor, mapReady, eventFromUrl])
 
   const handleClusterClick = useCallback((_feature: unknown) => {
     if (vmEnabled) {
@@ -161,51 +300,19 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
 
   // ===== CALCULS =====
-
-  // Utiliser directement filteredEvents qui contient déjà la logique unifiée
-  const allEventsToDisplay = filteredEvents
+  // (mapEvents déjà défini ligne 90)
 
   // ===== EFFETS =====
-  // Plus besoin de synchronisation avec selectedFakeEvent : on utilise uniquement selectedEvent
-  // Notifier l'ouverture de l'EventCard (visitor mode) - une seule fois par événement
-  const lastNotifiedEventRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (vmEnabled && selectedEvent && selectedEvent.id !== lastNotifiedEventRef.current) {
-      lastNotifiedEventRef.current = selectedEvent.id
-      const isFake = (selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake
-      if (isFake && vmOnFakeEventCardOpened) {
-        vmOnFakeEventCardOpened(selectedEvent)
-      } else if (!isFake && vmOnEventCardOpened) {
-        vmOnEventCardOpened(selectedEvent)
-      }
-    }
-    // Reset quand selectedEvent devient null
-    if (!selectedEvent) {
-      lastNotifiedEventRef.current = null
-    }
-  }, [vmEnabled, selectedEvent])
-
-  // Appeler onEventCardClose quand selectedEvent passe de non-null à null en mode visitor
-  const prevSelectedEventRef = useRef<Event | null>(null)
-  useEffect(() => {
-    if (vmEnabled && vmOnEventCardClose) {
-      // Si selectedEvent passe de non-null à null, appeler onEventCardClose
-      if (prevSelectedEventRef.current && !selectedEvent) {
-        vmOnEventCardClose()
-      }
-      prevSelectedEventRef.current = selectedEvent
-    }
-  }, [vmEnabled, selectedEvent, vmOnEventCardClose])
 
   // Fermer l'EventCard lors de l'ouverture du modal CreateEvent
+  // (uniquement en mode normal, pas en mode visitor)
   useEffect(() => {
-    if (isModalOpen('createEvent') && selectedEvent) {
+    if (!vmEnabled && isModalOpen && isModalOpen('createEvent') && selectedEvent) {
       setSelectedEvent(null)
     }
-  }, [isModalOpen, selectedEvent])
+  }, [vmEnabled, isModalOpen, selectedEvent])
 
   // Détecter le changement de privacy et fermer l'EventCard
-  // (La séquence Public Mode est gérée dans visitorOnboarding.tsx)
   const prevIsPublicModeRef = useRef(isPublicMode)
   useEffect(() => {
     // Ne fermer l'EventCard que lors d'un VRAI changement de isPublicMode
@@ -219,37 +326,15 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [isPublicMode, selectedEvent])
 
-
+  // Déclencher l'animation d'entrée de la FilterBar après un court délai (identique à la réapparition)
+  useEffect(() => {
+    if (user.isVisitor) return
+    const timer = setTimeout(() => setShouldShowFilterBar(true), 1000)
+    return () => clearTimeout(timer)
+  }, [user.isVisitor])
 
 
   // Les fonctions de fermeture/ouverture EventCard sont maintenant gérées directement via setSelectedEvent
-
-
-
-  // Pop FilterBar lors de la transition VM → normal ou à l'ouverture de l'app
-  const [shouldPopFilterBar, setShouldPopFilterBar] = useState(false)
-  const hasTriggeredPopRef = useRef(false)
-
-  useEffect(() => {
-    if (vmEnabled) return // Ne pas jouer en mode visitor
-
-    try {
-      const shouldPop = sessionStorage.getItem('fomo-pop-filterbar') === 'true'
-      if (shouldPop && !hasTriggeredPopRef.current) {
-        hasTriggeredPopRef.current = true
-        // Nettoyer immédiatement le flag pour éviter les re-déclenchements
-        sessionStorage.removeItem('fomo-pop-filterbar')
-        setShouldPopFilterBar(true)
-        // Nettoyer l'état après animation (3s)
-        setTimeout(() => {
-          setShouldPopFilterBar(false)
-          hasTriggeredPopRef.current = false // Reset pour permettre de rejouer si nécessaire
-        }, 3000)
-      }
-    } catch {
-      // Ignorer si sessionStorage indisponible
-    }
-  }, [vmEnabled]) // Se déclenche au montage (vmEnabled initial) et lors des changements
 
   // ===== SURVEILLANCE DU VIEWPORT (MOBILE UNIQUEMENT) =====
   // Timer de 30s au montage, puis affichage toast si viewport < seuil
@@ -397,40 +482,29 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     }
   }, [platformInfo?.isMobile, showToast, hideToast, visitorMode?.enabled])
 
+
   return (
     <>
+      {/* FilterBar - affichée uniquement pour les users authentifiés (pas visitor) */}
+      {/* Masquer la FilterBar quand un EventCard est ouvert (selectedEvent !== null) */}
+      {/* Animation d'entrée identique à la réapparition après fermeture EventCard */}
+      {!user.isVisitor && (
+        <div className={`filterbar-overlay ${selectedEvent ? 'filterbar-overlay--hidden' : ''} ${shouldShowFilterBar ? 'filterbar-overlay--visible' : ''}`}>
+          <FilterBar />
+        </div>
+      )}
+
       <div className="map-container">
         <MapRenderer
-          events={allEventsToDisplay}
+          events={mapEvents}
+          filteredEventIds={filteredEventIds}
           onPinClick={handleEventClick}
           onClusterClick={handleClusterClick}
           onMapReady={handleMapReady}
         />
-
-        {/* FilterBar en overlay centré - masquée en mode visitor */}
-        {!vmEnabled && (
-          <div className={`filterbar-overlay ${shouldPopFilterBar ? 'filterbar-pop' : ''}`}>
-            <div 
-              className="filterbar-card"
-              onClick={(e) => {
-                // Fermer l'EventCard lors du clic sur l'input de recherche (filterbar__query)
-                const target = e.target as HTMLElement
-                if (target.id === 'filterbar-search' || target.closest('.filterbar__query')) {
-                  if (selectedEvent) {
-                    setSelectedEvent(null)
-                  }
-                }
-              }}
-            >
-              <FilterBar />
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* WelcomeScreen est maintenant géré dans visitorDiscoverPublicMode */}
-
-      {/* EventCard unifiée (vraie ou fake) */}
+      {/* EventCard unifiée */}
       {selectedEvent && (
         <div
           className={`event-card-container ${(selectedEvent.id || '').startsWith('fake-') || (selectedEvent as any).isFake ? 'fade-in-500ms' : ''}`}
@@ -442,23 +516,18 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
             showToggleResponse={true}
             responseButtonsDisabled={vmEnabled ? vmResponseButtonsDisabled : false}
             onLabelClick={vmEnabled ? vmOnLabelClick : undefined}
-            onResponseClick={(responseType) => {
-              // En mode visitor, utiliser le handler visitor
-              if (vmEnabled && vmOnResponseClick) {
-                vmOnResponseClick(responseType)
-              } else {
-                // Afficher les étoiles quand une réponse est cliquée (mode normal)
-                // Normaliser le responseType pour les animations (participe/going, maybe/interested, not_there/not_interested)
-                let normalizedResponseType: 'participe' | 'maybe' | 'not_there' | undefined
-                if (responseType === 'going' || responseType === 'participe') {
-                  normalizedResponseType = 'participe'
-                } else if (responseType === 'interested' || responseType === 'maybe') {
-                  normalizedResponseType = 'maybe'
-                } else if (responseType === 'not_interested' || responseType === 'not_there') {
-                  normalizedResponseType = 'not_there'
-                }
-                triggerStars(normalizedResponseType)
+            onResponseClick={vmEnabled ? vmOnResponseClick : (responseType) => {
+              // Afficher les étoiles quand une réponse est cliquée (mode normal uniquement)
+              // En mode visitor, l'animation est gérée par OnboardingStateContext
+              let normalizedResponseType: 'participe' | 'maybe' | 'not_there' | undefined
+              if (responseType === 'going' || responseType === 'participe') {
+                normalizedResponseType = 'participe'
+              } else if (responseType === 'interested' || responseType === 'maybe') {
+                normalizedResponseType = 'maybe'
+              } else if (responseType === 'not_interested' || responseType === 'not_there') {
+                normalizedResponseType = 'not_there'
               }
+              triggerStars(normalizedResponseType)
             }}
           />
         </div>

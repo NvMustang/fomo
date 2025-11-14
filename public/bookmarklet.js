@@ -48,7 +48,6 @@
             description: '',
             start: '',
             end: '',
-            timezone: 'Europe/Brussels',
             venue_name: '',
             address: '',
             host: '',
@@ -61,12 +60,166 @@
             // Déclarer mainContent une seule fois pour toute la fonction
             const mainContent = document.querySelector('[role="main"]') || document.body;
 
-            // ===== STRATÉGIE PRIORITAIRE : Élément role="button" avec Date/Titre/Adresse =====
+            // ===== STRATÉGIE PRIORITAIRE N°1 : Via aria-label "Informations de localisation" =====
+            // Structure: div[aria-label*="localisation"] > div.xu06os2.x1ok221b (premier = nom, deuxième = adresse)
+            if (!data.venue_name || !data.address) {
+                console.log('📍 [FOMO Bookmarklet] === STRATÉGIE ARIA-LABEL (PRIORITAIRE N°1) ===');
+                console.log('📍 [FOMO Bookmarklet] Recherche via aria-label de localisation...');
+
+                // Chercher le div avec l'aria-label spécifique
+                const locationDiv = mainContent.querySelector('div[aria-label*="Informations de localisation"], div[aria-label*="localisation"]');
+
+                if (locationDiv) {
+                    console.log('✅ [FOMO Bookmarklet] Div de localisation trouvé via aria-label');
+
+                    // Chercher directement les divs xu06os2.x1ok221b dans le div de localisation
+                    // Premier div = nom du lieu, deuxième div = adresse
+                    const locationDivs = locationDiv.querySelectorAll('div.xu06os2.x1ok221b');
+
+                    if (locationDivs.length >= 2) {
+                        const nameDiv = locationDivs[0];
+                        const addressDiv = locationDivs[1];
+
+                        const nameText = nameDiv.textContent.trim();
+                        const addressText = addressDiv.textContent.trim();
+
+                        if (nameText && nameText.length > 2 && nameText.length < 200 &&
+                            addressText && addressText.length > 5 && addressText.length < 200) {
+
+                            // Vérifier que ce n'est pas le titre de l'événement
+                            const isTitle = data.title && (
+                                nameText.toLowerCase() === data.title.toLowerCase() ||
+                                nameText.toLowerCase().includes(data.title.toLowerCase()) ||
+                                data.title.toLowerCase().includes(nameText.toLowerCase())
+                            );
+
+                            if (!isTitle) {
+                                // Vérifier que l'adresse ressemble à une adresse
+                                const looksLikeAddress = addressText.includes(',') ||
+                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
+
+                                if (looksLikeAddress) {
+                                    if (!data.venue_name) {
+                                        data.venue_name = nameText;
+                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via aria-label (divs):', nameText);
+                                    }
+                                    if (!data.address) {
+                                        data.address = addressText;
+                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via aria-label (divs):', addressText);
+                                    }
+                                    // Données trouvées, on peut arrêter la recherche
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback: chercher dans un lien si les divs directs n'ont pas fonctionné
+                    if ((!data.venue_name || !data.address)) {
+                        const venueLink = locationDiv.querySelector('a[role="link"]');
+
+                        if (venueLink) {
+                            console.log('✅ [FOMO Bookmarklet] Lien trouvé dans le div de localisation, recherche dans le lien...');
+
+                            // Chercher les divs dans le lien
+                            const linkDivs = venueLink.querySelectorAll('div.xu06os2.x1ok221b');
+                            if (linkDivs.length >= 2) {
+                                const nameDiv = linkDivs[0];
+                                const addressDiv = linkDivs[1];
+
+                                const nameText = nameDiv.textContent.trim();
+                                const addressText = addressDiv.textContent.trim();
+
+                                if (nameText && nameText.length > 2 && nameText.length < 200 &&
+                                    addressText && addressText.length > 5 && addressText.length < 200) {
+
+                                    const isTitle = data.title && (
+                                        nameText.toLowerCase() === data.title.toLowerCase() ||
+                                        nameText.toLowerCase().includes(data.title.toLowerCase()) ||
+                                        data.title.toLowerCase().includes(nameText.toLowerCase())
+                                    );
+
+                                    if (!isTitle) {
+                                        const looksLikeAddress = addressText.includes(',') ||
+                                            /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
+
+                                        if (looksLikeAddress) {
+                                            if (!data.venue_name) {
+                                                data.venue_name = nameText;
+                                                console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (divs):', nameText);
+                                            }
+                                            if (!data.address) {
+                                                data.address = addressText;
+                                                console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (divs):', addressText);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Fallback: utiliser les spans si les divs n'ont pas fonctionné
+                            if ((!data.venue_name || !data.address)) {
+                                const spans = venueLink.querySelectorAll('span[dir="auto"]');
+                                const texts = [];
+
+                                for (const span of spans) {
+                                    const text = span.textContent.trim();
+                                    if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
+                                        texts.push(text);
+                                    }
+                                }
+
+                                if (texts.length >= 2) {
+                                    const potentialName = texts[0];
+                                    const potentialAddress = texts[1];
+
+                                    // Vérifier que ce n'est pas le titre de l'événement
+                                    const isTitle = data.title && (
+                                        potentialName.toLowerCase() === data.title.toLowerCase() ||
+                                        potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
+                                        data.title.toLowerCase().includes(potentialName.toLowerCase())
+                                    );
+
+                                    if (!isTitle) {
+                                        // Vérifier que l'adresse ressemble à une adresse
+                                        const looksLikeAddress = potentialAddress.includes(',') ||
+                                            /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
+
+                                        if (looksLikeAddress) {
+                                            if (!data.venue_name) {
+                                                data.venue_name = potentialName;
+                                                console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (spans):', potentialName);
+                                            }
+                                            if (!data.address) {
+                                                data.address = potentialAddress;
+                                                console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (spans):', potentialAddress);
+                                            }
+                                        }
+                                    }
+                                } else if (texts.length === 1 && !data.address) {
+                                    // Si un seul texte, vérifier si c'est une adresse
+                                    const text = texts[0];
+                                    const looksLikeAddress = text.includes(',') ||
+                                        /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(text);
+
+                                    if (looksLikeAddress) {
+                                        data.address = text;
+                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (texte unique):', text);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    console.log('⚠️ [FOMO Bookmarklet] Div de localisation non trouvé via aria-label');
+                }
+            }
+
+            // ===== STRATÉGIE PRIORITAIRE N°2 : Élément role="button" avec Date/Titre/Adresse =====
             // Un élément avec role="button" contient toujours ces 3 infos dans l'ordre :
             // 1. Date
             // 2. Titre
             // 3. Nom du lieu OU adresse du lieu (si virgules)
-            console.log('🔍 [FOMO Bookmarklet] === STRATÉGIE ROLE BUTTON (PRIORITAIRE) ===');
+            console.log('🔍 [FOMO Bookmarklet] === STRATÉGIE ROLE BUTTON (PRIORITAIRE N°2) ===');
             const roleButtons = mainContent.querySelectorAll('[role="button"]');
             console.log('🔍 [FOMO Bookmarklet] Nombre d\'éléments role="button" trouvés:', roleButtons.length);
 
@@ -74,40 +227,129 @@
                 const buttonText = button.textContent.trim();
                 if (!buttonText || buttonText.length < 10) continue;
 
-                // Chercher les spans enfants qui contiennent les informations
-                const spans = button.querySelectorAll('span[dir="auto"]');
-                if (spans.length < 3) continue;
+                // Stratégie 1: Chercher la structure avec div.x1e56ztr.x1xmf6yo (structure imbriquée)
+                // Structure: div[role="button"] > div.x78zum5 > div.x1e56ztr.x1xmf6yo (3 divs)
+                // 1er div = Date, 2ème div = Titre (h1), 3ème div = Nom du lieu
+                const structureDivs = button.querySelectorAll('div.x1e56ztr.x1xmf6yo');
+                let dateText = null;
+                let titleText = null;
+                let locationText = null;
 
-                // Extraire les textes de chaque span
-                const texts = Array.from(spans).map(span => span.textContent.trim()).filter(text => text && text.length > 0);
-                if (texts.length < 3) continue;
+                if (structureDivs.length >= 3) {
+                    // Règle générale : Le premier span du premier div (celui qui précède le div contenant le h1) est toujours la date
+                    const dateDiv = structureDivs[0];
+                    const titleDiv = structureDivs[1];
 
-                // Vérifier que le premier texte ressemble à une date
-                const firstText = texts[0];
-                const isDateLike = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)|aujourd'hui|demain|today|tomorrow|du\s+\d{1,2})/i.test(firstText);
+                    // Vérifier que le deuxième div contient bien un h1 (titre)
+                    const hasH1 = titleDiv.querySelector('h1') !== null;
 
-                if (isDateLike) {
+                    console.log('🔍 [FOMO Bookmarklet] Structure trouvée:', {
+                        structureDivsLength: structureDivs.length,
+                        hasH1: hasH1
+                    });
+
+                    if (hasH1) {
+                        // Règle confirmée : premier div = date, deuxième div = titre
+                        const dateSpan = dateDiv.querySelector('span[dir="auto"]');
+                        console.log('🔍 [FOMO Bookmarklet] DateSpan trouvé:', dateSpan ? 'OUI' : 'NON');
+
+                        if (dateSpan) {
+                            dateText = dateSpan.textContent.trim();
+                            console.log('🔍 [FOMO Bookmarklet] Texte brut extrait:', dateText);
+
+                            // Validation basique : si le span contient un jour de la semaine, un mois, ou un format de date, on l'accepte
+                            // Le parsing complet se fera plus tard dans la section dates
+                            const hasDayOfWeek = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(dateText);
+                            const hasMonth = /(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december|janv|févr|avr|juil|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(dateText);
+                            const hasDatePattern = /(?:aujourd'hui|demain|today|tomorrow|du\s+\d{1,2}|\d{1,2}\s+(?:janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.)/i.test(dateText);
+
+                            console.log('🔍 [FOMO Bookmarklet] Validation:', {
+                                hasDayOfWeek,
+                                hasMonth,
+                                hasDatePattern,
+                                final: hasDayOfWeek || hasMonth || hasDatePattern
+                            });
+
+                            if (hasDayOfWeek || hasMonth || hasDatePattern) {
+                                console.log('✅ [FOMO Bookmarklet] Date trouvée via règle générale (premier span avant h1):', dateText);
+                            } else {
+                                console.warn('⚠️ [FOMO Bookmarklet] Premier span du premier div ne ressemble pas à une date:', dateText);
+                                // Même si la validation échoue, on accepte le texte s'il contient des chiffres et des caractères de date
+                                // Le parsing complet se fera plus tard et pourra échouer proprement
+                                if (dateText && dateText.length > 5 && /\d/.test(dateText)) {
+                                    console.log('⚠️ [FOMO Bookmarklet] Validation échouée mais texte accepté quand même (sera parsé plus tard):', dateText);
+                                    // On garde dateText tel quel
+                                } else {
+                                    dateText = null;
+                                }
+                            }
+                        } else {
+                            console.warn('⚠️ [FOMO Bookmarklet] Aucun span[dir="auto"] trouvé dans le premier div');
+                        }
+                    } else {
+                        console.warn('⚠️ [FOMO Bookmarklet] Le deuxième div ne contient pas de h1');
+                    }
+
+                    // Deuxième div : Titre (dans h1)
+                    const titleH1 = titleDiv.querySelector('h1');
+                    if (titleH1) {
+                        titleText = titleH1.textContent.trim();
+                    } else {
+                        // Fallback: chercher dans les spans
+                        const titleSpan = titleDiv.querySelector('span[dir="auto"]');
+                        if (titleSpan) {
+                            titleText = titleSpan.textContent.trim();
+                        }
+                    }
+
+                    // Troisième div : Nom du lieu
+                    const locationDiv = structureDivs[2];
+                    const locationSpan = locationDiv.querySelector('span[dir="auto"]');
+                    if (locationSpan) {
+                        locationText = locationSpan.textContent.trim();
+                    }
+                }
+
+                // Stratégie 2: Si la structure div.x1e56ztr n'a pas fonctionné, chercher directement les spans
+                if (!dateText || !titleText || !locationText) {
+                    const spans = button.querySelectorAll('span[dir="auto"]');
+                    if (spans.length >= 3) {
+                        const texts = Array.from(spans).map(span => span.textContent.trim()).filter(text => text && text.length > 0);
+                        if (texts.length >= 3) {
+                            const firstText = texts[0];
+                            const isDateLike = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)|aujourd'hui|demain|today|tomorrow|du\s+\d{1,2})/i.test(firstText);
+
+                            if (isDateLike) {
+                                if (!dateText) dateText = firstText;
+                                if (!titleText) titleText = texts[1];
+                                if (!locationText) locationText = texts[2];
+                            }
+                        }
+                    }
+                }
+
+                // Si on a trouvé au moins la date et le titre, utiliser ces données
+                if (dateText && titleText) {
                     console.log('✅ [FOMO Bookmarklet] Élément role="button" avec structure Date/Titre/Adresse trouvé');
-                    console.log('📅 [FOMO Bookmarklet] Texte 1 (Date):', firstText);
-                    console.log('📝 [FOMO Bookmarklet] Texte 2 (Titre):', texts[1]);
-                    console.log('📍 [FOMO Bookmarklet] Texte 3 (Lieu/Adresse):', texts[2]);
+                    console.log('📅 [FOMO Bookmarklet] Texte 1 (Date):', dateText);
+                    console.log('📝 [FOMO Bookmarklet] Texte 2 (Titre):', titleText);
+                    console.log('📍 [FOMO Bookmarklet] Texte 3 (Lieu/Adresse):', locationText || 'NON TROUVÉ');
 
                     // 1. Date (sera parsée plus tard dans la section dates)
-                    if (!data.start && firstText) {
+                    if (!data.start && dateText) {
                         // Stocker temporairement pour parsing ultérieur
-                        data.start = firstText;
-                        console.log('📅 [FOMO Bookmarklet] Date trouvée via role="button":', firstText);
+                        data.start = dateText;
+                        console.log('📅 [FOMO Bookmarklet] Date trouvée via role="button":', dateText);
                     }
 
                     // 2. Titre
-                    if (!data.title && texts[1]) {
-                        data.title = texts[1];
-                        console.log('✅ [FOMO Bookmarklet] Titre trouvé via role="button":', texts[1]);
+                    if (!data.title && titleText) {
+                        data.title = titleText;
+                        console.log('✅ [FOMO Bookmarklet] Titre trouvé via role="button":', titleText);
                     }
 
                     // 3. Nom du lieu OU adresse
-                    if (texts[2]) {
-                        const locationText = texts[2];
+                    if (locationText) {
                         if (locationText.includes(',')) {
                             // C'est une adresse complète avec virgules
                             const parts = locationText.split(',').map(p => p.trim());
@@ -309,6 +551,198 @@
             // Il peut être dans un div parent avec classes spécifiques
             let descSpan = null;
 
+            // ===== STRATÉGIE PRIORITAIRE : Chercher dans les divs avec classe "html-div" =====
+            // Les descriptions sont souvent dans des divs avec la classe "html-div"
+            console.log('📝 [FOMO Bookmarklet] === STRATÉGIE HTML-DIV (PRIORITAIRE) ===');
+            const htmlDivs = mainContent.querySelectorAll('div.html-div');
+            console.log('📝 [FOMO Bookmarklet] Nombre de divs html-div trouvés:', htmlDivs.length);
+
+            // Récupérer tous les spans déjà utilisés pour date/titre/lieu dans role="button" (en-tête)
+            const usedSpansForHtmlDiv = new Set();
+            const roleButtonsForHtmlDiv = mainContent.querySelectorAll('[role="button"]');
+            for (const button of roleButtonsForHtmlDiv) {
+                const structureDivs = button.querySelectorAll('div.x1e56ztr.x1xmf6yo');
+                if (structureDivs.length >= 3) {
+                    // Premier div = date
+                    const dateSpan = structureDivs[0].querySelector('span[dir="auto"]');
+                    if (dateSpan) usedSpansForHtmlDiv.add(dateSpan);
+                    // Deuxième div = titre
+                    const titleH1 = structureDivs[1].querySelector('h1');
+                    if (titleH1) {
+                        const titleSpans = titleH1.querySelectorAll('span[dir="auto"]');
+                        titleSpans.forEach(s => usedSpansForHtmlDiv.add(s));
+                    }
+                    // Troisième div = lieu
+                    const locationSpan = structureDivs[2].querySelector('span[dir="auto"]');
+                    if (locationSpan) usedSpansForHtmlDiv.add(locationSpan);
+                }
+            }
+            console.log('📝 [FOMO Bookmarklet] Spans exclus (déjà utilisés pour date/titre/lieu):', usedSpansForHtmlDiv.size);
+
+            // Exclure les divs html-div qui sont juste après ou dans la même hiérarchie que la div de localisation
+            // La div avec aria-label="Informations de localisation pour cet évènement" contient les infos de localisation
+            // Les divs html-div juste après ou dans la même hiérarchie contiennent souvent du texte qui interfère avec la description
+            const locationDivs = mainContent.querySelectorAll('div[aria-label*="Informations de localisation"], div[aria-label*="localisation"]');
+            const excludedHtmlDivs = new Set();
+            const excludedSpans = new Set();
+
+            for (const locationDiv of locationDivs) {
+                // Exclure TOUS les spans dans la div de localisation (même ceux non utilisés pour venue_name/address)
+                const allSpansInLocation = locationDiv.querySelectorAll('span[dir="auto"]');
+                allSpansInLocation.forEach(span => excludedSpans.add(span));
+
+                // Exclure la div html-div parente de la div de localisation
+                const parentHtmlDiv = locationDiv.closest('div.html-div');
+                if (parentHtmlDiv) {
+                    excludedHtmlDivs.add(parentHtmlDiv);
+                    // Exclure aussi tous les spans dans cette div parente
+                    const spansInParent = parentHtmlDiv.querySelectorAll('span[dir="auto"]');
+                    spansInParent.forEach(span => excludedSpans.add(span));
+                }
+
+                // Exclure les divs html-div qui sont des siblings directs après la div de localisation
+                let nextSibling = locationDiv.parentElement?.nextElementSibling;
+                let levels = 0;
+                while (nextSibling && levels < 3) {
+                    if (nextSibling.classList.contains('html-div')) {
+                        excludedHtmlDivs.add(nextSibling);
+                        // Exclure aussi tous les spans dans ce sibling
+                        const spansInSibling = nextSibling.querySelectorAll('span[dir="auto"]');
+                        spansInSibling.forEach(span => excludedSpans.add(span));
+                    }
+                    // Chercher aussi dans les enfants directs
+                    const childHtmlDivs = nextSibling.querySelectorAll('div.html-div');
+                    childHtmlDivs.forEach(div => {
+                        excludedHtmlDivs.add(div);
+                        const spansInChild = div.querySelectorAll('span[dir="auto"]');
+                        spansInChild.forEach(span => excludedSpans.add(span));
+                    });
+                    nextSibling = nextSibling.nextElementSibling;
+                    levels++;
+                }
+
+                // Exclure aussi les divs html-div qui sont dans le même parent que la div de localisation
+                const parent = locationDiv.parentElement;
+                if (parent) {
+                    const siblingHtmlDivs = parent.querySelectorAll('div.html-div');
+                    siblingHtmlDivs.forEach(div => {
+                        // Exclure si c'est un sibling ou un descendant d'un sibling
+                        if (div !== parentHtmlDiv && (div.parentElement === parent || div.closest('div.html-div')?.parentElement === parent)) {
+                            excludedHtmlDivs.add(div);
+                            const spansInSibling = div.querySelectorAll('span[dir="auto"]');
+                            spansInSibling.forEach(span => excludedSpans.add(span));
+                        }
+                    });
+                }
+            }
+            console.log('📝 [FOMO Bookmarklet] Divs html-div exclus (près de la localisation):', excludedHtmlDivs.size);
+            console.log('📝 [FOMO Bookmarklet] Spans exclus (dans la section localisation):', excludedSpans.size);
+
+            const candidateSpansHtmlDiv = [];
+            for (const htmlDiv of htmlDivs) {
+                // Ignorer les divs html-div exclus (près de la localisation)
+                if (excludedHtmlDivs.has(htmlDiv)) {
+                    continue;
+                }
+
+                // Chercher les spans avec dir="auto" et style fontSize:14px dans ce div
+                const spansInDiv = htmlDiv.querySelectorAll('span[dir="auto"]');
+                for (const span of spansInDiv) {
+                    // Ignorer les spans déjà utilisés pour date/titre/lieu
+                    if (usedSpansForHtmlDiv.has(span)) {
+                        continue;
+                    }
+
+                    // Ignorer les spans qui sont dans la section de localisation (aria-label)
+                    if (excludedSpans.has(span)) {
+                        continue;
+                    }
+
+                    // Ignorer les spans qui sont dans une div html-div exclue
+                    const spanHtmlDiv = span.closest('div.html-div');
+                    if (spanHtmlDiv && excludedHtmlDivs.has(spanHtmlDiv)) {
+                        continue;
+                    }
+
+                    const style = span.getAttribute('style') || '';
+                    if (style.includes('--x-fontSize: 14px')) {
+                        // Vérifier qu'il contient des divs de description
+                        const hasDescriptionDivs = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s').length > 0 ||
+                            span.querySelectorAll('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length > 0;
+
+                        if (hasDescriptionDivs) {
+                            const spanText = span.textContent.trim();
+                            const textLength = spanText.length;
+
+                            // Compter séparément les divs xtlvy1s (vrais paragraphes) et xdj266r (premier paragraphe/intro)
+                            const xtlvy1sCount = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s').length;
+                            const xdj266rCount = span.querySelectorAll('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length;
+                            const paragraphCount = xtlvy1sCount + xdj266rCount;
+
+                            // Vérifier si le span contient un bouton "Voir moins" (indicateur fiable de description)
+                            const voirMoinsButtons = span.querySelectorAll('[role="button"], button');
+                            let hasVoirMoins = false;
+                            for (const btn of voirMoinsButtons) {
+                                const btnText = btn.textContent.trim().toLowerCase();
+                                if (btnText === 'voir moins' || btnText === 'voir plus' || btnText === 'see less' || btnText === 'see more') {
+                                    hasVoirMoins = true;
+                                    break;
+                                }
+                            }
+
+                            // Exclure les spans qui sont dans un role="button" (en-tête)
+                            const isInRoleButton = span.closest('[role="button"]') !== null;
+
+                            // Exclure les spans qui ressemblent à des dates
+                            const looksLikeDate = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+(?:janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.|du\s+\d{1,2})/i.test(spanText);
+
+                            // Vérifier que le span n'est pas trop court
+                            // Si le span a plusieurs paragraphes (xtlvy1s), on accepte même s'il est un peu court
+                            // Si le span a un bouton "Voir moins", c'est un indicateur fort de description
+                            // Sinon, on exige au moins 100 caractères
+                            const isLongEnough = hasVoirMoins || xtlvy1sCount >= 2 || (xtlvy1sCount >= 1 && textLength >= 100) || textLength >= 200;
+
+                            if (!isInRoleButton && !looksLikeDate && isLongEnough) {
+                                candidateSpansHtmlDiv.push({
+                                    span,
+                                    textLength,
+                                    paragraphCount,
+                                    xtlvy1sCount, // Nombre de vrais paragraphes
+                                    xdj266rCount,
+                                    hasVoirMoins // Indicateur de description fiable
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Choisir le span avec le contenu le plus long et le plus de paragraphes
+            if (candidateSpansHtmlDiv.length > 0) {
+                candidateSpansHtmlDiv.sort((a, b) => {
+                    // Priorité 1: présence du bouton "Voir moins" (indicateur fiable de description)
+                    if (b.hasVoirMoins !== a.hasVoirMoins) {
+                        return b.hasVoirMoins ? 1 : -1;
+                    }
+                    // Priorité 2: nombre de divs xtlvy1s (vrais paragraphes)
+                    if (b.xtlvy1sCount !== a.xtlvy1sCount) {
+                        return b.xtlvy1sCount - a.xtlvy1sCount;
+                    }
+                    // Priorité 3: nombre total de paragraphes
+                    if (b.paragraphCount !== a.paragraphCount) {
+                        return b.paragraphCount - a.paragraphCount;
+                    }
+                    // Priorité 4: longueur du texte
+                    return b.textLength - a.textLength;
+                });
+                descSpan = candidateSpansHtmlDiv[0].span;
+                console.log('📝 [FOMO Bookmarklet] ✅ Span trouvé via stratégie html-div');
+                console.log('📝 [FOMO Bookmarklet] Nombre de candidats:', candidateSpansHtmlDiv.length);
+                console.log('📝 [FOMO Bookmarklet] Span choisi - Voir moins:', candidateSpansHtmlDiv[0].hasVoirMoins, 'xtlvy1s:', candidateSpansHtmlDiv[0].xtlvy1sCount, 'Paragraphes totaux:', candidateSpansHtmlDiv[0].paragraphCount, 'Longueur:', candidateSpansHtmlDiv[0].textLength);
+            } else {
+                console.log('📝 [FOMO Bookmarklet] Aucun span trouvé via stratégie html-div');
+            }
+
             // Essayer d'abord de trouver le span dans un div parent spécifique (selon le sélecteur CSS fourni)
             const parentDivs = mainContent.querySelectorAll('div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak');
             console.log('📝 [FOMO Bookmarklet] Nombre de divs html-div.xdj266r trouvés:', parentDivs.length);
@@ -326,9 +760,165 @@
                 }
             }
 
-            // Fallback: chercher directement le span
+            // Fallback 1: chercher directement le span avec les classes (plus flexible)
             if (!descSpan) {
-                descSpan = mainContent.querySelector('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"]');
+                // Récupérer tous les spans déjà utilisés pour date/titre/lieu dans role="button"
+                const usedSpansForFallback = new Set();
+                const roleButtons = mainContent.querySelectorAll('[role="button"]');
+                for (const button of roleButtons) {
+                    const structureDivs = button.querySelectorAll('div.x1e56ztr.x1xmf6yo');
+                    if (structureDivs.length >= 3) {
+                        // Premier div = date
+                        const dateSpan = structureDivs[0].querySelector('span[dir="auto"]');
+                        if (dateSpan) usedSpansForFallback.add(dateSpan);
+                        // Deuxième div = titre
+                        const titleH1 = structureDivs[1].querySelector('h1');
+                        if (titleH1) {
+                            const titleSpans = titleH1.querySelectorAll('span[dir="auto"]');
+                            titleSpans.forEach(s => usedSpansForFallback.add(s));
+                        }
+                        // Troisième div = lieu
+                        const locationSpan = structureDivs[2].querySelector('span[dir="auto"]');
+                        if (locationSpan) usedSpansForFallback.add(locationSpan);
+                    }
+                }
+
+                // Chercher tous les spans avec les classes principales et trouver celui qui n'est pas dans l'en-tête
+                const allSpansWithClasses = mainContent.querySelectorAll('span[dir="auto"][class*="xdmh292"][class*="x15dsfln"][class*="x140p0ai"]');
+                const candidateSpans = [];
+
+                for (const span of allSpansWithClasses) {
+                    // Ignorer les spans déjà utilisés pour date/titre/lieu
+                    if (usedSpansForFallback.has(span)) {
+                        continue;
+                    }
+
+                    // Ignorer les spans qui sont dans un role="button" (en-tête)
+                    if (span.closest('[role="button"]') !== null) {
+                        continue;
+                    }
+
+                    // Vérifier qu'il contient des divs de description
+                    const hasDescriptionDivs = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s').length > 0 ||
+                        span.querySelectorAll('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length > 0;
+
+                    if (hasDescriptionDivs) {
+                        const spanText = span.textContent.trim();
+                        const textLength = spanText.length;
+                        const paragraphCount = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s, div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length;
+
+                        // Validation basique: exclure seulement les spans vraiment trop courts (moins de 10 caractères)
+                        // On accepte même les descriptions courtes comme "Hits 90/2000"
+                        if (textLength >= 10) {
+                            candidateSpans.push({ span, textLength, paragraphCount });
+                        }
+                    }
+                }
+
+                // Choisir le span avec le contenu le plus long et le plus de paragraphes
+                if (candidateSpans.length > 0) {
+                    candidateSpans.sort((a, b) => {
+                        // Priorité 1: nombre de paragraphes
+                        if (b.paragraphCount !== a.paragraphCount) {
+                            return b.paragraphCount - a.paragraphCount;
+                        }
+                        // Priorité 2: longueur du texte
+                        return b.textLength - a.textLength;
+                    });
+                    descSpan = candidateSpans[0].span;
+                    console.log('📝 [FOMO Bookmarklet] ✅ Span trouvé via Fallback 1 (classes principales)');
+                    console.log('📝 [FOMO Bookmarklet] Nombre de candidats:', candidateSpans.length);
+                    console.log('📝 [FOMO Bookmarklet] Span choisi - Paragraphes:', candidateSpans[0].paragraphCount, 'Longueur:', candidateSpans[0].textLength);
+                }
+            }
+
+            // Fallback 2: chercher le span avec style --x-fontSize: 14px qui contient des divs de description
+            // Ce style est un indicateur fiable pour les descriptions
+            // Cas 1: span avec divs xtlvy1s (paragraphes multiples)
+            // Cas 2: span avec un seul div xdj266r contenant toute la description (avec <br>)
+            // IMPORTANT: Exclure les spans qui sont dans la structure role="button" (en-tête avec date/titre/lieu)
+            if (!descSpan) {
+                console.log('📝 [FOMO Bookmarklet] Recherche via style fontSize:14px...');
+                const allSpans = mainContent.querySelectorAll('span[dir="auto"]');
+                console.log('📝 [FOMO Bookmarklet] Nombre de spans à analyser:', allSpans.length);
+
+                // Récupérer tous les spans déjà utilisés pour date/titre/lieu dans role="button"
+                const usedSpans = new Set();
+                const roleButtons = mainContent.querySelectorAll('[role="button"]');
+                for (const button of roleButtons) {
+                    const structureDivs = button.querySelectorAll('div.x1e56ztr.x1xmf6yo');
+                    if (structureDivs.length >= 3) {
+                        // Premier div = date
+                        const dateSpan = structureDivs[0].querySelector('span[dir="auto"]');
+                        if (dateSpan) usedSpans.add(dateSpan);
+                        // Deuxième div = titre
+                        const titleH1 = structureDivs[1].querySelector('h1');
+                        if (titleH1) {
+                            const titleSpans = titleH1.querySelectorAll('span[dir="auto"]');
+                            titleSpans.forEach(s => usedSpans.add(s));
+                        }
+                        // Troisième div = lieu
+                        const locationSpan = structureDivs[2].querySelector('span[dir="auto"]');
+                        if (locationSpan) usedSpans.add(locationSpan);
+                    }
+                }
+                console.log('📝 [FOMO Bookmarklet] Spans exclus (déjà utilisés pour date/titre/lieu):', usedSpans.size);
+
+                const candidateSpansFallback2 = [];
+
+                for (const span of allSpans) {
+                    // Ignorer les spans déjà utilisés pour date/titre/lieu
+                    if (usedSpans.has(span)) {
+                        continue;
+                    }
+
+                    const style = span.getAttribute('style') || '';
+                    if (style.includes('--x-fontSize: 14px')) {
+                        // Vérifier que ce span contient des divs de description
+                        // Cas 1: divs xtlvy1s (paragraphes multiples)
+                        const hasXtly1sDivs = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s').length > 0;
+                        // Cas 2: div xdj266r (peut contenir toute la description avec <br>)
+                        const hasXdj266rDiv = span.querySelectorAll('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length > 0;
+
+                        // Vérifier aussi que le contenu texte est suffisamment long (éviter les faux positifs)
+                        const spanText = span.textContent.trim();
+                        const hasSubstantialContent = spanText.length > 50;
+
+                        // Exclure les spans qui ressemblent à des dates (contiennent des patterns de date)
+                        const looksLikeDate = /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+(?:janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.|du\s+\d{1,2})/i.test(spanText);
+
+                        // Exclure les spans qui sont dans un role="button" (en-tête)
+                        const isInRoleButton = span.closest('[role="button"]') !== null;
+
+                        if ((hasXtly1sDivs || hasXdj266rDiv) && hasSubstantialContent && !looksLikeDate && !isInRoleButton) {
+                            const paragraphCount = span.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s, div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length;
+
+                            // Validation basique: exclure seulement les spans vraiment trop courts (moins de 10 caractères)
+                            // On accepte même les descriptions courtes comme "Hits 90/2000"
+                            if (spanText.length >= 10) {
+                                candidateSpansFallback2.push({ span, textLength: spanText.length, paragraphCount });
+                            }
+                        }
+                    }
+                }
+
+                // Choisir le span avec le contenu le plus long et le plus de paragraphes
+                if (candidateSpansFallback2.length > 0) {
+                    candidateSpansFallback2.sort((a, b) => {
+                        // Priorité 1: nombre de paragraphes
+                        if (b.paragraphCount !== a.paragraphCount) {
+                            return b.paragraphCount - a.paragraphCount;
+                        }
+                        // Priorité 2: longueur du texte
+                        return b.textLength - a.textLength;
+                    });
+                    descSpan = candidateSpansFallback2[0].span;
+                    console.log('📝 [FOMO Bookmarklet] ✅ Span trouvé via style fontSize:14px avec divs de description');
+                    console.log('📝 [FOMO Bookmarklet] Nombre de candidats:', candidateSpansFallback2.length);
+                    console.log('📝 [FOMO Bookmarklet] Span choisi - Paragraphes:', candidateSpansFallback2[0].paragraphCount, 'Longueur:', candidateSpansFallback2[0].textLength);
+                    console.log('📝 [FOMO Bookmarklet] Nombre de divs xtlvy1s trouvés:', descSpan.querySelectorAll('div.x14z9mp.xat24cr.x1lziwak.x1vvkbs.xtlvy1s').length);
+                    console.log('📝 [FOMO Bookmarklet] Nombre de divs xdj266r trouvés:', descSpan.querySelectorAll('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs').length);
+                }
             }
 
             if (descSpan) {
@@ -486,126 +1076,7 @@
                 const allSpans = mainContent.querySelectorAll('span[dir="auto"]');
                 console.log('📝 [FOMO Bookmarklet] Nombre total de spans dir="auto" trouvés:', allSpans.length);
             }
-            console.log('📝 [FOMO Bookmarklet] === FIN EXTRACTION DESCRIPTION ===');
-            console.log('📝 [FOMO Bookmarklet] Description finale dans data.description:', data.description || 'VIDE');
-
-            // Stratégie 2: data-testid
-            if (!data.description) {
-                const descSelectors = [
-                    '[data-testid="event-permalink-details"]',
-                    '[data-testid="event-permalink-description"]',
-                    '[data-testid="event-permalink-about"]',
-                    '[data-testid="event-permalink-event-description"]'
-                ];
-                for (const selector of descSelectors) {
-                    const el = document.querySelector(selector);
-                    if (el) {
-                        const text = el.textContent.trim();
-                        if (text && text.length > 20) {
-                            data.description = text.substring(0, 1000);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Stratégie 3: Div avec classes spécifiques Facebook (description principale)
-            if (!data.description) {
-                // Chercher le div avec les classes xdj266r x14z9mp xat24cr x1lziwak x1vvkbs
-                const descDiv = document.querySelector('div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs');
-                if (descDiv) {
-                    // Cloner le div pour ne pas modifier l'original
-                    const clone = descDiv.cloneNode(true);
-                    // Supprimer TOUS les boutons (plus agressif)
-                    const buttons = clone.querySelectorAll('[role="button"], button, [class*="button"]');
-                    buttons.forEach(btn => {
-                        const btnText = btn.textContent.trim().toLowerCase();
-                        // Liste exhaustive des patterns de boutons
-                        if (btnText.includes('voir moins') || btnText.includes('voir plus') ||
-                            btnText.includes('en savoir plus') || btnText.includes('see more') ||
-                            btnText.includes('see less') || btnText === 'voir plus' || btnText === 'voir moins' ||
-                            btnText === 'plus' || btnText === 'moins' || btnText === 'more' || btnText === 'less') {
-                            btn.remove();
-                        }
-                    });
-                    let text = clone.textContent.trim();
-
-                    // Nettoyer le texte final pour supprimer les restes de boutons
-                    text = text.replace(/\s*(voir\s+(plus|moins)|en\s+savoir\s+plus|see\s+(more|less))\s*/gi, '');
-                    text = text.replace(/\s+/g, ' ').trim(); // Normaliser les espaces
-
-                    if (text && text.length > 20) {
-                        data.description = text.substring(0, 1000);
-                        console.log('📝 [FOMO Bookmarklet] Description trouvée via div spécifique:', text.substring(0, 100));
-                    }
-                }
-            }
-
-            // Stratégie 4: Chercher dans les divs avec classes communes (fallback flexible)
-            if (!data.description) {
-                const descDivs = mainContent.querySelectorAll('div[class*="xdj266r"], div[class*="x14z9mp"]');
-                for (const div of descDivs) {
-                    const clone = div.cloneNode(true);
-                    // Supprimer TOUS les boutons (plus agressif)
-                    const buttons = clone.querySelectorAll('[role="button"], button, [class*="button"]');
-                    buttons.forEach(btn => {
-                        const btnText = btn.textContent.trim().toLowerCase();
-                        if (btnText.includes('voir moins') || btnText.includes('voir plus') ||
-                            btnText.includes('en savoir plus') || btnText.includes('see more') ||
-                            btnText.includes('see less') || btnText === 'voir plus' || btnText === 'voir moins' ||
-                            btnText === 'plus' || btnText === 'moins' || btnText === 'more' || btnText === 'less') {
-                            btn.remove();
-                        }
-                    });
-                    let text = clone.textContent.trim();
-                    // Nettoyer le texte final
-                    text = text.replace(/\s*(voir\s+(plus|moins)|en\s+savoir\s+plus|see\s+(more|less))\s*/gi, '');
-                    text = text.replace(/\s+/g, ' ').trim();
-
-                    if (text && text.length > 50 && text.length < 2000 &&
-                        !text.match(/^https?:\/\//) &&
-                        text.split(/\s+/).length > 10) {
-                        data.description = text.substring(0, 1000);
-                        break;
-                    }
-                }
-            }
-
-            // Stratégie 5: Chercher dans les divs avec dir="auto" qui contiennent beaucoup de texte
-            if (!data.description) {
-                const divs = mainContent.querySelectorAll('div[dir="auto"]');
-                let longestText = '';
-                for (const div of divs) {
-                    const clone = div.cloneNode(true);
-                    // Supprimer TOUS les boutons (plus agressif)
-                    const buttons = clone.querySelectorAll('[role="button"], button, [class*="button"]');
-                    buttons.forEach(btn => {
-                        const btnText = btn.textContent.trim().toLowerCase();
-                        if (btnText.includes('voir moins') || btnText.includes('voir plus') ||
-                            btnText.includes('en savoir plus') || btnText.includes('see more') ||
-                            btnText.includes('see less') || btnText === 'voir plus' || btnText === 'voir moins' ||
-                            btnText === 'plus' || btnText === 'moins' || btnText === 'more' || btnText === 'less') {
-                            btn.remove();
-                        }
-                    });
-                    let text = clone.textContent.trim();
-                    // Nettoyer le texte final
-                    text = text.replace(/\s*(voir\s+(plus|moins)|en\s+savoir\s+plus|see\s+(more|less))\s*/gi, '');
-                    text = text.replace(/\s+/g, ' ').trim();
-
-                    // Filtrer les textes qui semblent être des descriptions (longs, pas de liens uniquement)
-                    if (text && text.length > 50 && text.length < 2000 &&
-                        !text.match(/^https?:\/\//) &&
-                        text.split(/\s+/).length > 10) {
-                        if (text.length > longestText.length) {
-                            longestText = text;
-                        }
-                    }
-                }
-                if (longestText) {
-                    data.description = longestText.substring(0, 1000);
-                }
-            }
+            console.log('📝 [FOMO Bookmarklet] Description finale:', data.description ? `${data.description.substring(0, 100)}...` : 'VIDE');
 
             // ===== DATES =====
             console.log('📅 [FOMO Bookmarklet] === DÉBUT EXTRACTION DATES ===');
@@ -687,18 +1158,28 @@
                 }
             }
 
+            // Si data.start est déjà une string (texte brut), l'utiliser pour le parsing
+            let dateText = null;
             if (dateSpanSpecific) {
-                const dateText = dateSpanSpecific.textContent.trim();
-                console.log('📅 [FOMO Bookmarklet] Texte trouvé:', dateText);
+                dateText = dateSpanSpecific.textContent.trim();
+                console.log('📅 [FOMO Bookmarklet] Texte trouvé via sélecteur:', dateText);
+            } else if (data.start && typeof data.start === 'string' && !data.start.includes('T') && !data.start.includes('Z')) {
+                // data.start est déjà une string (texte brut) trouvée via role="button"
+                dateText = data.start;
+                console.log('📅 [FOMO Bookmarklet] Texte trouvé via role="button":', dateText);
+            }
+
+            if (dateText) {
 
                 // Parser les patterns spécifiques dans l'ordre
                 let parsed = false;
                 try {
-                    // Pattern 1: "du 14 nov. 17:00 au 16 nov. 20:00"
-                    let dateMatch = dateText.match(/du\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+(\w+)\.\s+(\d{1,2}):(\d{2})/i);
+                    // Pattern 1a: "du 24 janv. 2026 16:30 au 25 janv. 2026 05:00" (avec année)
+                    // Utiliser [^\s.]+ au lieu de \w+ pour capturer les mois avec accents (déc., févr., etc.)
+                    let dateMatch = dateText.match(/du\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{4})\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{4})\s+(\d{1,2}):(\d{2})/i);
                     if (dateMatch) {
-                        const [, startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute] = dateMatch;
-                        console.log('📅 [FOMO Bookmarklet] Match trouvé:', { startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute });
+                        const [, startDay, startMonthAbbr, startYear, startHour, startMinute, endDay, endMonthAbbr, endYear, endHour, endMinute] = dateMatch;
+                        console.log('📅 [FOMO Bookmarklet] Match trouvé (avec année):', { startDay, startMonthAbbr, startYear, startHour, startMinute, endDay, endMonthAbbr, endYear, endHour, endMinute });
 
                         // Mapping des mois abrégés français
                         const monthAbbrMap = {
@@ -713,18 +1194,11 @@
                         const endMonth = monthAbbrMap[endMonthAbbr.toLowerCase()];
 
                         if (startMonth !== undefined && endMonth !== undefined) {
-                            // Utiliser l'année actuelle ou l'année suivante si le mois est déjà passé
-                            const now = new Date();
-                            let year = now.getFullYear();
-                            if (startMonth < now.getMonth() || (startMonth === now.getMonth() && parseInt(startDay) < now.getDate())) {
-                                year = year + 1;
-                            }
-
-                            const startDate = new Date(year, startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
-                            const endDate = new Date(year, endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
+                            const startDate = new Date(parseInt(startYear), startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
+                            const endDate = new Date(parseInt(endYear), endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
 
                             // Si même jour et même mois, et heure de fin < heure de début, l'événement se termine le lendemain
-                            if (startDay === endDay && startMonth === endMonth) {
+                            if (startDay === endDay && startMonth === endMonth && startYear === endYear) {
                                 const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
                                 const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
                                 if (endTime < startTime) {
@@ -749,15 +1223,133 @@
                         }
                     }
 
+                    // Pattern 1b: "du 31 déc. 19:00 au 1 janv. 2026 05:00" (début sans année, fin avec année - passage d'année)
+                    // Utiliser [^\s.]+ au lieu de \w+ pour capturer les mois avec accents (déc., févr., etc.)
+                    if (!parsed) {
+                        dateMatch = dateText.match(/du\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{4})\s+(\d{1,2}):(\d{2})/i);
+                        if (dateMatch) {
+                            const [, startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endYear, endHour, endMinute] = dateMatch;
+                            console.log('📅 [FOMO Bookmarklet] Match trouvé (début sans année, fin avec année):', { startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endYear, endHour, endMinute });
+
+                            // Mapping des mois abrégés français
+                            const monthAbbrMap = {
+                                'janv': 0, 'jan': 0, 'févr': 1, 'fév': 1, 'mars': 2, 'mar': 2,
+                                'avr': 3, 'mai': 4, 'juin': 5, 'juil': 6, 'jul': 6, 'août': 7, 'aout': 7,
+                                'sept': 8, 'oct': 9, 'nov': 10, 'déc': 11, 'dec': 11,
+                                'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                                'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+                            };
+
+                            const startMonth = monthAbbrMap[startMonthAbbr.toLowerCase()];
+                            const endMonth = monthAbbrMap[endMonthAbbr.toLowerCase()];
+
+                            if (startMonth !== undefined && endMonth !== undefined) {
+                                // Si le mois de fin est avant le mois de début (ex: déc -> janv), c'est l'année suivante pour le début
+                                // Sinon, utiliser l'année de fin pour le début aussi
+                                let startYear = parseInt(endYear);
+                                if (endMonth < startMonth || (endMonth === startMonth && parseInt(endDay) < parseInt(startDay))) {
+                                    // Passage d'année : début est l'année précédente
+                                    startYear = parseInt(endYear) - 1;
+                                }
+
+                                const startDate = new Date(startYear, startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
+                                const endDate = new Date(parseInt(endYear), endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
+
+                                // Si même jour et même mois, et heure de fin < heure de début, l'événement se termine le lendemain
+                                if (startDay === endDay && startMonth === endMonth && startYear === parseInt(endYear)) {
+                                    const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                    const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                    if (endTime < startTime) {
+                                        endDate.setDate(endDate.getDate() + 1);
+                                        console.log('📅 [FOMO Bookmarklet] Heure de fin < heure de début, événement se termine le lendemain');
+                                    }
+                                }
+
+                                console.log('📅 [FOMO Bookmarklet] Dates créées - Début:', startDate, 'Fin:', endDate);
+
+                                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                                    data.start = startDate.toISOString();
+                                    data.end = endDate.toISOString();
+                                    console.log('✅ [FOMO Bookmarklet] Date début extraite:', data.start);
+                                    console.log('✅ [FOMO Bookmarklet] Date fin extraite:', data.end);
+                                } else {
+                                    console.warn('⚠️ [FOMO Bookmarklet] Dates invalides après parsing');
+                                }
+                                parsed = true;
+                            } else {
+                                console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnus:', startMonthAbbr, endMonthAbbr);
+                            }
+                        }
+                    }
+
+                    // Pattern 1c: "du 14 nov. 17:00 au 16 nov. 20:00" (sans année pour les deux)
+                    // Utiliser [^\s.]+ au lieu de \w+ pour capturer les mois avec accents (déc., févr., etc.)
+                    if (!parsed) {
+                        dateMatch = dateText.match(/du\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{1,2}):(\d{2})\s+au\s+(\d{1,2})\s+([^\s.]+)\.\s+(\d{1,2}):(\d{2})/i);
+                        if (dateMatch) {
+                            const [, startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute] = dateMatch;
+                            console.log('📅 [FOMO Bookmarklet] Match trouvé:', { startDay, startMonthAbbr, startHour, startMinute, endDay, endMonthAbbr, endHour, endMinute });
+
+                            // Mapping des mois abrégés français
+                            const monthAbbrMap = {
+                                'janv': 0, 'jan': 0, 'févr': 1, 'fév': 1, 'mars': 2, 'mar': 2,
+                                'avr': 3, 'mai': 4, 'juin': 5, 'juil': 6, 'jul': 6, 'août': 7, 'aout': 7,
+                                'sept': 8, 'oct': 9, 'nov': 10, 'déc': 11, 'dec': 11,
+                                'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                                'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+                            };
+
+                            const startMonth = monthAbbrMap[startMonthAbbr.toLowerCase()];
+                            const endMonth = monthAbbrMap[endMonthAbbr.toLowerCase()];
+
+                            if (startMonth !== undefined && endMonth !== undefined) {
+                                // Utiliser l'année actuelle ou l'année suivante si le mois est déjà passé
+                                const now = new Date();
+                                let year = now.getFullYear();
+                                if (startMonth < now.getMonth() || (startMonth === now.getMonth() && parseInt(startDay) < now.getDate())) {
+                                    year = year + 1;
+                                }
+
+                                const startDate = new Date(year, startMonth, parseInt(startDay), parseInt(startHour), parseInt(startMinute));
+                                const endDate = new Date(year, endMonth, parseInt(endDay), parseInt(endHour), parseInt(endMinute));
+
+                                // Si même jour et même mois, et heure de fin < heure de début, l'événement se termine le lendemain
+                                if (startDay === endDay && startMonth === endMonth) {
+                                    const startTime = parseInt(startHour) * 60 + parseInt(startMinute);
+                                    const endTime = parseInt(endHour) * 60 + parseInt(endMinute);
+                                    if (endTime < startTime) {
+                                        endDate.setDate(endDate.getDate() + 1);
+                                        console.log('📅 [FOMO Bookmarklet] Heure de fin < heure de début, événement se termine le lendemain');
+                                    }
+                                }
+
+                                console.log('📅 [FOMO Bookmarklet] Dates créées - Début:', startDate, 'Fin:', endDate);
+
+                                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                                    data.start = startDate.toISOString();
+                                    data.end = endDate.toISOString();
+                                    console.log('✅ [FOMO Bookmarklet] Date début extraite:', data.start);
+                                    console.log('✅ [FOMO Bookmarklet] Date fin extraite:', data.end);
+                                } else {
+                                    console.warn('⚠️ [FOMO Bookmarklet] Dates invalides après parsing');
+                                }
+                                parsed = true;
+                            } else {
+                                console.warn('⚠️ [FOMO Bookmarklet] Mois non reconnus:', startMonthAbbr, endMonthAbbr);
+                            }
+                        }
+                    }
+
                     // Pattern 2: "Samedi 15 novembre 2025 de 22:00 à 04:30" ou "Jeudi 18 décembre 2025 à 17:00" (ignorer le jour de la semaine, utiliser la date complète)
                     if (!parsed) {
                         // Format avec plage: "de 22:00 à 04:30"
-                        let fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+(\w+)\s+(\d{4})\s+de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
+                        // Utiliser [^\s]+ au lieu de \w+ pour capturer les mois avec accents (décembre, février, etc.)
+                        let fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+([^\s]+)\s+(\d{4})\s+de\s+(\d{1,2}):(\d{2})\s+à\s+(\d{1,2}):(\d{2})/i);
                         if (fullDateMatch) {
                             const [, day, monthName, year, startHour, startMinute, endHour, endMinute] = fullDateMatch;
                             const monthMap = {
                                 'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
-                                'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11,
+                                'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11,
                                 'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
                                 'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11
                             };
@@ -778,7 +1370,8 @@
                             }
                         } else {
                             // Format simple: "à 17:00" (sans heure de fin)
-                            fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+(\w+)\s+(\d{4})\s+à\s+(\d{1,2}):(\d{2})/i);
+                            // Utiliser [^\s]+ au lieu de \w+ pour capturer les mois avec accents
+                            fullDateMatch = dateText.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2})\s+([^\s]+)\s+(\d{4})\s+à\s+(\d{1,2}):(\d{2})/i);
                             if (fullDateMatch) {
                                 const [, day, monthName, year, hour, minute] = fullDateMatch;
                                 const monthMap = {
@@ -926,210 +1519,100 @@
             // Recherche du NOM DU LIEU (venue name) - basée sur l'icône SVG de localisation (fallback si structure conteneur n'a pas fonctionné)
             const venueSearchContainer = searchContainer || mainContent;
 
-            // Stratégie 0: Via aria-label "Informations de localisation pour cet évènement" (prioritaire)
+            // Note: La stratégie aria-label est maintenant en priorité n°1 (début du fichier)
+            // Si elle n'a pas fonctionné, on continue avec les fallbacks ci-dessous
             if (!data.venue_name || !data.address) {
-                console.log('📍 [FOMO Bookmarklet] Stratégie 0: Recherche via aria-label de localisation...');
+                console.log('📍 [FOMO Bookmarklet] Stratégie fallback: Recherche via liens et SVG...');
 
-                // Chercher le div avec l'aria-label spécifique
-                const locationDiv = venueSearchContainer.querySelector('div[aria-label*="Informations de localisation"], div[aria-label*="localisation"]');
+                // Fallback: chercher les liens avec les classes spécifiques (ancienne méthode)
+                const venueLinks = venueSearchContainer.querySelectorAll('a[role="link"]');
+                console.log('📍 [FOMO Bookmarklet] Nombre de liens trouvés (fallback):', venueLinks.length);
 
-                if (locationDiv) {
-                    console.log('✅ [FOMO Bookmarklet] Div de localisation trouvé via aria-label');
-
-                    // Chercher le lien à l'intérieur de ce div
-                    const venueLink = locationDiv.querySelector('a[role="link"]');
-
-                    if (venueLink) {
-                        console.log('✅ [FOMO Bookmarklet] Lien trouvé dans le div de localisation');
-
-                        // Chercher les spans à l'intérieur du lien
-                        // Structure: premier span avec le nom, deuxième span avec l'adresse
-                        const spans = venueLink.querySelectorAll('span[dir="auto"]');
-                        const texts = [];
-
-                        for (const span of spans) {
-                            const text = span.textContent.trim();
-                            // Filtrer les textes trop courts ou trop longs, et éviter les doublons
-                            if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
-                                texts.push(text);
-                            }
-                        }
-
-                        // Chercher aussi dans les divs qui contiennent les spans (structure imbriquée)
-                        const divs = venueLink.querySelectorAll('div.xu06os2.x1ok221b');
-                        if (divs.length >= 2) {
-                            // Premier div = nom, deuxième div = adresse
-                            const nameDiv = divs[0];
-                            const addressDiv = divs[1];
-
-                            const nameText = nameDiv.textContent.trim();
-                            const addressText = addressDiv.textContent.trim();
-
-                            if (nameText && nameText.length > 2 && nameText.length < 200 &&
-                                addressText && addressText.length > 5 && addressText.length < 200) {
-
-                                // Vérifier que ce n'est pas le titre de l'événement
-                                const isTitle = data.title && (
-                                    nameText.toLowerCase() === data.title.toLowerCase() ||
-                                    nameText.toLowerCase().includes(data.title.toLowerCase()) ||
-                                    data.title.toLowerCase().includes(nameText.toLowerCase())
-                                );
-
-                                if (!isTitle) {
-                                    // Vérifier que l'adresse ressemble à une adresse
-                                    const looksLikeAddress = addressText.includes(',') ||
-                                        /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
-
-                                    if (looksLikeAddress) {
-                                        if (!data.venue_name) {
-                                            data.venue_name = nameText;
-                                            console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (divs):', nameText);
-                                        }
-                                        if (!data.address) {
-                                            data.address = addressText;
-                                            console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (divs):', addressText);
-                                        }
-                                        // Données trouvées, on peut arrêter la recherche
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback: utiliser les spans si les divs n'ont pas fonctionné
-                        if ((!data.venue_name || !data.address) && texts.length >= 2) {
-                            const potentialName = texts[0];
-                            const potentialAddress = texts[1];
-
-                            // Vérifier que ce n'est pas le titre de l'événement
-                            const isTitle = data.title && (
-                                potentialName.toLowerCase() === data.title.toLowerCase() ||
-                                potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
-                                data.title.toLowerCase().includes(potentialName.toLowerCase())
-                            );
-
-                            if (!isTitle) {
-                                // Vérifier que l'adresse ressemble à une adresse
-                                const looksLikeAddress = potentialAddress.includes(',') ||
-                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
-
-                                if (looksLikeAddress) {
-                                    if (!data.venue_name) {
-                                        data.venue_name = potentialName;
-                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (spans):', potentialName);
-                                    }
-                                    if (!data.address) {
-                                        data.address = potentialAddress;
-                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (spans):', potentialAddress);
-                                    }
-                                }
-                            }
-                        } else if (texts.length === 1 && !data.address) {
-                            // Si un seul texte, vérifier si c'est une adresse
-                            const text = texts[0];
-                            const looksLikeAddress = text.includes(',') ||
-                                /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(text);
-
-                            if (looksLikeAddress) {
-                                data.address = text;
-                                console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (texte unique):', text);
-                            }
-                        }
-                    } else {
-                        console.log('⚠️ [FOMO Bookmarklet] Lien non trouvé dans le div de localisation');
+                for (const link of venueLinks) {
+                    // Vérifier si le lien contient les classes spécifiques (au moins quelques-unes)
+                    const linkClasses = link.className;
+                    if (!linkClasses.includes('x1i10hfl') || !linkClasses.includes('x1qjc9v5')) {
+                        continue;
                     }
-                } else {
-                    console.log('⚠️ [FOMO Bookmarklet] Div de localisation non trouvé via aria-label, fallback sur recherche de liens...');
 
-                    // Fallback: chercher les liens avec les classes spécifiques (ancienne méthode)
-                    const venueLinks = venueSearchContainer.querySelectorAll('a[role="link"]');
-                    console.log('📍 [FOMO Bookmarklet] Nombre de liens trouvés (fallback):', venueLinks.length);
+                    // Chercher les spans à l'intérieur du lien
+                    const spans = link.querySelectorAll('span[dir="auto"]');
+                    const texts = [];
 
-                    for (const link of venueLinks) {
-                        // Vérifier si le lien contient les classes spécifiques (au moins quelques-unes)
-                        const linkClasses = link.className;
-                        if (!linkClasses.includes('x1i10hfl') || !linkClasses.includes('x1qjc9v5')) {
-                            continue;
+                    for (const span of spans) {
+                        const text = span.textContent.trim();
+                        if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
+                            texts.push(text);
                         }
+                    }
 
-                        // Chercher les spans à l'intérieur du lien
-                        const spans = link.querySelectorAll('span[dir="auto"]');
-                        const texts = [];
+                    // Chercher aussi dans les divs qui contiennent les spans (structure imbriquée)
+                    const divs = link.querySelectorAll('div.xu06os2.x1ok221b');
+                    if (divs.length >= 2) {
+                        // Premier div = nom, deuxième div = adresse
+                        const nameDiv = divs[0];
+                        const addressDiv = divs[1];
 
-                        for (const span of spans) {
-                            const text = span.textContent.trim();
-                            if (text && text.length > 2 && text.length < 200 && !texts.includes(text)) {
-                                texts.push(text);
-                            }
-                        }
+                        const nameText = nameDiv.textContent.trim();
+                        const addressText = addressDiv.textContent.trim();
 
-                        // Chercher aussi dans les divs qui contiennent les spans (structure imbriquée)
-                        const divs = link.querySelectorAll('div.xu06os2.x1ok221b');
-                        if (divs.length >= 2) {
-                            // Premier div = nom, deuxième div = adresse
-                            const nameDiv = divs[0];
-                            const addressDiv = divs[1];
-
-                            const nameText = nameDiv.textContent.trim();
-                            const addressText = addressDiv.textContent.trim();
-
-                            if (nameText && nameText.length > 2 && nameText.length < 200 &&
-                                addressText && addressText.length > 5 && addressText.length < 200) {
-
-                                // Vérifier que ce n'est pas le titre de l'événement
-                                const isTitle = data.title && (
-                                    nameText.toLowerCase() === data.title.toLowerCase() ||
-                                    nameText.toLowerCase().includes(data.title.toLowerCase()) ||
-                                    data.title.toLowerCase().includes(nameText.toLowerCase())
-                                );
-
-                                if (!isTitle) {
-                                    // Vérifier que l'adresse ressemble à une adresse
-                                    const looksLikeAddress = addressText.includes(',') ||
-                                        /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
-
-                                    if (looksLikeAddress) {
-                                        if (!data.venue_name) {
-                                            data.venue_name = nameText;
-                                            console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback divs):', nameText);
-                                        }
-                                        if (!data.address) {
-                                            data.address = addressText;
-                                            console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback divs):', addressText);
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback: utiliser les spans si les divs n'ont pas fonctionné
-                        if ((!data.venue_name || !data.address) && texts.length >= 2) {
-                            const potentialName = texts[0];
-                            const potentialAddress = texts[1];
+                        if (nameText && nameText.length > 2 && nameText.length < 200 &&
+                            addressText && addressText.length > 5 && addressText.length < 200) {
 
                             // Vérifier que ce n'est pas le titre de l'événement
                             const isTitle = data.title && (
-                                potentialName.toLowerCase() === data.title.toLowerCase() ||
-                                potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
-                                data.title.toLowerCase().includes(potentialName.toLowerCase())
+                                nameText.toLowerCase() === data.title.toLowerCase() ||
+                                nameText.toLowerCase().includes(data.title.toLowerCase()) ||
+                                data.title.toLowerCase().includes(nameText.toLowerCase())
                             );
 
                             if (!isTitle) {
                                 // Vérifier que l'adresse ressemble à une adresse
-                                const looksLikeAddress = potentialAddress.includes(',') ||
-                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
+                                const looksLikeAddress = addressText.includes(',') ||
+                                    /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(addressText);
 
                                 if (looksLikeAddress) {
                                     if (!data.venue_name) {
-                                        data.venue_name = potentialName;
-                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback spans):', potentialName);
+                                        data.venue_name = nameText;
+                                        console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback divs):', nameText);
                                     }
                                     if (!data.address) {
-                                        data.address = potentialAddress;
-                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback spans):', potentialAddress);
+                                        data.address = addressText;
+                                        console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback divs):', addressText);
                                     }
                                     break;
                                 }
+                            }
+                        }
+                    }
+
+                    // Fallback: utiliser les spans si les divs n'ont pas fonctionné
+                    if ((!data.venue_name || !data.address) && texts.length >= 2) {
+                        const potentialName = texts[0];
+                        const potentialAddress = texts[1];
+
+                        // Vérifier que ce n'est pas le titre de l'événement
+                        const isTitle = data.title && (
+                            potentialName.toLowerCase() === data.title.toLowerCase() ||
+                            potentialName.toLowerCase().includes(data.title.toLowerCase()) ||
+                            data.title.toLowerCase().includes(potentialName.toLowerCase())
+                        );
+
+                        if (!isTitle) {
+                            // Vérifier que l'adresse ressemble à une adresse
+                            const looksLikeAddress = potentialAddress.includes(',') ||
+                                /(rue|avenue|boulevard|place|chemin|route|allée|impasse|street|road|way|drive|france|belgium|belgique)/i.test(potentialAddress);
+
+                            if (looksLikeAddress) {
+                                if (!data.venue_name) {
+                                    data.venue_name = potentialName;
+                                    console.log('✅ [FOMO Bookmarklet] Nom du lieu trouvé via lien (fallback spans):', potentialName);
+                                }
+                                if (!data.address) {
+                                    data.address = potentialAddress;
+                                    console.log('✅ [FOMO Bookmarklet] Adresse trouvée via lien (fallback spans):', potentialAddress);
+                                }
+                                break;
                             }
                         }
                     }

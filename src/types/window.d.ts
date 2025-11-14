@@ -10,15 +10,19 @@ declare global {
     interface Window {
         // Map functions (MapRenderer.tsx)
         addTemporaryEventToMap?: (event: Event, isPublicMode: boolean) => void
-        zoomOutMap?: () => void
+        zoomOutOnPin?: (zoomLevels?: number, duration?: number) => void
         centerMapOnEvent?: (event: Event, duration?: number) => void
         getMap?: () => unknown // Type Map de maplibre-gl, évite l'import dans .d.ts
+        setStylingPin?: (eventId: string, response: string | null) => void
         startPublicModeSequence?: (targetZoom: number, duration: number) => void
         fadeOutFakePins?: () => void
 
         // Profile/LastActivities (LastActivities.tsx, App.tsx)
         setSelectedEventFromProfile?: (event: Event) => void
         navigateToMapPage?: () => void
+
+        // EventCard fermeture (DiscoverPage.tsx, EventCard.tsx)
+        closeEventCard?: () => void
 
         // Visitor onboarding (visitorOnboarding.tsx, DiscoverPage.tsx)
         __updateVisitorSelectedEventRef?: (event: Event | null) => void

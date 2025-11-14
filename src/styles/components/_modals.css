@@ -173,6 +173,10 @@
     border-color: white;
 }
 
+/* CTA "Continuer en mode visiteur" utilise les mêmes styles que le modal */
+/* Le container .modal_container dans .welcome-screen-overlay est déjà positionné relativement */
+/* Le modal lui-même a déjà l'animation modalSlideUp */
+
 /* Bouton retour avec fond transparent dans les modals de formulaire */
 .modal-content .back-button {
     background: transparent;

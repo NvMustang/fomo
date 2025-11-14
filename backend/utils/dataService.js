@@ -360,8 +360,8 @@ class DataServiceV2 {
             name: row[2] || '',
             email: row[3] || '',
             city: row[4] || '',
-            lat: parseFloat(row[5]) || null, // NOUVEAU: latitude
-            lng: parseFloat(row[6]) || null, // NOUVEAU: longitude
+            lat: parseFloat((row[5] || '').replace(',', '.')) || null, // Latitude (même logique que events)
+            lng: parseFloat((row[6] || '').replace(',', '.')) || null, // Longitude (même logique que events)
             friendsCount: parseInt(row[7]) || 0,
             showAttendanceToFriends: toBool(row[8]),
             isVisitor: toBool(row[9]), // Colonne J: isVisitor (true pour visiteurs, false pour users authentifiés)

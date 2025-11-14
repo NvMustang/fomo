@@ -8,10 +8,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button, ToggleLabelsWithExpendableList } from '@/components'
 import { useAuth } from '@/contexts/AuthContext'
-import { useFomoDataContext } from '@/contexts/FomoDataProvider'
-import { useFilters } from '@/contexts/FiltersContext'
+import { useDataContext } from '@/contexts/DataContext'
+import { useFilters } from '@/hooks'
 import type { Event } from '@/types/fomoTypes'
 import { useToast } from '@/hooks'
+import { getLatestResponsesByUser, groupUsersByResponses } from '@/utils/filterTools'
 import { format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
@@ -24,8 +25,8 @@ interface ShareContentProps {
 export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) => {
     const { showToast } = useToast()
     const { user } = useAuth()
-    const { responses, addEventResponse, users, getLatestResponsesByUser } = useFomoDataContext()
-    const { getFriends, getGuestsGroupedByResponse } = useFilters()
+    const { responses, addEventResponse, users } = useDataContext()
+    const { getFriends } = useFilters()
     const [eventUrl, setEventUrl] = useState('')
     const [shareMessage, setShareMessage] = useState('')
     const [activeTab, setActiveTab] = useState<'invite' | 'share'>('invite')
@@ -46,12 +47,12 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
     // Obtenir les amis actifs
     const friends = useMemo(() => {
         if (!user?.id) return []
-        return getFriends(user.id)
-    }, [user?.id, getFriends])
+        return getFriends()
+    }, [getFriends])
 
-    // Obtenir les guests groupés par réponse
+    // Obtenir les guests groupés par réponse (utilisant les dernières réponses uniquement, excluant l'utilisateur actif)
     const guestsGrouped = useMemo(() => {
-        if (!event?.id) {
+        if (!event?.id || !responses || !user?.id) {
             return {
                 invited: [] as typeof responses,
                 going: [] as typeof responses,
@@ -65,8 +66,25 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
                 null: [] as typeof responses
             }
         }
-        return getGuestsGroupedByResponse(event.id)
-    }, [event?.id, getGuestsGroupedByResponse])
+        // Obtenir les dernières réponses par utilisateur pour cet événement
+        const latestResponsesMap = getLatestResponsesByUser(responses, event.id)
+        // Convertir en tableau et exclure l'utilisateur actif
+        let latestResponses = Array.from(latestResponsesMap.values()).filter(r => r.userId !== user.id)
+        
+        // Pour les invitations, ne garder que celles où l'utilisateur actuel est l'inviteur
+        // (invitedByUserId === user.id)
+        const invitedResponses = latestResponses.filter(r => 
+            r.finalResponse === 'invited' && r.invitedByUserId === user.id
+        )
+        // Pour les autres réponses, garder toutes les dernières réponses
+        const otherResponses = latestResponses.filter(r => r.finalResponse !== 'invited')
+        
+        // Recombiner : invitations filtrées + autres réponses
+        latestResponses = [...invitedResponses, ...otherResponses]
+        
+        // Grouper par réponse
+        return groupUsersByResponses(latestResponses)
+    }, [event?.id, responses, user?.id])
 
     // Convertir les UserResponse en User
     const guestsUsers = useMemo(() => {
@@ -94,7 +112,7 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
         if (!event || !user?.id || !responses) return
 
         // NOUVEAU SYSTÈME : Utiliser les helpers pour obtenir les dernières réponses
-        const latestResponsesMap = getLatestResponsesByUser(event.id)
+        const latestResponsesMap = getLatestResponsesByUser(responses, event.id)
         const existingInvitations = Array.from(latestResponsesMap.values()).filter(r =>
             r.finalResponse === 'invited' &&
             r.invitedByUserId === user.id
@@ -102,7 +120,7 @@ export const ShareContent: React.FC<ShareContentProps> = ({ event, onClose }) =>
 
         const invitedIds = new Set(existingInvitations.map(r => r.userId))
         setInvitedFriendIds(invitedIds)
-    }, [event, user?.id, responses, getLatestResponsesByUser])
+    }, [event, user?.id, responses])
 
     // Trouver les amis non participants
     const notParticipatingFriends = useMemo(() => {

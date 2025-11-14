@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-type Page = 'map' | 'dashboard' | 'onboarding' | 'list' | 'chat' | 'profil' | 'bookmarklet' | 'bookmarklet-receiver'
+type Page = 'map' | 'dashboard' | 'onboarding' | 'list' | 'chat' | 'profil'
 
 /**
  * Détecter la page initiale depuis l'URL
@@ -18,12 +18,6 @@ function getInitialPage(): Page {
     }
     if (path === '/onboarding') {
         return 'onboarding'
-    }
-    if (path === '/bookmarklet') {
-        return 'bookmarklet'
-    }
-    if (path === '/bookmarklet-receiver') {
-        return 'bookmarklet-receiver'
     }
     return 'map'
 }
@@ -42,10 +36,6 @@ export function useNavigation() {
                 setCurrentPage('dashboard')
             } else if (path === '/onboarding') {
                 setCurrentPage('onboarding')
-            } else if (path === '/bookmarklet') {
-                setCurrentPage('bookmarklet')
-            } else if (path === '/bookmarklet-receiver') {
-                setCurrentPage('bookmarklet-receiver')
             } else if (path === '/') {
                 setCurrentPage('map')
             }
@@ -65,10 +55,6 @@ export function useNavigation() {
             window.history.pushState({}, '', '/analytics')
         } else if (page === 'onboarding') {
             window.history.pushState({}, '', '/onboarding')
-        } else if (page === 'bookmarklet') {
-            window.history.pushState({}, '', '/bookmarklet')
-        } else if (page === 'bookmarklet-receiver') {
-            window.history.pushState({}, '', '/bookmarklet-receiver')
         } else if (page === 'map') {
             window.history.pushState({}, '', '/')
         }

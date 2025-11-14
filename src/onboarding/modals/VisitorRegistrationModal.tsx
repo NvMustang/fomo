@@ -23,24 +23,20 @@ interface VisitorRegistrationModalProps {
 const VARIANT_CONFIG = {
     participe: {
         emoji: '🎉',
-        title: 'Heureux que vous soyez présent !',
-        message: (organizerName: string) => `Laissez vos coordonnées à ${organizerName} afin qu'il/elle prépare votre venue.`
+        title: 'Heureux que tu sois présent !'
     },
     maybe: {
         emoji: '🤔',
-        title: 'Pas sûr ? On garde une place pour toi 😉',
-        message: (organizerName: string) => `Laissez vos coordonnées à ${organizerName} afin de l'informer de votre incertitude.`
+        title: 'Pas sûr ? On garde une place pour toi 😉'
     },
     not_there: {
         emoji: '😔',
-        title: 'Oh, triste que tu ne sois pas là...',
-        message: (organizerName: string) => `Informez ${organizerName} que vous ne pourrez pas être présent cette fois.`
+        title: 'Oh, triste que tu ne sois pas là...'
     }
 }
 
 export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> = ({
     isOpen,
-    onClose,
     onConfirm,
     organizerName = 'L\'organisateur',
     responseType = 'participe'
@@ -48,6 +44,7 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [emailError, setEmailError] = useState('')
+    const [showEmailField, setShowEmailField] = useState(false)
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -61,11 +58,13 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
             }
             setEmailError('')
             // L'animation des étoiles est jouée AVANT l'ouverture du modal (sur les boutons de réponse)
-            // Ici on confirme simplement
+            // Ici on confirme simplement - le modal se fermera automatiquement via le changement de step
             onConfirm(name.trim(), emailTrimmed || undefined)
+            // Nettoyer le form (le modal sera démonté par le changement de step)
             setName('')
             setEmail('')
-            onClose()
+            setShowEmailField(false)
+            // Pas besoin d'appeler onClose() - le changement de step fermera le modal
         }
     }
 
@@ -78,7 +77,11 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
     const config = VARIANT_CONFIG[responseType] || VARIANT_CONFIG.participe
 
     const modalContent = (
-        <div className="modal_overlay" onClick={onClose}>
+        <div className="modal_overlay" onClick={(e) => {
+            // Désactiver le clic sur l'overlay : le visitor doit entrer un nom
+            // C'est normal qu'un invité s'identifie auprès de son hôte
+            e.stopPropagation()
+        }}>
             <div className="modal_container">
                 <div
                     className="modal visitor-modal-dynamic"
@@ -108,7 +111,7 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
                                 margin: 0,
                                 lineHeight: 1.6
                             }}>
-                                {config.message(organizerName)}
+                                Mais attend... Qui es-tu en fait ? 🤷‍♂️ <br /> <strong>{organizerName}</strong> aimerait connaître ton nom pour organiser au mieux ta venue.
                             </p>
                         </div>
 
@@ -131,39 +134,75 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
                                 aria-label="Votre nom"
                                 required
                             />
-                            <p className="form-help">
-                                Mais en fait, qui êtes-vous ? 🤷‍♂️ <br /> Entrez un nom suffisamment explicite pour que <strong>{organizerName}</strong> vous reconnaisse sans mal !
-                            </p>
+
                         </div>
 
-                        <div className="form-section">
-                            <label htmlFor="visit-email" className="form-label">
-                                E-mail
-                                <span className="form-label-hint">Non-obligatoire</span>
-                            </label>
-                            <input
-                                id="visit-email"
-                                type="email"
-                                className="form-input"
-                                placeholder="votre@email.com"
-                                value={email}
-                                onChange={(e) => {
-                                    setEmail(e.target.value)
-                                    if (emailError) setEmailError('')
-                                }}
-                                onFocus={() => onboardingTracker.trackStep('visitor_form_email_focus')}
-                                onBlur={() => onboardingTracker.trackStep('visitor_form_email_blur')}
-                                aria-label="Votre adresse e-mail"
-                            />
-                            {emailError && (
-                                <div className="error-message">
-                                    {emailError}
-                                </div>
-                            )}
-                            <p className="form-help">
-                                Afin que FOMO puisse vous prévenir des derniers détails transmis par votre hôte !
-                            </p>
-                        </div>
+                        {!showEmailField ? (
+                            <div className="form-section">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowEmailField(true)
+                                        onboardingTracker.trackStep('visitor_form_email_focus')
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        width: '100%',
+                                        font: 'inherit'
+                                    }}
+                                    aria-label="Afficher le champ email"
+                                >
+                                    <p className="form-help" style={{ margin: 0, flex: 1 }}>
+                                        Tu veux être informé des derniers changements ?
+                                    </p>
+                                    <span style={{
+                                        fontSize: 'var(--text-sm)',
+                                        color: 'var(--text-secondary)',
+                                        marginLeft: 'var(--sm)',
+                                        flexShrink: 0
+                                    }}>
+                                        ▶
+                                    </span>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="form-section">
+                                <label htmlFor="visit-email" className="form-label">
+                                    E-mail
+                                    <span className="form-label-hint">Facultatif</span>
+                                </label>
+                                <input
+                                    id="visit-email"
+                                    type="email"
+                                    className="form-input"
+                                    placeholder="votre@email.com"
+                                    value={email}
+                                    onChange={(e) => {
+                                        setEmail(e.target.value)
+                                        if (emailError) setEmailError('')
+                                    }}
+                                    onFocus={() => onboardingTracker.trackStep('visitor_form_email_focus')}
+                                    onBlur={() => onboardingTracker.trackStep('visitor_form_email_blur')}
+                                    aria-label="Votre adresse e-mail"
+                                    autoFocus
+                                />
+                                {emailError && (
+                                    <div className="error-message">
+                                        {emailError}
+                                    </div>
+                                )}
+                                <p className="form-help">
+                                    Afin que FOMO puisse vous prévenir des derniers détails transmis par votre hôte !
+                                </p>
+                            </div>
+                        )}
 
                         <div className="form-section">
                             <div className="form-actions" style={{
@@ -180,13 +219,9 @@ export const VisitorRegistrationModal: React.FC<VisitorRegistrationModalProps> =
                                 >
                                     C'est parti ! ✈️
                                 </Button>
-                                <Button
-                                    variant="ghost"
-                                    onClick={onClose}
-                                    style={{ width: '100%' }}
-                                >
-                                    Annuler
-                                </Button>
+                                {/* Pas de bouton "Annuler" : le visitor doit entrer un nom
+                                    C'est normal qu'un invité s'identifie auprès de son hôte
+                                    Le visitor peut entrer n'importe quel nom s'il préfère rester anonyme */}
                             </div>
                         </div>
                     </div>

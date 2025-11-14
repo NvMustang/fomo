@@ -64,7 +64,7 @@ class GeocodingService {
      */
     static async searchAddresses(query, options = {}) {
         // types peut être omis pour obtenir tous les types de résultats
-        const { countryCode, limit = 8, types } = options
+        const { countryCode, limit = 8, types, bbox } = options
 
         try {
             console.log(`🔍 Recherche d'adresses Mapbox: ${query}${countryCode ? ` (pays: ${countryCode})` : ' (mondiale)'}`)
@@ -84,12 +84,17 @@ class GeocodingService {
             const countryFilter = countryCode ? `&country=${countryCode}` : ''
             // types est optionnel - si fourni, l'ajouter
             const typesParam = types ? `&types=${encodeURIComponent(types)}` : ''
+            // bbox est optionnel - format: [west, south, east, north] pour limiter la recherche à une zone
+            const bboxParam = bbox && Array.isArray(bbox) && bbox.length === 4 
+                ? `&bbox=${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}` 
+                : ''
 
             // Paramètres Mapbox:
             // - autocomplete=true : active l'autocomplétion (par défaut activé)
             // - language=fr : préfère les résultats en français
             // - limit : nombre de résultats
-            const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxKey}&limit=${limit}&language=fr&autocomplete=true${typesParam}${countryFilter}`
+            // - bbox : limite la recherche à une zone géographique [west, south, east, north]
+            const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxKey}&limit=${limit}&language=fr&autocomplete=true${typesParam}${countryFilter}${bboxParam}`
 
             // Logger l'URL (sans le token) pour debug
             const urlForLog = mapboxUrl.replace(/access_token=[^&]+/, 'access_token=***')

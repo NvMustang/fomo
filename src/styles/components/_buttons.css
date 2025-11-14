@@ -48,7 +48,7 @@
 /* Response buttons */
 .response-button {
     flex: auto;
-    padding: var(--sm)
+    padding: var(--xs);
 }
 
 /* Circular buttons */

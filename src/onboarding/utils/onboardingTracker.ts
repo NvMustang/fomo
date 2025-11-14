@@ -56,6 +56,7 @@ export type OnboardingStep =
     | 'user_form_city_error'
     | 'user_account_created'
     | 'welcome_screen_shown'
+    | 'view_my_events_clicked'
     | 'abandoned'
     | 'completed'
 
@@ -160,7 +161,7 @@ class OnboardingTracker {
         if (explicitDeploymentId) {
             return explicitDeploymentId.trim()
         }
-        
+
         // 2. Commit SHA depuis Vercel (automatique à chaque push)
         // Vercel injecte VERCEL_GIT_COMMIT_SHA au build time
         // On doit l'exposer via VITE_ pour que Vite le rende disponible
@@ -170,7 +171,7 @@ class OnboardingTracker {
             // Utiliser les 7 premiers caractères du SHA (format court Git)
             return commitSha.trim().substring(0, 7)
         }
-        
+
         // 3. Fallback : date du jour (pour dev local uniquement)
         // En production Vercel, on devrait toujours avoir le commit SHA
         const today = new Date()

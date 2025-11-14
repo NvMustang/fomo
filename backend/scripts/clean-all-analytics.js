@@ -1,8 +1,8 @@
 /**
  * Script CLEAN ALL - Réinitialisation complète des analytics
  * 
- * Nettoie TOUT :
- * - Vide toutes les données analytics des deux bases (test + production)
+ * Nettoie la base PRODUCTION uniquement (source de vérité unique) :
+ * - Vide toutes les données analytics de la base PRODUCTION
  * - Ajoute une référence initiale MapTiler avec la valeur actuelle
  * - Fournit un code JavaScript pour vider les caches localStorage
  * 
@@ -10,6 +10,7 @@
  * Exemple: node backend/scripts/clean-all-analytics.js 207581
  * 
  * ⚠️  ATTENTION : Cette opération est irréversible !
+ * 📊 Stratégie : Source de vérité unique = PROD uniquement
  */
 
 const path = require('path')
@@ -55,7 +56,6 @@ async function cleanAllAnalytics(currentValue) {
         process.exit(1)
     }
 
-    const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
     const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
 
     if (!productionSpreadsheetId) {
@@ -83,8 +83,8 @@ async function cleanAllAnalytics(currentValue) {
         'Script clean-all'                     // user_name (colonne 12)
     ]
 
-    // 1. Réinitialiser la base de PRODUCTION
-    console.log('📊 Étape 1/3 : Nettoyage de la base PRODUCTION...')
+    // Réinitialiser la base de PRODUCTION uniquement (source de vérité unique)
+    console.log('📊 Étape 1/2 : Nettoyage de la base PRODUCTION (source de vérité unique)...')
     try {
         // Vider la feuille Analytics (garder l'en-tête)
         await sheets.spreadsheets.values.clear({
@@ -108,38 +108,8 @@ async function cleanAllAnalytics(currentValue) {
         throw error
     }
 
-    // 2. Réinitialiser la base de TEST (si disponible)
-    if (testSpreadsheetId) {
-        console.log('📊 Étape 2/3 : Nettoyage de la base TEST...')
-        try {
-            // Vider la feuille Analytics (garder l'en-tête)
-            await sheets.spreadsheets.values.clear({
-                spreadsheetId: testSpreadsheetId,
-                range: 'Analytics!A2:M'
-            })
-            console.log('   ✅ Feuille Analytics vidée')
-
-            // Ajouter la référence initiale
-            await sheets.spreadsheets.values.append({
-                spreadsheetId: testSpreadsheetId,
-                range: 'Analytics!A2:M',
-                valueInputOption: 'RAW',
-                resource: {
-                    values: [initialRefRow]
-                }
-            })
-            console.log(`   ✅ Référence initiale ajoutée: ${currentValue.toLocaleString()}\n`)
-        } catch (error) {
-            console.error(`   ❌ Erreur réinitialisation TEST:`, error.message)
-            // Ne pas faire échouer le script si la base test n'est pas accessible
-            console.warn('   ⚠️  Continuons avec la production uniquement...\n')
-        }
-    } else {
-        console.log('📊 Étape 2/3 : Base TEST non configurée, ignorée\n')
-    }
-
-    // 3. Instructions pour vider les caches localStorage
-    console.log('📊 Étape 3/3 : Instructions pour vider les caches localStorage...\n')
+    // Instructions pour vider les caches localStorage
+    console.log('📊 Étape 2/2 : Instructions pour vider les caches localStorage...\n')
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('📋 COPIEZ ET COLLEZ CE CODE DANS LA CONSOLE DU NAVIGATEUR (F12) :\n')
     console.log('```javascript')
@@ -163,10 +133,7 @@ async function cleanAllAnalytics(currentValue) {
     // Résumé final
     console.log('✅ CLEAN ALL terminé avec succès!\n')
     console.log('📊 Résumé:')
-    console.log(`   ✅ Base PRODUCTION: réinitialisée avec référence ${currentValue.toLocaleString()}`)
-    if (testSpreadsheetId) {
-        console.log(`   ✅ Base TEST: réinitialisée avec référence ${currentValue.toLocaleString()}`)
-    }
+    console.log(`   ✅ Base PRODUCTION (source de vérité unique): réinitialisée avec référence ${currentValue.toLocaleString()}`)
     console.log(`   ⏳ Caches localStorage: à vider manuellement (voir instructions ci-dessus)\n`)
     console.log('📝 Prochaines étapes:')
     console.log(`   1. Copiez le code JavaScript ci-dessus`)
