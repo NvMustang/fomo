@@ -98,7 +98,7 @@ const MapRendererComponent: React.FC<MapViewProps> = (
     if (mapRef.current?.getMap && event.venue) {
       const map = mapRef.current.getMap()
       const targetZoom = 15 // Marge de 2 niveaux par rapport au maxZoom du clustering (13) pour stabilité
-      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 500]
+      const targetCenter: [number, number] = [event.venue.lng, event.venue.lat - targetZoom / 5000]
 
       map.flyTo({
         center: targetCenter,
