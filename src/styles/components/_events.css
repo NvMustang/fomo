@@ -22,7 +22,8 @@
 
 
 .event-card {
-    width: 360px;
+    width: 90vw;
+    max-width: 360px;
     /* Glassmorphism effect inspiré de la navbar */
     background: rgba(255, 255, 255, 0.25);
     backdrop-filter: blur(var(--glass-blur-strong));

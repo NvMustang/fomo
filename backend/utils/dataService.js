@@ -8,7 +8,7 @@
  * - Colonnes système : modifiedAt, deletedAt
  */
 
-const { sheets, SPREADSHEET_ID } = require('./sheets-config')
+const { sheets, SPREADSHEET_ID, getAnalyticsSpreadsheetId } = require('./sheets-config')
 const analyticsTracker = require('./analyticsTracker')
 
 // Normalisation unique des booléens provenant de Google Sheets
@@ -48,6 +48,43 @@ class DataServiceV2 {
             console.error('❌ Erreur récupération données actives:', error)
             const errorMsg = error.message || String(error)
             analyticsTracker.trackRequest('googlesheets', `getAllActiveData:${range}`, false, {
+                error: errorMsg
+            })
+            return []
+        }
+    }
+
+    /**
+     * Récupérer toutes les données actives d'une table depuis la DB de PRODUCTION
+     * Utilisé spécifiquement pour les analytics qui doivent toujours être lus depuis PROD
+     * @param {string} range - Range Google Sheets (ex: 'Analytics!A2:M')
+     * @param {function} mapper - Fonction pour mapper une ligne vers un objet
+     * @returns {Array} Données mappées (uniquement les données actives)
+     */
+    static async getAllActiveDataFromProd(range, mapper) {
+        try {
+            const analyticsSpreadsheetId = getAnalyticsSpreadsheetId()
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: analyticsSpreadsheetId,
+                range: range
+            })
+
+            analyticsTracker.trackRequest('googlesheets', `getAllActiveDataFromProd:${range}`, true)
+
+            const rows = response.data.values || []
+            const activeData = []
+
+            for (const row of rows) {
+                // Pour l'instant, toutes les lignes sont considérées comme actives
+                // (les colonnes système ne sont pas encore implémentées)
+                activeData.push(mapper(row))
+            }
+
+            return activeData
+        } catch (error) {
+            console.error('❌ Erreur récupération données actives depuis PROD:', error)
+            const errorMsg = error.message || String(error)
+            analyticsTracker.trackRequest('googlesheets', `getAllActiveDataFromProd:${range}`, false, {
                 error: errorMsg
             })
             return []
@@ -192,6 +229,75 @@ class DataServiceV2 {
             return { action: 'updated', data: rowData }
         } catch (error) {
             console.error('❌ Erreur mise à jour ligne:', error)
+            throw error
+        }
+    }
+
+    /**
+     * Mettre à jour plusieurs lignes en batch
+     * @param {string} range - Range Google Sheets (ex: 'Events!A2:S')
+     * @param {Array<{keyValue: string, rowData: Array}>} updates - Array d'objets avec keyValue et rowData
+     * @param {number} keyColumn - Index de la colonne clé (0-based)
+     * @returns {Promise<{updated: number, errors: number}>}
+     */
+    static async batchUpdateRows(range, updates, keyColumn) {
+        try {
+            // Récupérer toutes les données pour trouver les indices de lignes
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: range
+            })
+
+            const rows = response.data.values || []
+            const sheetName = range.split('!')[0]
+            const startCol = range.split('!')[1].split(':')[0].replace(/\d+/g, '')
+            const endCol = range.split('!')[1].split(':')[1].replace(/\d+/g, '')
+
+            // Créer une map eventId -> rowIndex pour accès rapide
+            const keyToRowIndex = new Map()
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i] && rows[i][keyColumn]) {
+                    keyToRowIndex.set(rows[i][keyColumn], i)
+                }
+            }
+
+            // Préparer les requêtes batch
+            const batchRequests = []
+            let updatedCount = 0
+
+            for (const update of updates) {
+                const rowIndex = keyToRowIndex.get(update.keyValue)
+                if (rowIndex === undefined) {
+                    console.warn(`⚠️  Ligne non trouvée pour la clé: ${update.keyValue}`)
+                    continue
+                }
+
+                const actualRowIndex = rowIndex + 2 // +2 car on commence à la ligne 2
+                const specificRange = `${sheetName}!${startCol}${actualRowIndex}:${endCol}${actualRowIndex}`
+
+                batchRequests.push({
+                    range: specificRange,
+                    values: [update.rowData]
+                })
+                updatedCount++
+            }
+
+            if (batchRequests.length === 0) {
+                return { updated: 0, errors: 0 }
+            }
+
+            // Exécuter le batch update
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: SPREADSHEET_ID,
+                resource: {
+                    valueInputOption: 'RAW',
+                    data: batchRequests
+                }
+            })
+
+            return { updated: updatedCount, errors: updates.length - updatedCount }
+        } catch (error) {
+            console.error('❌ Erreur batch update:', error)
             throw error
         }
     }
@@ -351,7 +457,8 @@ class DataServiceV2 {
             isOnline: toBool(row[14]),
             modifiedAt: row[15] || new Date().toISOString(),
             deletedAt: row[16] || null,
-            source: row[17] || '' // R: Source (ex: 'facebook', 'manual', etc.)
+            source: row[17] || '', // R: Source (ex: 'facebook', 'manual', etc.)
+            deleteUrl: row[18] || null // S: ImgBB Delete URL
         }),
 
         user: (row) => ({

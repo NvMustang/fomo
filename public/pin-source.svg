@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="32"
+   height="32"
+   viewBox="0 0 32 32"
+   xml:space="preserve"
+   id="svg186"
+   sodipodi:docname="pin-source.svg"
+   inkscape:version="1.2 (dc2aeda, 2022-05-15)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs190" /><sodipodi:namedview
+   id="namedview188"
+   pagecolor="#ffffff"
+   bordercolor="#ffffff"
+   borderopacity="0"
+   inkscape:showpageshadow="false"
+   inkscape:pageopacity="0"
+   inkscape:pagecheckerboard="true"
+   inkscape:deskcolor="#d1d1d1"
+   showgrid="true"
+   inkscape:zoom="16.194497"
+   inkscape:cx="20.902162"
+   inkscape:cy="19.11143"
+   inkscape:window-width="1467"
+   inkscape:window-height="867"
+   inkscape:window-x="6188"
+   inkscape:window-y="414"
+   inkscape:window-maximized="0"
+   inkscape:current-layer="svg186"
+   showborder="false"
+   borderlayer="false"><inkscape:grid
+     type="xygrid"
+     id="grid698"
+     originx="3.2499999e-08"
+     originy="0" /></sodipodi:namedview>
+    <g
+   style="opacity:1;fill:#1a1a1a;fill-rule:nonzero;stroke:none;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none"
+   transform="matrix(1.288507,0,0,2.1472724,8.6627526,8.533037)"
+   id="g184"
+   inkscape:export-filename="pin-source.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96">
+        <path
+   d="m 5.6945,-3.9738959 c -4.71491097,0 -8.537133,2.6225312 -8.537133,5.8575604 0,1.4442302 0.765265,2.7641062 2.02815703,3.7854329 L 5.6945,10.928731 12.203234,5.6689318 C 13.466126,4.6477707 14.231391,3.3277291 14.231391,1.8834989 14.231633,-1.3513647 10.40941,-3.9738959 5.6945,-3.9738959 Z m 0,8.0648051 c -1.939106,0 -3.510904,-1.0784534 -3.510904,-2.4089269 0,-1.33047343 1.571798,-2.40892693 3.510904,-2.40892693 1.939105,0 3.510903,1.0784535 3.510903,2.40892693 0,1.3304735 -1.571798,2.4089269 -3.510903,2.4089269 z"
+   style="opacity:1;fill:#ffffff;fill-rule:nonzero;stroke:none;stroke-width:0.199902;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none"
+   stroke-linecap="round"
+   id="path182"
+   inkscape:export-filename="pin-source.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96" />
+    </g>
+</svg>

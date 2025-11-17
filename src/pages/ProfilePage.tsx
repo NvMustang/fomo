@@ -129,7 +129,7 @@ export const ProfilePageWeb: React.FC = () => {
           message: 'Ajoute des amis pour les inviter à tes événements!',
           type: 'info',
           position: 'top',
-          duration: 8000
+          duration: 4000
         })
       }, 4000) // Délai de 4s après le chargement
 

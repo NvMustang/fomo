@@ -68,17 +68,20 @@ FOMO_KEY=votre_mot_de_passe_secret
 ### 🧪 Détection automatique de l'environnement
 
 La configuration détecte automatiquement l'environnement :
-- **En local** (développement) : utilise toujours la DB de test si `GOOGLE_SPREADSHEET_ID_TEST` est défini
-- **Sur Vercel** (production) : utilise automatiquement `GOOGLE_SPREADSHEET_ID`
+- **En local** (développement) : utilise automatiquement la DB de test (`GOOGLE_SPREADSHEET_ID_TEST`)
+- **Sur Vercel** (production) : utilise automatiquement la DB de production (`GOOGLE_SPREADSHEET_ID`)
+
+**Note importante :** Les analytics sont toujours sauvegardés en PROD, même en développement local.
 
 **Configuration pour le développement local :**
 
 1. **Ajouter dans `backend/.env`** :
    ```env
    GOOGLE_SPREADSHEET_ID_TEST=1QQJGH17UWDGYHbIIEcqajBYlwv8lplp8m00J6e6EQ-Y
+   GOOGLE_SPREADSHEET_ID=14UFZYrfMgljwFQ_M2UQMXgjszzG4FEgeoT7hVv0VGsQ
    ```
 
-2. **Démarrer le serveur** (toujours en mode test en local) :
+2. **Démarrer le serveur** :
    ```bash
    npm run dev
    ```

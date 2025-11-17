@@ -331,6 +331,17 @@ export function FilterBar() {
     const activeFilterBadges = useMemo(() => {
         const badges: Array<{ id: string; label: string; onRemove: () => void }> = []
 
+        // Dates personnalisées
+        if (filters.customStartDate && filters.customEndDate) {
+            const start = filters.customStartDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+            const end = filters.customEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+            badges.push({
+                id: 'custom-dates',
+                label: `${start} - ${end}`,
+                onRemove: () => setFilters(prev => ({ ...prev, customStartDate: undefined, customEndDate: undefined }))
+            })
+        }
+
         // Réponses (multiples)
         const activeResponses = (filters.responses || []).filter(r => r !== 'all')
         activeResponses.forEach(resp => {
@@ -347,17 +358,6 @@ export function FilterBar() {
                 })
             }
         })
-
-        // Dates personnalisées
-        if (filters.customStartDate && filters.customEndDate) {
-            const start = filters.customStartDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-            const end = filters.customEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-            badges.push({
-                id: 'custom-dates',
-                label: `${start} - ${end}`,
-                onRemove: () => setFilters(prev => ({ ...prev, customStartDate: undefined, customEndDate: undefined }))
-            })
-        }
 
         // Tags (multiples)
         const activeTags = (filters.tags || []).filter(t => t !== 'all')
@@ -442,7 +442,27 @@ export function FilterBar() {
             </div>
 
             <div className="filterbar__expandable">
-                {/* Réponses - Priorité 1 (le plus utilisé) - Multi-sélection */}
+                {/* Dates personnalisées - Priorité 1 */}
+                <Select
+                    options={[]}
+                    value={customDateValue}
+                    onChange={() => {
+                        // Reset des dates via le clear button
+                        setFilters(prev => ({
+                            ...prev,
+                            customStartDate: undefined,
+                            customEndDate: undefined
+                        }))
+                    }}
+                    components={{ Menu: CustomDateMenu }}
+                    placeholder="Dates"
+                    isClearable={customDateValue !== null}
+                    menuPortalTarget={menuPortalTarget}
+                    menuPosition="fixed"
+                    styles={secondaryMenuPortalStylesSingle}
+                />
+
+                {/* Réponses - Priorité 2 (le plus utilisé) - Multi-sélection */}
                 <Select
                     isMulti
                     options={responseOptions}
@@ -481,26 +501,6 @@ export function FilterBar() {
                     menuPortalTarget={menuPortalTarget}
                     menuPosition="fixed"
                     styles={secondaryMenuPortalStylesMulti}
-                />
-
-                {/* Dates personnalisées - Priorité 2 */}
-                <Select
-                    options={[]}
-                    value={customDateValue}
-                    onChange={() => {
-                        // Reset des dates via le clear button
-                        setFilters(prev => ({
-                            ...prev,
-                            customStartDate: undefined,
-                            customEndDate: undefined
-                        }))
-                    }}
-                    components={{ Menu: CustomDateMenu }}
-                    placeholder="Dates"
-                    isClearable={customDateValue !== null}
-                    menuPortalTarget={menuPortalTarget}
-                    menuPosition="fixed"
-                    styles={secondaryMenuPortalStylesSingle}
                 />
 
                 {/* Tags - Priorité 3 */}

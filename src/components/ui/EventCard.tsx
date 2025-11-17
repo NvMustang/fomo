@@ -107,6 +107,7 @@ interface EventCardProps {
     onLabelClick?: () => void // Callback quand l'étiquette est cliquée (pour déclencher le toast impatience en visitor mode)
     isDetailsExpanded?: boolean // Si fourni, contrôle l'état d'expansion des détails (mode contrôlé)
     onToggleExpanded?: () => void // Callback pour gérer le toggle d'expansion (mode contrôlé)
+    showCloseButton?: boolean // Si true, affiche le bouton de fermeture (uniquement dans DiscoverPage)
 }
 
 export const EventCard = React.memo<EventCardProps>(({
@@ -119,6 +120,7 @@ export const EventCard = React.memo<EventCardProps>(({
     onLabelClick,
     isDetailsExpanded: isDetailsExpandedProp,
     onToggleExpanded,
+    showCloseButton = false,
 }: EventCardProps) => {
     // État interne pour l'expansion (uncontrolled)
     const [isDetailsExpandedInternal, setIsDetailsExpandedInternal] = useState(false)
@@ -291,6 +293,8 @@ export const EventCard = React.memo<EventCardProps>(({
             return
         }
 
+
+
         // Comparer initial (à l'ouverture) avec current (à la fermeture)
         // pour déterminer si on doit envoyer 'seen'
         const current = getLocalResponse()
@@ -301,38 +305,19 @@ export const EventCard = React.memo<EventCardProps>(({
 
         // LOGIQUE : Envoyer 'seen' uniquement si l'utilisateur n'a pas interagi (initial === current)
         // et que l'état est null (pas d'entrée dans l'historique), 'invited', ou 'linked' (pas d'interaction confirmée)
+        // 
+        // Cas unifiés : pas d'entrée / 'invited' / 'linked' → pas de changement → envoie 'seen'
+        // - initial=null, current=null → initialResponse='new', finalResponse='seen' (première fois)
+        // - initial='invited', current='invited' → initialResponse='invited', finalResponse='seen' (a vu l'invitation)
+        // - initial='linked', current='linked' → initialResponse='linked', finalResponse='seen' (a vu via lien)
+        if (initial === current && (initial === null || initial === 'invited' || initial === 'linked')) {
 
-        // Cas 1: pas d'entrée → pas d'entrée → envoie 'seen' (pas d'interaction)
-        // initial et current sont tous les deux null (aucune entrée dans l'historique)
-        // initialResponse='new', finalResponse='seen' (première fois que l'utilisateur voit l'événement)
-        if (initial === null && current === null) {
-            addEventResponse(event.id, 'seen', {
-                initialResponse: 'new'
-            })
-            // Mettre à jour le feature-state de la carte pour colorer le pin
-            window.setStylingPin?.(event.id, 'seen')
-            return
-        }
 
-        // Cas 2: 'invited' → 'invited' (sans changement) → envoie 'seen' (a vu l'invitation mais n'a pas répondu)
-        // initialResponse='invited', finalResponse='seen'
-        if (initial === 'invited' && current === 'invited') {
             addEventResponse(event.id, 'seen', {
-                initialResponse: 'invited'
+                initialResponse: initial === null ? 'new' : initial
             })
-            // Mettre à jour le feature-state de la carte pour colorer le pin
-            window.setStylingPin?.(event.id, 'seen')
-            return
-        }
 
-        // Cas 3: 'linked' → 'linked' (sans changement) → envoie 'seen' (a vu via lien mais n'a pas répondu)
-        // 'linked' = visitor arrivé via URL d'un event, mais n'a pas encore interagi
-        // initialResponse='linked', finalResponse='seen'
-        if (initial === 'linked' && current === 'linked') {
-            addEventResponse(event.id, 'seen', {
-                initialResponse: 'linked'
-            })
-            // Mettre à jour le feature-state de la carte pour colorer le pin
+            // Mettre à jour le feature-state de la carte pour colorer le pin (GARDÉ)
             window.setStylingPin?.(event.id, 'seen')
             return
         }
@@ -349,11 +334,14 @@ export const EventCard = React.memo<EventCardProps>(({
         if (current !== initial) {
             // Si c'est la première fois (initial === null), utiliser 'new' comme initialResponse
             const effectiveInitial = initial === null ? 'new' : initial
+
+
             // Envoyer la réponse finale avec initialResponse pour tracker le changement
             addEventResponse(event.id, current, {
                 initialResponse: effectiveInitial
             })
-            // Mettre à jour le feature-state de la carte pour colorer le pin
+
+            // Mettre à jour le feature-state de la carte pour colorer le pin (GARDÉ)
             // Note: current peut être null, dans ce cas on ne met pas à jour (le pin garde sa couleur de base)
             if (current !== null) {
                 window.setStylingPin?.(event.id, current)
@@ -473,21 +461,23 @@ export const EventCard = React.memo<EventCardProps>(({
                             }}
                         />
                     )}
-                    {/* Bouton de fermeture */}
-                    <button
-                        className="event-card-banner-close"
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            // Utiliser la fonction globale de fermeture (logique centralisée)
-                            if (window.closeEventCard) {
-                                window.closeEventCard()
-                            }
-                        }}
-                        aria-label="Fermer"
-                        title="Fermer"
-                    >
-                        ×
-                    </button>
+                    {/* Bouton de fermeture - affiché uniquement si showCloseButton est true */}
+                    {showCloseButton && (
+                        <button
+                            className="event-card-banner-close"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                // Utiliser la fonction globale de fermeture (logique centralisée)
+                                if (window.closeEventCard) {
+                                    window.closeEventCard()
+                                }
+                            }}
+                            aria-label="Fermer"
+                            title="Fermer"
+                        >
+                            ×
+                        </button>
+                    )}
                 </div>
 
                 {/* Zone fixe 2 - Titre (hauteur fixe) */}
@@ -519,21 +509,15 @@ export const EventCard = React.memo<EventCardProps>(({
                         <div className="meta-row">📍 {formatVenueAddress(event.venue)} </div>
                         <div className="meta-row">📅 {format(toZonedTime(event.startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone), 'PPP à p', { locale: fr })}</div>
                     </div>
-                    {/* Bouton de partage (mode user + mode public, événement non passé) */}
-                    {!user?.isVisitor && isPublicMode && !eventIsPast && (
-                        <Button
-                            variant="ghost"
+                    {/* Bouton de partage (mode user, événement non passé) */}
+                    {!user?.isVisitor && !eventIsPast && (
+                        <button
+                            className={`circular-button circular-button-sm ${isShareExpanded ? 'rotated' : ''}`}
                             onClick={handleShare}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: 'var(--xs)',
-                                minWidth: 'auto',
-                                flexShrink: 0
-                            }}
-                            title="Partager l'événement"
-                            aria-label="Partager l'événement"
+                            disabled={event.isOnline === false}
+                            title={event.isOnline === false ? "Le partage n'est pas disponible pour les événements offline" : "Partager l'événement"}
+                            aria-label={event.isOnline === false ? "Le partage n'est pas disponible pour les événements offline" : "Partager l'événement"}
+                            style={{ opacity: event.isOnline === false ? 0.5 : 1 }}
                         >
                             <img
                                 src="/share-icon.svg"
@@ -542,7 +526,7 @@ export const EventCard = React.memo<EventCardProps>(({
                                 height="16"
                                 className={isShareExpanded ? 'share-icon-rotated' : ''}
                             />
-                        </Button>
+                        </button>
                     )}
                 </div>
 
@@ -705,42 +689,6 @@ export const EventCard = React.memo<EventCardProps>(({
                     >
                         {event.isOnline === false ? 'Offline' : 'Online'}
                     </Button>
-                    {/* Bouton de partage */}
-                    <Button
-                        variant="secondary"
-                        onClick={handleShare}
-                        className="response-button"
-                        disabled={event.isOnline === false}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 'var(--sm)',
-                            minWidth: 'auto'
-                        }}
-                        title={event.isOnline === false ? "Le partage n'est pas disponible pour les événements offline" : "Partager l'événement"}
-                        aria-label={event.isOnline === false ? "Le partage n'est pas disponible pour les événements offline" : "Partager l'événement"}
-                    >
-                        <img
-                            src="/share-icon.svg"
-                            alt="Partager"
-                            width="16"
-                            height="16"
-                            className={isShareExpanded ? 'share-icon-rotated' : ''}
-                            style={{ marginRight: 0, opacity: event.isOnline === false ? 0.5 : 1 }}
-                        />
-                    </Button>
-                    {isShareExpanded && (
-                        <div
-                            className={`event-share-section ${isShareExpanded ? 'expanded' : ''}`}
-                            style={{
-                                overflowY: isShareExpanded ? 'auto' : 'hidden',
-                                minHeight: 0 // Important pour que flex: 1 fonctionne correctement
-                            }}
-                        >
-                            <ShareContent event={event} onClose={handleShareClose} />
-                        </div>
-                    )}
                 </div>
             )}
 

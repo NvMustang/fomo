@@ -7,8 +7,8 @@ const DataServiceV2 = require('../utils/dataService')
 
 class EventsController {
     // Range Google Sheets pour la feuille Events
-    // Colonnes: A=ID, B=CreatedAt, C=Title, D=Description, E=StartsAt, F=EndsAt, G=Venue Name, H=Venue Address, I=Lat, J=Lng, K=Cover URL, L=Image Position, M=Organizer ID, N=Is Public, O=Is Online, P=ModifiedAt, Q=DeletedAt, R=Source
-    static EVENTS_RANGE = 'Events!A2:R'
+    // Colonnes: A=ID, B=CreatedAt, C=Title, D=Description, E=StartsAt, F=EndsAt, G=Venue Name, H=Venue Address, I=Lat, J=Lng, K=Cover URL, L=Image Position, M=Organizer ID, N=Is Public, O=Is Online, P=ModifiedAt, Q=DeletedAt, R=Source, S=Delete URL
+    static EVENTS_RANGE = 'Events!A2:S'
 
     /**
      * Helper: Obtenir les eventIds avec réponses pour un userId
@@ -116,8 +116,8 @@ class EventsController {
                 const eventIdsWithResponses = EventsController.getEventIdsWithResponses(allResponses, userId)
 
                 // Filtrer les events : uniquement ceux avec réponses ET qui sont privés
-                events = events.filter(evt => 
-                    eventIdsWithResponses.has(evt.id) && 
+                events = events.filter(evt =>
+                    eventIdsWithResponses.has(evt.id) &&
                     evt.isPublic !== true  // Exclure les événements publics (isPublic === true ou undefined)
                 )
 
@@ -297,7 +297,8 @@ class EventsController {
                 eventData.isOnline || 'false',              // O: Is Online
                 new Date().toISOString(),                   // P: ModifiedAt
                 '',                                         // Q: DeletedAt
-                eventData.source || 'manual'                // R: Source (par défaut 'manual' pour création manuelle)
+                eventData.source || 'manual',               // R: Source (par défaut 'manual' pour création manuelle)
+                eventData.deleteUrl || ''                   // S: ImgBB Delete URL
             ]
 
             const result = await DataServiceV2.upsertData(

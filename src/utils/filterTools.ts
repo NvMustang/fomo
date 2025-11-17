@@ -28,6 +28,7 @@ import {
     addDays,
     isPast,
     startOfDay,
+    endOfDay,
     isWithinInterval,
 } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
@@ -350,6 +351,7 @@ export type Groups<T> = {
     seen: T[]
     cleared: T[]
     invited: T[]
+    linked: T[]
     null: T[]
 }
 
@@ -367,6 +369,7 @@ export function createEmptyGroups<T>(): Groups<T> {
         seen: [],
         cleared: [],
         invited: [],
+        linked: [],
         null: []
     }
 }
@@ -837,30 +840,26 @@ export function applyFilters(
         responses?: (UserResponseValue | 'all')[] // Multi-sélection
         customStartDate?: Date
         customEndDate?: Date
-        excludePastEvents?: boolean // Exclure les événements passés
+        // excludePastEvents retiré - géré via groupAndCountEventsByPeriod dans useFilters
     },
     context?: {
         responses?: UserResponse[]
         userId?: string
     }
 ): Event[] {
-    // Pré-calculer le map des réponses si nécessaire (1 seule fois)
+    // Pré-calculer le map des réponses si le filtre est actif (cohérent avec les autres filtres)
     let userResponsesMap: Record<string, string> | undefined
-    if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all') && context?.responses && context?.userId) {
-        userResponsesMap = userResponsesMapper(events, context.responses, context.userId)
+    if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all')) {
+        if (context?.responses && context?.userId) {
+            userResponsesMap = userResponsesMapper(events, context.responses, context.userId)
+        } else {
+            // Si pas de contexte, créer un map vide (tous les événements auront une réponse vide)
+            userResponsesMap = {}
+        }
     }
 
     // Filtrer en UN SEUL passage
-    const now = new Date()
     return events.filter(evt => {
-        // Filtre par exclusion des événements passés (priorité haute)
-        // Condition: endsAt < now (ou startsAt < now si pas de endsAt)
-        if (filters.excludePastEvents) {
-            const evtEnd = evt.endsAt ? new Date(evt.endsAt) : new Date(evt.startsAt)
-            if (evtEnd < now) {
-                return false
-            }
-        }
 
         // Filtre par query (recherche textuelle)
         if (filters.searchQuery && !matchQuery(evt, filters.searchQuery)) {
@@ -877,9 +876,16 @@ export function applyFilters(
             const evtStart = new Date(evt.startsAt)
             const evtEnd = evt.endsAt ? new Date(evt.endsAt) : evtStart
 
+            // Normaliser les dates pour comparer uniquement les jours (pas les heures)
+            // startOfDay pour les dates de début, endOfDay pour les dates de fin
+            const filterStart = startOfDay(filters.customStartDate)
+            const filterEnd = endOfDay(filters.customEndDate)
+            const evtStartDay = startOfDay(evtStart)
+            const evtEndDay = endOfDay(evtEnd)
+
             // L'événement doit chevaucher la plage de dates
             // (commence avant la fin ET termine après le début)
-            if (!(evtStart <= filters.customEndDate && evtEnd >= filters.customStartDate)) {
+            if (!(evtStartDay <= filterEnd && evtEndDay >= filterStart)) {
                 return false
             }
         }
@@ -889,9 +895,9 @@ export function applyFilters(
             return false
         }
 
-        // Filtre par réponses utilisateur (multi-sélection)
-        if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all') && userResponsesMap) {
-            const eventResponse = userResponsesMap[evt.id] || ''
+        // Filtre par réponses utilisateur (multi-sélection) - cohérent avec les autres filtres
+        if (filters.responses && filters.responses.length > 0 && !filters.responses.includes('all')) {
+            const eventResponse = userResponsesMap?.[evt.id] || ''
 
             // Vérifier si la réponse de l'événement est dans le tableau des réponses sélectionnées
             const matchesAnyResponse = filters.responses.some(selectedResponse => {

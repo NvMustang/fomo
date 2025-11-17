@@ -17,7 +17,14 @@
         "analyze:analytics": "node scripts/analyze-analytics-data.js",
         "analyze:analytics:prod": "node scripts/analyze-analytics-data.js --prod",
         "cleanup:analytics": "node scripts/cleanup-test-data.js",
-        "test:geocoding": "node scripts/test-geocoding.js"
+        "test:geocoding": "node scripts/test-geocoding.js",
+        "extract:image": "node scripts/extract-image-from-event.js",
+        "extract:image:puppeteer": "node scripts/extract-image-puppeteer.js",
+        "download:image": "node scripts/download-image.js",
+        "get:image": "node scripts/get-image-from-event.js",
+        "generate:image-dataset": "node scripts/generate-image-dataset.js",
+        "upload:imgbb": "node scripts/upload-images-to-imgbb.js",
+        "upload:and-update": "node scripts/upload-and-update-sheets.js"
     },
     "dependencies": {
         "axios": "^1.12.2",
@@ -27,7 +34,8 @@
         "express-rate-limit": "^7.1.5",
         "googleapis": "^128.0.0",
         "helmet": "^7.1.0",
-        "multer": "^1.4.5-lts.1"
+        "multer": "^1.4.5-lts.1",
+        "puppeteer": "^24.30.0"
     },
     "devDependencies": {
         "nodemon": "^3.0.2"

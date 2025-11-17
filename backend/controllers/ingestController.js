@@ -230,7 +230,7 @@ class IngestController {
         // Source : utiliser l'URL de l'événement
         const source = payload.url || payload.source || 'facebook'
 
-        // Format de ligne Google Sheets: [id, createdAt, title, description, startsAt, endsAt, venueName, venueAddress, lat, lng, coverUrl, imagePosition, organizerId, isPublic, isOnline, modifiedAt, deletedAt, source]
+        // Format de ligne Google Sheets: [id, createdAt, title, description, startsAt, endsAt, venueName, venueAddress, lat, lng, coverUrl, imagePosition, organizerId, isPublic, isOnline, modifiedAt, deletedAt, source, deleteUrl]
         const rowData = [
             eventId,                                    // A: ID
             now,                                        // B: CreatedAt
@@ -249,7 +249,8 @@ class IngestController {
             'true',                                     // O: Is Online (toujours true)
             now,                                        // P: ModifiedAt
             '',                                         // Q: DeletedAt
-            source                                      // R: Source (URL de l'événement)
+            source,                                     // R: Source (URL de l'événement)
+            ''                                          // S: ImgBB Delete URL (vide par défaut, sera rempli si upload via imgbb)
         ]
 
         return { eventId, rowData }

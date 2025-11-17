@@ -44,8 +44,8 @@ export const CLUSTER_CONFIG = {
   // Configuration de la source GeoJSON
   source: {
     enabled: true,
-    radius: 30,      // Rayon très réduit : les pins doivent être très proches pour se clusteriser
-    maxZoom: 10,      // Zoom maximum augmenté : les clusters disparaissent plus tard pour moins d'agrégation
+    radius: 25,      // Rayon réduit : les pins doivent être très proches pour se clusteriser
+    maxZoom: 13,      // Zoom maximum augmenté : les clusters persistent jusqu'à zoom 13 pour éviter les chevauchements
     properties: {
       scoreSum: ["+", ["get", "score"]], // Cumule un indicateur d'intérêt
     },

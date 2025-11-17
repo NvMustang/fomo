@@ -25,6 +25,7 @@ import {
     groupAndCountEventsByTag,
     groupAndCountEventsByOrganizer,
     groupAndCountEventsByResponse,
+    groupAndCountEventsByPeriod,
     type Groups
 } from '@/utils/filterTools'
 
@@ -38,16 +39,31 @@ export const useFilters = () => {
     const applyCurrentFilters = useCallback((baseEvents: Event[]): Event[] => {
         const effectiveUserId = currentUserId || user?.id
 
+        // ⚠️ Utiliser groupAndCountEventsByPeriod pour grouper par période
+        // Puis exclure le groupe "past" si excludePastEvents est true
+        const { groups } = groupAndCountEventsByPeriod(baseEvents)
+        const excludePast = filters.excludePastEvents !== false // Par défaut true
+
+        // Flatten les groupes en excluant "past" si nécessaire
+        let eventsToFilter: Event[] = []
+        Object.entries(groups).forEach(([periodKey, periodEvents]) => {
+            if (periodKey === 'past' && excludePast) {
+                return // Exclure "past" si excludePastEvents est true
+            }
+            eventsToFilter.push(...periodEvents)
+        })
+
+        // Appliquer les autres filtres (sans excludePastEvents)
         let filtered = applyFilters(
-            baseEvents,
+            eventsToFilter,
             {
                 searchQuery: filters.searchQuery?.trim() || undefined,
                 tags: filters.tags,
                 organizerId: filters.organizerId,
                 responses: filters.responses,
                 customStartDate: filters.customStartDate,
-                customEndDate: filters.customEndDate,
-                excludePastEvents: filters.excludePastEvents
+                customEndDate: filters.customEndDate
+                // excludePastEvents retiré - géré via les groupes
             },
             {
                 responses,
@@ -56,7 +72,7 @@ export const useFilters = () => {
         )
 
         return filtered
-    }, [filters, responses, currentUserId, user?.id])
+    }, [filters])
 
     // ===== GROUPEMENTS =====
 
@@ -95,40 +111,54 @@ export const useFilters = () => {
     const getFilterOptions = useCallback((baseEvents: Event[]) => {
         const effectiveUserId = currentUserId || user?.id
 
+        // ⚠️ Utiliser groupAndCountEventsByPeriod pour grouper par période
+        // Puis exclure le groupe "past" si excludePastEvents est true
+        const { groups } = groupAndCountEventsByPeriod(baseEvents)
+        const excludePast = filters.excludePastEvents !== false // Par défaut true
+
+        // Flatten les groupes en excluant "past" si nécessaire
+        let eventsToFilter: Event[] = []
+        Object.entries(groups).forEach(([periodKey, periodEvents]) => {
+            if (periodKey === 'past' && excludePast) {
+                return // Exclure "past" si excludePastEvents est true
+            }
+            eventsToFilter.push(...periodEvents)
+        })
+
         // Appliquer tous les filtres pour chaque catégorie, en excluant celui qu'on calcule
-        
+
         // Pour les tags : on applique TOUS les filtres (y compris les tags déjà sélectionnés)
         // pour montrer quels tags coexistent avec les tags sélectionnés
-        const eventsWithTagsFilter = applyFilters(baseEvents, {
+        const eventsWithTagsFilter = applyFilters(eventsToFilter, {
             searchQuery: filters.searchQuery?.trim() || undefined,
             customStartDate: filters.customStartDate,
             customEndDate: filters.customEndDate,
             organizerId: filters.organizerId,
             responses: filters.responses,
-            tags: filters.tags, // ← Tags INCLUS pour voir la coexistence
-            excludePastEvents: filters.excludePastEvents
+            tags: filters.tags // ← Tags INCLUS pour voir la coexistence
+            // excludePastEvents retiré - géré via les groupes
         }, { responses, userId: effectiveUserId })
 
-        const eventsWithoutOrganizerFilter = applyFilters(baseEvents, {
+        const eventsWithoutOrganizerFilter = applyFilters(eventsToFilter, {
             searchQuery: filters.searchQuery?.trim() || undefined,
             tags: filters.tags,
             customStartDate: filters.customStartDate,
             customEndDate: filters.customEndDate,
-            responses: filters.responses,
-            excludePastEvents: filters.excludePastEvents
+            responses: filters.responses
             // organizerId exclu
+            // excludePastEvents retiré - géré via les groupes
         }, { responses, userId: effectiveUserId })
 
         // Pour les réponses : on EXCLUT le filtre responses pour afficher toutes les options disponibles
         // Cela permet le multi-select intuitif (logique OR : J'y vais + Intéressé)
-        const eventsWithoutResponsesFilter = applyFilters(baseEvents, {
+        const eventsWithoutResponsesFilter = applyFilters(eventsToFilter, {
             searchQuery: filters.searchQuery?.trim() || undefined,
             tags: filters.tags,
             customStartDate: filters.customStartDate,
             customEndDate: filters.customEndDate,
-            organizerId: filters.organizerId,
-            excludePastEvents: filters.excludePastEvents
+            organizerId: filters.organizerId
             // responses EXCLU → affiche toutes les réponses disponibles
+            // excludePastEvents retiré - géré via les groupes
         }, { responses, userId: effectiveUserId })
 
         return {
@@ -137,16 +167,6 @@ export const useFilters = () => {
             responses: groupAndCountEventsByResponse(eventsWithoutResponsesFilter, responses, effectiveUserId)
         }
     }, [filters, responses, users, currentUserId, user?.id])
-
-    // ===== IDS FILTRÉS (pour MapLibre) =====
-
-    /**
-     * Retourne les IDs des événements filtrés (pour setFilter MapLibre)
-     */
-    const getFilteredEventIds = useCallback((events: Event[]): Set<string> => {
-        const filtered = applyCurrentFilters(events)
-        return new Set(filtered.map(e => e.id))
-    }, [applyCurrentFilters])
 
     // ===== FRIENDS & GUESTS =====
 
@@ -179,7 +199,9 @@ export const useFilters = () => {
                 seen: [],
                 cleared: [],
                 null: [],
-                invited: []
+                invited: [],
+                linked: []
+
             }
         }
 
@@ -209,7 +231,6 @@ export const useFilters = () => {
         groupByPeriods,
         groupByResponses,
         getFilterOptions,
-        getFilteredEventIds,
 
         // Friends & Guests
         getFriends,

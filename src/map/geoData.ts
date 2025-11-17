@@ -1,5 +1,5 @@
 /**
- * Map sources - GeoJSON source creation for events
+ * Map geo data - GeoJSON creation and MapLibre source utilities for events
  */
 
 import type { Event } from '@/types/fomoTypes'
@@ -7,15 +7,14 @@ import { CLUSTER_CONFIG } from './config'
 import { getPrivacyColor } from './utils'
 
 /**
- * Crée une source GeoJSON avec les événements et leurs réponses utilisateur initiales.
- * Les réponses sont incluses dans properties.userResponse pour le styling initial des pins.
+ * Crée un GeoJSON FeatureCollection à partir d'événements et d'un map de réponses.
+ * Fonction générique utilisée pour la création initiale de la source et pour setData().
  */
-export const createEventsSource = (
-  eventsToShow: Event[],
-  userResponsesMap: Record<string, string> = {},
-  disableClustering: boolean = false
+export const createEventsGeoJSON = (
+  events: Event[],
+  userResponsesMap: Record<string, string> = {}
 ) => {
-  const features = eventsToShow.map((e) => {
+  const features = events.map((e) => {
     const initialResponse = userResponsesMap[e.id] || ''
 
     return {
@@ -41,8 +40,25 @@ export const createEventsSource = (
   })
 
   return {
+    type: "FeatureCollection" as const,
+    features
+  }
+}
+
+/**
+ * Crée une source GeoJSON avec les événements et leurs réponses utilisateur initiales.
+ * Les réponses sont incluses dans properties.userResponse pour le styling initial des pins.
+ */
+export const createEventsSource = (
+  eventsToShow: Event[],
+  userResponsesMap: Record<string, string> = {},
+  disableClustering: boolean = false
+) => {
+  const geoJSON = createEventsGeoJSON(eventsToShow, userResponsesMap)
+
+  return {
     type: "geojson" as const,
-    data: { type: "FeatureCollection" as const, features },
+    data: geoJSON,
     promoteId: 'id',
     cluster: !disableClustering && CLUSTER_CONFIG.source.enabled,
     ...(!disableClustering && {

@@ -116,24 +116,25 @@ class AnalyticsController {
             }
 
             // Sauvegarder dans Google Sheets avec déduplication (append en batch)
+            // IMPORTANT: Les analytics sont toujours sauvegardés en PROD, même en local
             let savedCount = 0
             let savedReferences = 0
-            const { appendDataWithDeduplication } = require('../utils/sheets-config')
+            const { appendDataWithDeduplicationForAnalytics } = require('../utils/sheets-config')
 
             // Sauvegarder les requêtes normales : déduplication par Timestamp + Provider + Endpoint + Method
             if (requestsToSave.length > 0) {
-                const result = await appendDataWithDeduplication('Analytics', requestsToSave, [0, 1, 2, 3], 2, 50000, requestId)
+                const result = await appendDataWithDeduplicationForAnalytics('Analytics', requestsToSave, [0, 1, 2, 3], 2, 50000, requestId)
                 savedCount += result.saved
-                console.log(`✅ [${requestId}] ${result.saved} nouvelles requêtes sauvegardées (${result.duplicates} doublons ignorés)`)
+                console.log(`✅ [${requestId}] ${result.saved} nouvelles requêtes sauvegardées en PROD (${result.duplicates} doublons ignorés)`)
             }
 
             // Sauvegarder les références MapTiler : déduplication par Timestamp + Valeur (colonnes 0 et 7)
             // Cela évite les doublons même si la même valeur est sauvegardée plusieurs fois
             if (referencesToSave.length > 0) {
-                const result = await appendDataWithDeduplication('Analytics', referencesToSave, [0, 7], 2, 50000, requestId)
+                const result = await appendDataWithDeduplicationForAnalytics('Analytics', referencesToSave, [0, 7], 2, 50000, requestId)
                 savedReferences = result.saved
                 savedCount += result.saved
-                console.log(`✅ [${requestId}] ${result.saved} nouvelles références MapTiler sauvegardées (${result.duplicates} doublons ignorés)`)
+                console.log(`✅ [${requestId}] ${result.saved} nouvelles références MapTiler sauvegardées en PROD (${result.duplicates} doublons ignorés)`)
             }
 
             if (savedCount === 0) {
@@ -174,15 +175,12 @@ class AnalyticsController {
     /**
      * Récupérer les statistiques agrégées depuis Google Sheets
      * Agrège toutes les données de tous les utilisateurs
-     * Utilise la source de vérité unique configurée dans sheets-config.js
-     * (PROD par défaut en production, configurable via FORCE_PRODUCTION=true en local)
+     * Les analytics sont toujours lus depuis la DB de PROD
      */
     static async getAggregatedStats(req, res) {
         try {
-            // Lire depuis la DB configurée (source de vérité unique = PROD par défaut)
-            // Par défaut : utilise toujours PROD (même en local)
-            // Pour utiliser TEST en local : définir USE_TEST_DB=true dans .env
-            const analytics = await DataServiceV2.getAllActiveData(
+            // Lire depuis la DB de PROD (analytics toujours en PROD)
+            const analytics = await DataServiceV2.getAllActiveDataFromProd(
                 AnalyticsController.ANALYTICS_RANGE,
                 DataServiceV2.mappers.analytics
             )

@@ -57,20 +57,29 @@ const sheets = google.sheets({ version: 'v4', auth })
 const drive = google.drive({ version: 'v3', auth })
 
 // Détection automatique de l'environnement :
-// - Par défaut : utilise toujours PROD (source de vérité unique)
-// - Local avec TEST : si USE_TEST_DB=true, utilise GOOGLE_SPREADSHEET_ID_TEST
-// - Vercel (production) : utilise toujours GOOGLE_SPREADSHEET_ID (production)
-// 
-// Stratégie : Source de vérité unique = PROD par défaut
-// Pour utiliser TEST en local, définir USE_TEST_DB=true dans .env
+// - Local (développement) : utilise automatiquement GOOGLE_SPREADSHEET_ID_TEST
+// - Vercel (production) : utilise automatiquement GOOGLE_SPREADSHEET_ID
 const isLocal = !process.env.VERCEL
-const useTestDb = process.env.USE_TEST_DB === 'true'
 const testSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID_TEST
 const productionSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
 
-const SPREADSHEET_ID = (isLocal && useTestDb && testSpreadsheetId)
-    ? testSpreadsheetId  // Local avec USE_TEST_DB=true : utiliser la DB de test
-    : productionSpreadsheetId  // Par défaut : toujours utiliser PROD (source de vérité unique)
+// SPREADSHEET_ID pour les données de l'app (Events, Users, Responses, etc.)
+// Local → DB de test, Vercel → DB de prod
+const SPREADSHEET_ID = isLocal && testSpreadsheetId
+    ? testSpreadsheetId  // Local : utiliser la DB de test
+    : productionSpreadsheetId  // Vercel : utiliser la DB de prod
+
+/**
+ * Retourne toujours l'ID de la DB de production
+ * Utilisé pour les analytics qui doivent toujours être sauvegardés en PROD
+ * même en développement local
+ */
+function getAnalyticsSpreadsheetId() {
+    if (!productionSpreadsheetId) {
+        throw new Error('GOOGLE_SPREADSHEET_ID non configuré dans .env')
+    }
+    return productionSpreadsheetId
+}
 
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || null
 
@@ -96,8 +105,8 @@ async function validateSpreadsheet() {
         })
 
         // Déterminer l'environnement pour l'affichage
-        const envType = (isLocal && useTestDb && testSpreadsheetId) ? '🧪 TEST' : '📊 PRODUCTION'
-        const sourceNote = envType === '📊 PRODUCTION' ? ' (source de vérité unique)' : ' (mode test)'
+        const envType = (isLocal && testSpreadsheetId) ? '🧪 TEST' : '📊 PRODUCTION'
+        const sourceNote = envType === '📊 PRODUCTION' ? ' (production)' : ' (mode test)'
         console.log(`${envType}${sourceNote} - Feuille trouvée: ${spreadsheet.data.properties.title}`)
         return spreadsheet.data
     } catch (error) {
@@ -192,7 +201,7 @@ async function appendDataWithDeduplication(sheetName, data, keyColumns, startRow
             const lastColumn = String.fromCharCode(65 + Math.max(...keyColumns)) // A=65, B=66, etc.
             const readRange = `${String.fromCharCode(65 + keyColumns[0])}${startRow}:${lastColumn}${startRow + maxReadRows - 1}`
             const existingData = await readData(sheetName, readRange)
-            
+
             existingKeys = new Set(
                 existingData
                     .filter(row => {
@@ -204,7 +213,7 @@ async function appendDataWithDeduplication(sheetName, data, keyColumns, startRow
                         return keyColumns.map(colIndex => row[colIndex].toString().trim()).join('|')
                     })
             )
-            
+
             if (requestId) {
                 console.log(`📊 ${logPrefix}${existingKeys.size} entrées existantes trouvées dans "${sheetName}"`)
             }
@@ -222,13 +231,13 @@ async function appendDataWithDeduplication(sheetName, data, keyColumns, startRow
             if (!keyColumns.every(colIndex => row && row[colIndex] !== undefined && row[colIndex] !== null)) {
                 return false // Ignorer les lignes incomplètes
             }
-            
+
             // Créer la clé composite pour cette ligne
             const rowKey = keyColumns.map(colIndex => {
                 const value = row[colIndex]
                 return value ? value.toString().trim() : ''
             }).join('|')
-            
+
             // Ne garder que si la clé n'existe pas déjà
             return !existingKeys.has(rowKey)
         })
@@ -339,6 +348,119 @@ async function insertColumn(sheetName, columnIndex, sheetId = null) {
 }
 
 /**
+ * Ajouter des données à un onglet avec déduplication - VERSION ANALYTICS
+ * Cette version utilise toujours la DB de PRODUCTION, même en local
+ * 
+ * @param {string} sheetName - Nom de l'onglet
+ * @param {Array<Array>} data - Données à sauvegarder (array de lignes)
+ * @param {Array<number>} keyColumns - Indices des colonnes formant la clé unique (0-based)
+ * @param {number} startRow - Ligne de départ (par défaut 2, après les headers)
+ * @param {number} maxReadRows - Nombre maximum de lignes à lire pour la déduplication (par défaut 10000)
+ * @param {string} requestId - ID de requête pour les logs (optionnel)
+ * @returns {Object} { saved: number, duplicates: number, total: number }
+ */
+async function appendDataWithDeduplicationForAnalytics(sheetName, data, keyColumns, startRow = 2, maxReadRows = 10000, requestId = '') {
+    const analyticsSpreadsheetId = getAnalyticsSpreadsheetId()
+
+    if (!data || data.length === 0) {
+        return { saved: 0, duplicates: 0, total: 0 }
+    }
+
+    if (!keyColumns || keyColumns.length === 0) {
+        throw new Error('keyColumns est requis pour la déduplication')
+    }
+
+    const logPrefix = requestId ? `[${requestId}] ` : ''
+
+    try {
+        // Lire les données existantes pour les colonnes de clé
+        let existingKeys = new Set()
+        try {
+            // Construire le range pour lire les colonnes de clé (ex: A2:A10000 ou A2:C10000)
+            const lastColumn = String.fromCharCode(65 + Math.max(...keyColumns)) // A=65, B=66, etc.
+            const readRange = `${String.fromCharCode(65 + keyColumns[0])}${startRow}:${lastColumn}${startRow + maxReadRows - 1}`
+
+            // Lire depuis la DB de PROD pour les analytics
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: analyticsSpreadsheetId,
+                range: `${sheetName}!${readRange}`
+            })
+            const existingData = response.data.values || []
+
+            existingKeys = new Set(
+                existingData
+                    .filter(row => {
+                        // Vérifier que toutes les colonnes de clé sont présentes
+                        return keyColumns.every(colIndex => row && row[colIndex] && row[colIndex].toString().trim())
+                    })
+                    .map(row => {
+                        // Créer une clé composite en joignant les valeurs des colonnes de clé
+                        return keyColumns.map(colIndex => row[colIndex].toString().trim()).join('|')
+                    })
+            )
+
+            if (requestId) {
+                console.log(`📊 ${logPrefix}${existingKeys.size} entrées existantes trouvées dans "${sheetName}" (PROD)`)
+            }
+        } catch (readError) {
+            // Si la lecture échoue (feuille vide ou première sauvegarde), continuer
+            if (requestId) {
+                console.warn(`⚠️ ${logPrefix}Erreur lecture données existantes (première sauvegarde?):`, readError.message)
+            }
+            // Continuer avec un Set vide
+        }
+
+        // Filtrer les données pour ne garder que les nouvelles
+        const newDataToSave = data.filter(row => {
+            // Vérifier que toutes les colonnes de clé sont présentes dans la ligne
+            if (!keyColumns.every(colIndex => row && row[colIndex] !== undefined && row[colIndex] !== null)) {
+                return false // Ignorer les lignes incomplètes
+            }
+
+            // Créer la clé composite pour cette ligne
+            const rowKey = keyColumns.map(colIndex => {
+                const value = row[colIndex]
+                return value ? value.toString().trim() : ''
+            }).join('|')
+
+            // Ne garder que si la clé n'existe pas déjà
+            return !existingKeys.has(rowKey)
+        })
+
+        const duplicatesCount = data.length - newDataToSave.length
+
+        // Sauvegarder seulement les nouvelles données dans la DB de PROD
+        if (newDataToSave.length > 0) {
+            const range = `${sheetName}!A${startRow}:${String.fromCharCode(65 + newDataToSave[0].length - 1)}`
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: analyticsSpreadsheetId,
+                range: range,
+                valueInputOption: 'RAW',
+                resource: {
+                    values: newDataToSave
+                }
+            })
+
+            if (requestId) {
+                console.log(`✅ ${logPrefix}${newDataToSave.length} nouvelles lignes sauvegardées dans "${sheetName}" (PROD) (${duplicatesCount} doublons ignorés)`)
+            }
+        } else {
+            if (requestId) {
+                console.log(`ℹ️ ${logPrefix}Toutes les lignes existent déjà dans "${sheetName}" (PROD), aucune nouvelle ligne à sauvegarder`)
+            }
+        }
+
+        return {
+            saved: newDataToSave.length,
+            duplicates: duplicatesCount,
+            total: data.length
+        }
+    } catch (error) {
+        throw new Error(`Erreur lors de l'ajout de données avec déduplication à l'onglet "${sheetName}" (analytics): ${error.message}`)
+    }
+}
+
+/**
  * Exécuter une migration avec gestion d'erreurs
  */
 async function runMigration(migrationName, migrationFunction) {
@@ -364,6 +486,7 @@ module.exports = {
     drive,
     SPREADSHEET_ID,
     DRIVE_FOLDER_ID,
+    getAnalyticsSpreadsheetId,
     validateConfig,
     validateSpreadsheet,
     validateSheet,
@@ -372,6 +495,7 @@ module.exports = {
     clearSheet,
     appendData,
     appendDataWithDeduplication,
+    appendDataWithDeduplicationForAnalytics,
     updateData,
     readData,
     insertColumn,

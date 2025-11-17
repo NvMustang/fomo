@@ -46,7 +46,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const { user } = useAuth()
   const { platformInfo } = useDevice()
   const { showToast, hideToast } = useToast()
-  const { getFilteredEventIds, filters } = useFilters()
+  const { applyCurrentFilters } = useFilters()
 
   // ===== ÉTATS LOCAUX =====
   // Unifier les sources visitor via visitorMode si fourni
@@ -150,16 +150,15 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return events
   }, [user.isVisitor, isPublicMode, events])
 
-  // ===== CALCUL DES IDS FILTRÉS =====
-  // Calculer les IDs des événements filtrés pour MapRenderer
+  // ===== CALCUL DES EVENTS FILTRÉS =====
+  // Calculer les events filtrés pour MapRenderer
   // MapRenderer utilisera setData() pour mettre à jour la source et recalculer les clusters
-  const filteredEventIds = useMemo(() => {
+  const filteredEvents = useMemo(() => {
     if (user.isVisitor) {
-      return mapEvents.map(e => e.id)
+      return mapEvents
     }
-    const filteredIds = getFilteredEventIds(mapEvents)
-    return Array.from(filteredIds)
-  }, [user.isVisitor, mapEvents, getFilteredEventIds, filters])
+    return applyCurrentFilters(mapEvents)
+  }, [mapEvents, applyCurrentFilters])
 
   // ===== TOAST POUR EXISTING VISITOR =====
   // Afficher un toast personnalisé pour l'existing visitor sans event dans l'URL
@@ -183,7 +182,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           message: 'Voici les events pour lesquels tu as été invité, pour changer ta réponse, tap sur le pin !',
           type: 'info',
           position: 'top',
-          duration: 8000 // 8 secondes pour laisser le temps de lire
+          duration: 4000 // 8 secondes pour laisser le temps de lire
         })
       }, 2000) // Délai de 2s après le chargement
 
@@ -215,7 +214,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
           message: 'Crées-en un (➕) et invite des amis à y participer ! 🤗',
           type: 'info',
           position: 'top',
-          duration: 8000
+          duration: 4000
         })
       }, 4000) // Délai de 4s après le chargement
 
@@ -497,7 +496,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
       <div className="map-container">
         <MapRenderer
           events={mapEvents}
-          filteredEventIds={filteredEventIds}
+          filteredEvents={filteredEvents}
           onPinClick={handleEventClick}
           onClusterClick={handleClusterClick}
           onMapReady={handleMapReady}
@@ -514,6 +513,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({
             key={selectedEvent.id}
             event={selectedEvent}
             showToggleResponse={true}
+            showCloseButton={true}
             responseButtonsDisabled={vmEnabled ? vmResponseButtonsDisabled : false}
             onLabelClick={vmEnabled ? vmOnLabelClick : undefined}
             onResponseClick={vmEnabled ? vmOnResponseClick : (responseType) => {

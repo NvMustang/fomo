@@ -89,6 +89,17 @@
     border-radius: var(--button-radius-xs);
 }
 
+.circular-button-sm {
+    width: var(--button-size-sm);
+    height: var(--button-size-sm);
+    border-radius: var(--button-radius-sm);
+}
+
+/* Icônes SVG blanches dans les boutons circulaires */
+.circular-button img {
+    filter: brightness(0) invert(1);
+}
+
 /* Container générique pour toutes les icônes */
 .icon-container {
     position: relative;

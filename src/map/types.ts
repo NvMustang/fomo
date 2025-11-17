@@ -72,7 +72,7 @@ export interface MapViewCoordinate {
 export interface MapViewProps {
   // Données
   events: Event[]
-  filteredEventIds?: string[] // IDs des événements à afficher (si undefined = afficher tous)
+  filteredEvents: Event[] // Événements filtrés à afficher
 
   // Callbacks
   onPinClick?: (event: Event | null) => void
